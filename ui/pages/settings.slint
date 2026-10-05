@@ -1,5 +1,5 @@
 import { ScrollView, LineEdit } from "std-widgets.slint";
-import { Theme } from "../theme.slint";
+import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
 import { UiButton, Panel, SettingToggle } from "../components.slint";
 import { PageCard } from "page-card.slint";
@@ -51,7 +51,10 @@ export component SettingsPage inherits PageCard {
                         Text { text: source.host; font-size: 11px; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
                         UiButton {
                             label: source.enabled ? "Freigegeben" : "Freigeben";
-                            primary: source.enabled;
+                            selected: source.enabled;
+                            checkable: true;
+                            has-icon: source.enabled;
+                            icon: Icons.check;
                             available: Store.updates && !Store.demo && !Store.busy;
                             activated => { Actions.set-source(source.host, !source.enabled); }
                         }

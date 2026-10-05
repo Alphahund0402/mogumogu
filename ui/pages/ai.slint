@@ -22,6 +22,8 @@ export component AiPage inherits PageCard {
             height: 68px;
             RowCard {
                 y: 3px; height: parent.height - 6px;
+                selection-kind: "ai";
+                selection-key: row.path + "|" + row.client + "|" + row.kind;
                 icon: Icons.spark;
                 title: row.client + " · " + row.kind;
                 subtitle: row.detail;

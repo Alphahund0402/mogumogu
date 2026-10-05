@@ -124,11 +124,13 @@ component AiCard inherits Card {
         }
         ListView {
             vertical-stretch: 1;
-            for row[index] in Store.ai : Activatable {
+            for row[index] in Store.ai : ai-line := Activatable {
                 height: 46px;
+                border-radius: 6px;
+                selection-kind: "ai";
+                selection-key: row.path + "|" + row.client + "|" + row.kind;
                 label: row.client + ", " + row.detail;
                 activated => { Actions.open-ai(row.index); }
-                background: self.hovered ? #f6f9fd : transparent;
                 HorizontalLayout {
                     padding-left: 15px; padding-right: 15px; spacing: 10px;
                     Rectangle {
@@ -140,7 +142,7 @@ component AiCard inherits Card {
                     }
                     VerticalLayout {
                         alignment: center; spacing: 2px; horizontal-stretch: 1;
-                        Text { text: row.client; font-size: 10px; font-weight: 500; color: Theme.ink; overflow: elide; }
+                        Text { text: row.client; font-size: 10px; font-weight: ai-line.selected ? 650 : 500; color: ai-line.selected ? Theme.selected-ink : Theme.ink; overflow: elide; }
                         Text { text: row.detail; font-size: 8px; color: Theme.muted; overflow: elide; }
                     }
                     Icon { source: Icons.lock; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: #8191a3; }

@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 # Starts an already built owner process. No autostart, no service.
 [CmdletBinding()]
-param([ValidateSet('Demo','Local')][string]$Mode = 'Demo', [switch]$ShowDashboard)
+param([ValidateSet('Demo','Local')][string]$Mode = 'Local', [switch]$ShowDashboard)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Windows ist erforderlich.' }

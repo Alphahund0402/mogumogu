@@ -1,6 +1,6 @@
 # Unterstützungsmatrix · mogumogu 0.1.0
 
-Stand: 4. Oktober 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experimentell`, `getestet`, `eingeschränkt`, `nicht unterstützt`.
+Stand: 5. Oktober 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experimentell`, `getestet`, `eingeschränkt`, `nicht unterstützt`.
 „Experimentell“ heißt: Parser und Fixtures existieren und laufen in der Testsuite; eine Abnahme gegen reale Toolversionen auf Windows 10 **und** 11 steht aus. „Unterstützt“ gilt nur innerhalb der genannten Formate.
 
 Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 1.98.0, Slint 1.18.1 (winit, Software-Renderer), SQLite 3.53.2 (gebündelt über rusqlite 0.40.2). Windows 11 ist **nicht** abgenommen.
@@ -8,6 +8,12 @@ Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 
 Linux/Docker unterstützt die portablen Entwicklungsprüfungen, keine Inventar-Laufzeit.
 Tray, Named Pipes, Job Objects und Windows-Lese-/Löschgrenzen bleiben dort nicht
 unterstützt. Anleitung: [DOCKER.md](DOCKER.md).
+
+## Desktop und Datenmodus
+
+Der normale Start (EXE, `build.ps1`, `start.ps1`, `build.cmd`) verwendet das lokale Inventar. Es zeigt ausschließlich registrierte Metadaten und statische Erfassungen aus freigegebenen Bereichen; ein neues Inventar ist leer. Beispieldaten erfordern ausdrücklich `--demo` bzw. `-Mode Demo` und liegen in einer getrennten Datenbank.
+
+Navigation, Filter, Schaltflächen und Listenzeilen verwenden gemeinsame Auswahl-, Hover-, Druck- und Fokuszustände. Häkchen, Seitenmarkierung und Schriftgewicht ergänzen die Auswahlfarbe; Tastaturfokus liegt innerhalb des Elements. Dies ersetzt keine vollständige Prüfung mit Assistenztechnik.
 
 ## Paketmanager
 
