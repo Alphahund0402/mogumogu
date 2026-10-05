@@ -20,8 +20,11 @@ export component PackagesPage inherits PageCard {
         for adapter in Store.adapters : Rectangle {
             height: 78px;
             Activatable {
-                y: 3px; height: parent.height - 6px; border-radius: 9px; border-width: 1px; border-color: #e9eff4;
-                background: self.hovered ? Theme.row-hover : Theme.row;
+                y: 3px; height: parent.height - 6px; border-radius: 9px;
+                resting-border: Theme.line;
+                resting-background: Theme.row;
+                selection-kind: "adapter";
+                selection-key: adapter.id;
                 label: adapter.name + ". Inventar " + adapter.inventory + ", Updates " + adapter.updates + ", Bereinigung " + adapter.cleanup;
                 activated => { Actions.open-adapter(adapter.id); }
                 HorizontalLayout {

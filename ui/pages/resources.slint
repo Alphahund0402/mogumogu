@@ -21,6 +21,8 @@ export component ResourcesPage inherits PageCard {
             height: 68px;
             RowCard {
                 y: 3px; height: parent.height - 6px;
+                selection-kind: "resource";
+                selection-key: "" + row.id;
                 icon: row.kind == "Temporär" ? Icons.clock : row.kind == "Umgebung" ? Icons.package : Icons.folder;
                 title: row.name;
                 subtitle: row.kind + " · " + row.owner + " · " + row.detail;

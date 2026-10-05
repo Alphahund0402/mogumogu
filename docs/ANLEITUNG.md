@@ -9,14 +9,18 @@ Registrieren speichert nur Namen und Pfade. Lesen erfordert eine eigene, an die 
 ## 2. Starten
 
 ```powershell
-.\build.ps1                       # bauen, testen, Demo im Tray starten
-.\build.ps1 -Mode Local -ShowDashboard
-.\start.ps1 -Mode Local           # bereits gebaut starten
+.\build.ps1                       # bauen, testen, lokales Inventar im Tray starten
+.\build.ps1 -ShowDashboard
+.\start.ps1 -ShowDashboard        # bereits gebaut mit lokalen Daten starten
 ```
 
 Der Tray-Prozess ist der **Besitzer**: Er hält die Datenbank, die lokale Pipe und optional die Überwachung. Fenster schließen beendet ihn nicht; „Beenden“ im Tray-Menü schon. Die CLI startet den Besitzer bei Bedarf selbst (Tray ohne Fenster); `--no-start` verhindert das. Für Automatisierung: `mogumogu.exe --headless`, beenden mit `$cli owner stop`.
 
-Demo- und lokale Datenbank sind getrennte Dateien unter `%LOCALAPPDATA%\mogumogu`. Zum Wechseln den Besitzer beenden und im anderen Modus starten.
+Standard ist das lokale Inventar mit deinen registrierten und freigegebenen Projektordnern. Neue Inventare beginnen leer. Die schreibgeschützte Beispielvorschau startet nur ausdrücklich mit `-Mode Demo`. Demo- und lokale Datenbank sind getrennte Dateien unter `%LOCALAPPDATA%\mogumogu`. Zum Wechseln den Besitzer beenden und im anderen Modus starten.
+
+Ausgewählte Navigationseinträge, Filter und geöffnete Listenzeilen verwenden dieselbe blaue Fläche und dunkle Schrift; Häkchen bzw. eine Seitenmarkierung machen die Auswahl zusätzlich sichtbar. Die zuletzt geöffnete Zeile bleibt markiert. Der Tastaturfokus erscheint als Rahmen innerhalb des Elements und ist von der Auswahl getrennt.
+
+„Erfasste Pakete“ zählt unterschiedliche aufgelöste oder installierte Pakete aus vollständigen Erfassungen. Die Paketmanager-Ansicht unterscheidet deklarierte, aufgelöste und installierte Einträge; ein Lockfile allein belegt keine Installation.
 
 ## 3. Projekte erfassen
 

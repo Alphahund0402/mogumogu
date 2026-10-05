@@ -6,7 +6,7 @@ Does not install prerequisites, set autostart or change machine settings.
 [CmdletBinding()]
 param(
     [ValidateSet('Release','Debug')][string]$Configuration = 'Release',
-    [ValidateSet('Demo','Local')][string]$Mode = 'Demo',
+    [ValidateSet('Demo','Local')][string]$Mode = 'Local',
     [switch]$ShowDashboard,
     [switch]$NoRun,
     [switch]$SkipTests

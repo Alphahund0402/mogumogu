@@ -76,7 +76,7 @@ component Hero inherits Rectangle {
     Text { x: 28px; y: 112px; text: "Deine Entwicklungswelt. Ein bisschen aufgeräumter."; font-size: 12px; color: #eef5fb; }
     Rectangle {
         x: parent.width - self.width - 27px; y: 76px; width: min(363px, parent.width * 0.42); height: 40px;
-        border-radius: 8px; background: #ffffffed; border-width: 1px; border-color: search.has-focus ? Theme.focus : #e3eaf166;
+        border-radius: 8px; background: #ffffffed; border-width: search.has-focus ? 2px : 1px; border-color: search.has-focus ? Theme.focus : #e3eaf166;
         HorizontalLayout {
             padding-left: 12px; padding-right: 10px; spacing: 8px;
             Icon { source: Icons.search; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: #63758a; }
@@ -141,7 +141,7 @@ export component Dashboard inherits Window {
                     HorizontalLayout {
                         spacing: 13px; height: 100px;
                         Metric { label: "Projekte"; value: Store.project-count; caption: "Projekte"; note: Store.project-note; icon: Icons.folder; activated => { Store.page = 1; } }
-                        Metric { label: "Paketinstallationen"; value: Store.package-count; caption: "Paketinstallationen"; note: Store.package-note; icon: Icons.package; tint: #fff5e6; tone: #b67b27; activated => { Store.page = 2; } }
+                        Metric { label: "Erfasste Pakete"; value: Store.package-count; caption: "Erfasste Pakete"; note: Store.package-note; icon: Icons.package; tint: #fff5e6; tone: #b67b27; activated => { Store.page = 2; } }
                         Metric { label: "Erfasster Umfang"; value: Store.footprint; caption: "Erfasster Umfang"; note: Store.footprint-note; icon: Icons.database; tint: #eaf8f4; tone: #159875; activated => { Store.page = 4; } }
                         Metric { label: "KI-Konfigurationen"; value: Store.ai-count; caption: "KI-Konfigurationen"; note: Store.ai-note; icon: Icons.spark; tint: #f3effc; tone: #8763ce; activated => { Store.page = 3; } }
                     }

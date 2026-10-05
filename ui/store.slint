@@ -19,7 +19,7 @@ export struct SourceToggle { host: string, enabled: bool }
 
 export global Store {
     // Mode and status
-    in property <bool> demo: true;
+    in property <bool> demo: false;
     in property <bool> busy: false;
     in property <string> status: "Inventar wird geladen …";
     in property <string> sqlite-version;
@@ -72,6 +72,9 @@ export global Store {
     in-out property <int> filter: 0;
     in-out property <int> resource-tab: 0;
     in-out property <string> query;
+    // Stable keys keep the last opened row visible across view/model rebuilds.
+    in-out property <string> selection-kind;
+    in-out property <string> selection-key;
 
     // Modal layer: 0 none, 1 detail, 2 form
     in-out property <int> modal: 0;

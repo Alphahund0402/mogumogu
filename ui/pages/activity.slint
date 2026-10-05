@@ -15,6 +15,8 @@ export component ActivityPage inherits PageCard {
             height: 68px;
             RowCard {
                 y: 3px; height: parent.height - 6px;
+                selection-kind: "scope";
+                selection-key: "" + scope.id;
                 icon: scope.watched ? Icons.monitor : Icons.shield;
                 title: scope.kind + " · " + scope.path;
                 subtitle: scope.coverage + (scope.last != "" ? " · " + scope.last : "") + (scope.watched ? " · wird beobachtet" : "");

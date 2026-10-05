@@ -15,6 +15,8 @@ export component ReviewPage inherits PageCard {
             height: 68px;
             RowCard {
                 y: 3px; height: parent.height - 6px;
+                selection-kind: "hint";
+                selection-key: "" + hint.id + "|" + hint.kind;
                 icon: hint.kind == "Prüftermin erreicht" ? Icons.clock : hint.kind == "Möglicherweise verwaist" ? Icons.folder : Icons.package;
                 title: hint.name + " · " + hint.kind;
                 subtitle: hint.trigger != "" ? hint.trigger + " " + hint.evidence : hint.evidence;
@@ -30,6 +32,8 @@ export component ReviewPage inherits PageCard {
         spacing: 6px;
         Text { text: "Pläne"; font-size: 13px; font-weight: 700; color: Theme.ink; }
         for plan in Store.plans : RowCard {
+            selection-kind: "plan";
+            selection-key: "" + plan.id;
             icon: Icons.check;
             title: "Plan " + plan.id + " · " + plan.summary;
             subtitle: "Fingerabdruck " + plan.fingerprint + " · " + plan.created;

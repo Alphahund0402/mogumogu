@@ -2,7 +2,7 @@
 
 **Ziel:** Lokale, performante Windows-10/11-Tray-Anwendung für Entwicklungsressourcen.
 **Stack:** Rust, Slint und SQLite. **Lizenz:** GPL-3.0-only.
-**Stand:** 4. Oktober 2026. Alle Arbeitspakete F-01 bis F-28 sind im Code umgesetzt und automatisiert getestet. Offen sind ausschließlich Abnahmen, die eine zweite Person oder eine weitere Plattform erfordern (Windows 11, unabhängiger Löschpfad-Review G5, manuelle Desktopprüfungen). Die Spalte „Stand“ trennt beides ausdrücklich.
+**Stand:** 5. Oktober 2026. Alle Arbeitspakete F-01 bis F-28 sind im Code umgesetzt und automatisiert getestet. Offen sind ausschließlich Abnahmen, die eine zweite Person oder eine weitere Plattform erfordern (Windows 11, unabhängiger Löschpfad-Review G5, manuelle Desktopprüfungen). Die Spalte „Stand“ trennt beides ausdrücklich.
 
 ## 1. Produkt und Grenze
 
@@ -28,7 +28,7 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 | Ein Besitzerfenster bei Bedarf | Dashboard schließen gibt die Komponente frei; Tray und Kern laufen weiter |
 | Ein Besitzerprozess, eine Schreibstelle | Desktop oder `--headless`; CLI spricht über eine benutzergebundene Named Pipe |
 | Statische Erkennung als Standard | Handle-relatives Lesen freigegebener Ordner; keine Programmstarts beim Erfassen |
-| Eigene Demo-Datenbank | Darstellung testen, ohne Benutzerdaten mit erfundenen Messwerten zu vermischen |
+| Lokalmodus als Startstandard, eigene Demo-Datenbank | Echte freigegebene Daten im normalen Start; Beispielvorschau nur explizit mit `-Mode Demo`, ohne Vermischung |
 | Eingebaute Paketadapter | Pro Fähigkeit getrennt (Inventar/Updates/Bereinigung), keine Fremdcodeausführung |
 | Deklarativer KI-Katalog | `profiles/ai-catalog.toml`, beim Build eingebettet und validiert; keine Skript- oder Netzwerkfelder |
 | Bereinigung nur als Testexecutor | Verwaltete Temp-Ausgabe in registrierten Wegwerf-Testwurzeln; produktiv gesperrt bis G5 |
@@ -38,7 +38,7 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 
 | Bereich | Quelle | Stand |
 |---|---|---|
-| Tray, Fensterlebenszyklus, Dashboard | `src/main.rs`, `src/desktop/`, `ui/` | Acht Ansichten nach Design, Dialoge, Tastaturnavigation; nativ gebaut und auf Windows 10 geprüft |
+| Tray, Fensterlebenszyklus, Dashboard | `src/main.rs`, `src/desktop/`, `ui/` | Acht Ansichten nach Design, Dialoge, Tastaturnavigation, gemeinsame Auswahl-/Hover-/Druck-/Fokuszustände; Lokalmodus als Startstandard |
 | Besitzerprozess und IPC | `src/owner.rs`, `src/ipc/`, `src/platform/windows.rs` | Ein Worker, Named Pipe (nur aktueller Benutzer, nur lokal, erste Instanz), Protokollversion, 1-MiB-Limit |
 | Kern und Anwendungsfälle | `src/service/`, `src/domain/` | Typisierte Zustände und Zustandsautomaten; gemeinsame Anwendungsfälle für UI und CLI |
 | SQLite | `src/storage/`, `migrations/` | Schema v2, Migration mit konsistenter Sicherung, Generationen, Aktionsjournal, Wiederanlauf |
@@ -55,6 +55,8 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 ## 4. Dashboardgestaltung
 
 Das ausgewählte Dashboard ist die visuelle Basis: statischer Berg-/Waldkopf, helles Blau/Grau, schmale linke Navigation und großzügige weiße Karten. Kein animierter Hintergrund, keine permanenten Diagrammanimationen und keine externe Bildabfrage.
+
+Navigation, Filter, Schaltflächen und Listenzeilen teilen zentrale Zustandsfarben. Ausgewählte Zeilen behalten ihre Markierung über stabile Schlüssel; Fokusrahmen liegen innerhalb der jeweiligen Komponente, auch in virtualisierten Listen. Der normale Build-/Startweg verwendet die lokale Datenbank; fehlende Messungen bleiben unbekannt.
 
 | Bereich | Verhalten |
 |---|---|

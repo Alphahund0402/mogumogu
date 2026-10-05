@@ -4,7 +4,7 @@
 
 mogumogu zeigt, welche Entwicklungsressourcen auf deinem Rechner existieren, wem sie gehören, welche Nutzung tatsächlich beobachtet wurde und was eine Prüfung verdient: Projekte, Pakete aus neun Paketmanagern, Python-Umgebungen, Build-Ausgaben, Scratchpads und die KI-Konfiguration von zwölf Clients. Alles bleibt lokal – kein Konto, keine Cloud, keine Telemetrie.
 
-![Dashboard (native App, Demodaten)](docs/screenshots/dashboard.png)
+![Dashboard (Slint-Renderer, lokales Inventar)](docs/screenshots/dashboard-local-render.png)
 
 > **Grundsatz:** Keine beobachtete Nutzung ist kein Entbehrlichkeitsnachweis. Registrieren erlaubt kein Lesen, Lesen erlaubt kein Löschen, und Bereinigung ist in dieser Version auf verwaltete Temp-Ausgabe in ausdrücklich markierten Wegwerf-Testwurzeln beschränkt.
 
@@ -14,7 +14,7 @@ Alle Arbeitspakete F-01 bis F-28 des [Implementierungsplans](docs/IMPLEMENTIERUN
 
 | Fähigkeit | Umfang |
 |---|---|
-| Tray und Dashboard | Acht Ansichten nach dem Naturdesign, Fenster bei Bedarf, Tastaturnavigation, Demo- und Lokalmodus getrennt |
+| Tray und Dashboard | Acht Ansichten nach dem Naturdesign, Fenster bei Bedarf, Tastaturnavigation, einheitliche Auswahl- und Fokuszustände; Lokalmodus als Standard, Demo separat |
 | Lesefreigaben | Pro Ordner, an die Ordneridentität gebunden; Junctions, Symlinks und Cloud-Platzhalter werden nie verfolgt |
 | Inventar | npm, pnpm, pip, uv, Cargo, NuGet statisch je Projekt; Scoop, Chocolatey, Windows-Softwareliste systemweit; deklariert/aufgelöst/installiert getrennt |
 | KI-Konfiguration | Agent Skills, Codex, Claude Code, Copilot/VS Code, Cursor, Gemini, Windsurf, Cline, Roo, OpenCode, Continue, Aider – als Daten, nie ausgeführt |
@@ -29,12 +29,14 @@ Alle Arbeitspakete F-01 bis F-28 des [Implementierungsplans](docs/IMPLEMENTIERUN
 Voraussetzungen: Windows 10/11 x64, [rustup](https://rustup.rs) mit MSVC-Toolchain (die Version legt `rust-toolchain.toml` fest), Visual Studio C++ Build Tools mit Windows SDK.
 
 ```powershell
-.\build.ps1                          # testen, Release bauen, Demo im Tray starten
-.\build.ps1 -Mode Local -ShowDashboard
-.\start.ps1 -Mode Local              # bereits gebaut starten
+.\build.ps1                          # testen, Release bauen, lokales Inventar im Tray starten
+.\build.ps1 -ShowDashboard           # lokales Inventar direkt öffnen
+.\start.ps1 -ShowDashboard           # bereits gebaut mit lokalen Daten starten
 ```
 
 Alternativ `build.cmd` doppelklicken (setzt die Execution Policy nur für diesen Prozess). Ausgabe: `dist\mogumogu\mogumogu.exe` und `mogumogu-cli.exe`. Kein Autostart, kein Dienst, keine Installation von Voraussetzungen.
+
+Der normale Start verwendet deine lokale Datenbank. Neue Inventare beginnen leer: Projekt registrieren, dessen Lesefreigabe erteilen und erfassen. Die separate Vorschau mit Beispieldaten startet nur ausdrücklich mit `-Mode Demo`; eine laufende Instanz vorher im Tray beenden.
 
 ```powershell
 $cli = '.\dist\mogumogu\mogumogu-cli.exe'

@@ -27,33 +27,68 @@ export component Activatable inherits Rectangle {
     in property <bool> available: true;
     in property <bool> in-dialog: false;
     in property <string> label;
+    in property <string> selection-kind;
+    in property <string> selection-key;
+    in property <bool> selected: root.selection-kind != "" && Store.selection-kind == root.selection-kind && Store.selection-key == root.selection-key;
+    in property <bool> checkable: false;
+    in property <brush> resting-background: transparent;
+    in property <color> resting-border: transparent;
+    in property <color> focus-color: Theme.focus;
     out property <bool> hovered: touch.has-hover && root.active;
-    out property <bool> focused: focus.has-focus;
+    out property <bool> pressed: touch.pressed && root.active;
+    out property <bool> focused: focus.has-focus && root.active;
     property <bool> active: root.available && (Store.modal == 0 || root.in-dialog);
     callback activated();
+    forward-focus: focus;
+    border-width: 1px;
+    border-color: root.selected ? Theme.selected-border : root.hovered ? Theme.hover-border : root.resting-border;
+    background: !root.available ? Theme.disabled
+        : root.selected ? (root.pressed ? Theme.selected-pressed : root.hovered ? Theme.selected-hover : Theme.selected)
+        : root.pressed ? Theme.pressed : root.hovered ? Theme.hover : root.resting-background;
     public function grab-focus() { focus.focus(); }
+    public function trigger() {
+        if root.active {
+            if root.selection-kind != "" {
+                Store.selection-kind = root.selection-kind;
+                Store.selection-key = root.selection-key;
+            }
+            root.activated();
+        }
+    }
     accessible-role: button;
-    accessible-label: root.label;
+    accessible-label: root.label + (root.selected ? ", ausgewählt" : "");
     accessible-enabled: root.active;
-    accessible-action-default => { if root.active { root.activated(); } }
+    accessible-checkable: root.checkable;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.trigger(); }
     focus := FocusScope {
+        width: root.width; height: root.height;
         enabled: root.active;
         key-pressed(event) => {
-            if event.text == " " || event.text == "\n" { root.activated(); return accept; }
+            if event.text == " " || event.text == "\n" { root.trigger(); return accept; }
             return reject;
         }
     }
     touch := TouchArea {
+        width: root.width; height: root.height;
         enabled: root.active;
         mouse-cursor: pointer;
-        clicked => { focus.focus(); root.activated(); }
+        clicked => { focus.focus(); root.trigger(); }
     }
     @children
-    Rectangle {
-        border-radius: root.border-radius + 2px;
-        border-width: root.focused ? 2px : 0px;
-        border-color: Theme.focus;
-        x: -3px; y: -3px; width: parent.width + 6px; height: parent.height + 6px;
+    if root.selected && root.selection-kind != "" : Rectangle {
+        x: 1px; y: 8px; width: 3px; height: root.height - 16px;
+        border-radius: 2px; background: Theme.blue;
+        accessible-role: none;
+    }
+    // Inset and explicitly bound to this control: no layout expansion or
+    // clipping into adjacent rows, including virtualized ListView items.
+    if root.focused : Rectangle {
+        border-radius: max(0px, root.border-radius - 2px);
+        border-width: 2px;
+        border-color: root.focus-color;
+        x: 3px; y: 3px; width: root.width - 6px; height: root.height - 6px;
+        accessible-role: none;
     }
 }
 
@@ -63,36 +98,41 @@ export component UiButton inherits Activatable {
     in property <image> icon;
     in property <bool> has-icon: false;
     in property <length> font-size: 11px;
+    focus-color: root.primary ? white : Theme.focus;
     height: 32px;
     min-width: 72px;
     border-radius: 7px;
     border-width: 1px;
-    border-color: root.primary ? Theme.blue : #e0e7ef;
-    background: !root.available ? #edf1f5 : root.primary ? (root.hovered ? Theme.blue-hover : Theme.blue) : (root.hovered ? #f4f8fd : white);
+    resting-background: Theme.surface;
+    resting-border: #d3deea;
+    border-color: !root.available ? Theme.line : root.primary ? Theme.blue : root.selected ? Theme.selected-border : root.hovered ? Theme.hover-border : root.resting-border;
+    background: !root.available ? Theme.disabled
+        : root.primary ? (root.pressed ? Theme.blue-pressed : root.hovered ? Theme.blue-hover : Theme.blue)
+        : root.selected ? (root.pressed ? Theme.selected-pressed : root.hovered ? Theme.selected-hover : Theme.selected)
+        : root.pressed ? Theme.pressed : root.hovered ? Theme.hover : root.resting-background;
     HorizontalLayout {
         padding-left: 12px; padding-right: 12px; spacing: 7px; alignment: center;
-        if root.has-icon : Icon { source: root.icon; width: 13px; height: 13px; y: (parent.height - self.height) / 2; tone: root.primary ? white : Theme.ink; }
+        if root.has-icon : Icon { source: root.icon; width: 13px; height: 13px; y: (parent.height - self.height) / 2; tone: !root.available ? Theme.disabled-ink : root.primary ? white : root.selected ? Theme.selected-ink : Theme.ink; }
         Text {
             text: root.label;
             font-size: root.font-size;
             vertical-alignment: center;
-            color: !root.available ? #94a1b0 : root.primary ? white : Theme.ink;
+            color: !root.available ? Theme.disabled-ink : root.primary ? white : root.selected ? Theme.selected-ink : Theme.ink;
+            font-weight: root.selected || root.primary ? 600 : 400;
         }
     }
 }
 
 export component NavItem inherits Activatable {
     in property <image> icon;
-    in property <bool> selected;
+    checkable: true;
     height: 42px;
     border-radius: 8px;
-    background: root.selected ? Theme.blue-soft : root.hovered ? #f0f4f8 : transparent;
-    accessible-label: root.label + (root.selected ? ", ausgewählt" : "");
-    if root.selected : Rectangle { x: 0; y: 13px; width: 3px; height: 17px; border-radius: 2px; background: Theme.blue; }
+    if root.selected : Rectangle { x: 1px; y: 10px; width: 3px; height: root.height - 20px; border-radius: 2px; background: Theme.blue; }
     HorizontalLayout {
         padding-left: 13px; spacing: 12px;
-        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.blue : Theme.ink; }
-        Text { text: root.label; vertical-alignment: center; font-size: 12px; color: root.selected ? Theme.blue : Theme.ink; font-weight: root.selected ? 600 : 400; }
+        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.selected-ink : Theme.ink; }
+        Text { text: root.label; vertical-alignment: center; font-size: 12px; color: root.selected ? Theme.selected-ink : Theme.ink; font-weight: root.selected ? 650 : 400; }
     }
 }
 
@@ -104,10 +144,9 @@ export component Metric inherits Activatable {
     in property <color> tone: Theme.blue;
     in property <color> tint: #edf4ff;
     min-height: 96px;
-    background: white;
+    resting-background: Theme.surface;
     border-radius: Theme.radius;
-    border-width: 1px;
-    border-color: root.hovered ? #bed5ef : Theme.line;
+    resting-border: Theme.line;
     drop-shadow-blur: 14px;
     drop-shadow-offset-y: 3px;
     drop-shadow-color: #16354f0a;
@@ -165,16 +204,18 @@ export component Pill inherits Rectangle {
 }
 
 export component FilterChip inherits Activatable {
-    in property <bool> selected;
     in property <string> count;
-    height: 26px;
+    checkable: true;
+    height: 30px;
     border-radius: 6px;
-    background: root.selected ? #e6f0ff : root.hovered ? #eef3f8 : #f6f8fb;
+    resting-background: Theme.row;
+    resting-border: Theme.line;
     accessible-label: root.label + " " + root.count + (root.selected ? ", aktiv" : "");
     HorizontalLayout {
-        padding-left: 13px; padding-right: 13px; spacing: 5px;
-        Text { text: root.label; font-size: 10px; vertical-alignment: center; color: root.selected ? Theme.blue : #718196; }
-        Text { text: root.count; font-size: 8px; vertical-alignment: center; color: root.selected ? Theme.blue : #9aa7b6; }
+        padding-left: 11px; padding-right: 11px; spacing: 6px;
+        if root.selected : Icon { source: Icons.check; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: Theme.selected-ink; }
+        Text { text: root.label; font-size: 10px; font-weight: root.selected ? 650 : 400; vertical-alignment: center; color: root.selected ? Theme.selected-ink : Theme.muted; }
+        if root.count != "" : Text { text: root.count; font-size: 9px; font-weight: root.selected ? 600 : 400; vertical-alignment: center; color: root.selected ? Theme.selected-ink : Theme.muted; }
     }
 }
 
@@ -183,9 +224,8 @@ export component QuickAction inherits Activatable {
     in property <image> icon;
     height: 50px;
     border-radius: 8px;
-    border-width: 1px;
-    border-color: root.hovered ? #c5daee : #e8edf3;
-    background: root.hovered ? #eff5fd : #fafbfd;
+    resting-border: Theme.line;
+    resting-background: Theme.row;
     HorizontalLayout {
         padding-left: 12px; padding-right: 12px; spacing: 12px;
         Icon { source: root.icon; y: (parent.height - self.height) / 2; }
@@ -207,16 +247,15 @@ export component RowCard inherits Activatable {
     in property <image> icon;
     height: 62px;
     border-radius: 9px;
-    border-width: 1px;
-    border-color: #e9eff4;
-    background: root.hovered ? Theme.row-hover : Theme.row;
-    accessible-label: root.title + ". " + root.subtitle + ". " + root.pill;
+    resting-border: Theme.line;
+    resting-background: Theme.row;
+    accessible-label: root.title + ". " + root.subtitle + ". " + root.pill + (root.selected ? ", ausgewählt" : "");
     HorizontalLayout {
         padding-left: 16px; padding-right: 16px; spacing: 14px;
-        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: #6585a0; }
+        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.selected-ink : #6585a0; }
         VerticalLayout {
             alignment: center; spacing: 4px; horizontal-stretch: 1;
-            Text { text: root.title; font-size: 12px; font-weight: 600; color: Theme.ink; overflow: elide; }
+            Text { text: root.title; font-size: 12px; font-weight: root.selected ? 700 : 600; color: root.selected ? Theme.selected-ink : Theme.ink; overflow: elide; }
             Text { text: root.subtitle; font-size: 10px; color: Theme.muted; overflow: elide; }
         }
         if root.meta != "" : Text { text: root.meta; font-size: 12px; color: #49617b; vertical-alignment: center; }
@@ -305,6 +344,8 @@ export component SettingToggle inherits Panel {
     in property <string> description;
     in property <bool> checked;
     in property <bool> enabled: true;
+    background: root.checked ? Theme.selected : Theme.row;
+    border-color: root.checked ? Theme.selected-border : Theme.line;
     callback toggled(bool);
     HorizontalLayout {
         spacing: 12px;
@@ -322,17 +363,19 @@ export component SettingToggle inherits Panel {
 component ProjectLine inherits Activatable {
     in property <ProjectRow> data;
     height: 40px;
+    border-radius: 6px;
+    selection-kind: "project";
+    selection-key: "" + root.data.id;
     label: root.data.name + ", " + root.data.state + ", " + root.data.path;
-    background: root.hovered ? #f4f8ff : transparent;
-    Rectangle { y: parent.height - 1px; height: 1px; background: #edf2f6; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: #edf2f6; visible: !root.selected; }
     HorizontalLayout {
         padding-left: 10px; padding-right: 10px; spacing: 10px;
         HorizontalLayout {
             width: 150px; spacing: 8px;
-            Icon { source: Icons.folder; width: 14px; height: 14px; y: (parent.height - self.height) / 2; tone: #3482cf; }
-            Text { text: root.data.name; font-size: 10px; font-weight: 500; color: Theme.ink; vertical-alignment: center; overflow: elide; }
+            Icon { source: Icons.folder; width: 14px; height: 14px; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.selected-ink : Theme.blue; }
+            Text { text: root.data.name; font-size: 10px; font-weight: root.selected ? 650 : 500; color: root.selected ? Theme.selected-ink : Theme.ink; vertical-alignment: center; overflow: elide; }
         }
-        Text { text: root.data.path; horizontal-stretch: 1; font-size: 9px; color: #7e8da0; vertical-alignment: center; overflow: elide; }
+        Text { text: root.data.path; horizontal-stretch: 1; font-size: 9px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
         Text { text: root.data.size; width: 72px; font-size: 10px; color: Theme.ink; vertical-alignment: center; }
         HorizontalLayout { width: 92px; alignment: start; Pill { label: root.data.state; kind: root.data.state-kind; y: (parent.height - self.height) / 2; } }
         Text { text: root.data.ecosystem; width: 130px; font-size: 9px; color: #6f8197; vertical-alignment: center; overflow: elide; }
