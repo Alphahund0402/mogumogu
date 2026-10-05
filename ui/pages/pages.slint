@@ -1,0 +1,293 @@
+// The seven detail pages. Each is a single card with header, an honest
+// one-line boundary statement and a bounded list.
+import { ListView, LineEdit, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Card, Icon, UiButton, FilterChip, RowCard, Callout, PageHeader, Pill, Panel, SettingToggle, ProjectTable } from "../components.slint";
+
+component PageCard inherits Card {
+    in property <string> title;
+    in property <string> description;
+    VerticalLayout {
+        padding: 24px; spacing: 16px;
+        PageHeader { title: root.title; description: root.description; }
+        @children
+    }
+}
+
+export component ProjectsPage inherits PageCard {
+    title: "Projekte";
+    description: "Registrierung ist keine Lese-, Scan- oder Löschfreigabe. Die Lesefreigabe wird pro Projekt bewusst erteilt.";
+    HorizontalLayout {
+        spacing: 5px; alignment: start;
+        FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.search(Store.query); } }
+        FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.search(Store.query); } }
+        FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.search(Store.query); } }
+        Rectangle { horizontal-stretch: 1; }
+        UiButton { label: "Projekt registrieren"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-project(); } }
+    }
+    ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
+}
+
+export component PackagesPage inherits PageCard {
+    title: "Paketmanager";
+    description: "Statische Adapter mit getrennten Fähigkeiten: Inventar, Updatehinweis und Bereinigung sind unabhängig. Kein Adapter startet Programme.";
+    if !Store.demo : HorizontalLayout {
+        spacing: 8px; alignment: start;
+        UiButton { label: "Scoop freigeben"; activated => { Actions.approve-system("scoop"); } }
+        UiButton { label: "Chocolatey freigeben"; activated => { Actions.approve-system("chocolatey"); } }
+        UiButton { label: "Windows-Softwareliste freigeben"; activated => { Actions.approve-system("winget"); } }
+        Rectangle { horizontal-stretch: 1; }
+        UiButton { label: "Updatehinweise prüfen"; has-icon: true; icon: Icons.refresh; available: Store.updates; activated => { Actions.check-updates(); } }
+    }
+    ListView {
+        vertical-stretch: 1;
+        for adapter in Store.adapters : Rectangle {
+            height: 78px;
+            Rectangle {
+                y: 3px; height: parent.height - 6px; border-radius: 9px; border-width: 1px; border-color: #e9eff4;
+                background: touch.has-hover ? Theme.row-hover : Theme.row;
+                accessible-role: button;
+                accessible-label: adapter.name + ". Inventar " + adapter.inventory + ", Updates " + adapter.updates + ", Bereinigung " + adapter.cleanup;
+                accessible-action-default => { Actions.open-adapter(adapter.id); }
+                HorizontalLayout {
+                    padding-left: 16px; padding-right: 16px; spacing: 14px;
+                    Icon { source: Icons.package; y: (parent.height - self.height) / 2; tone: #b67b27; }
+                    VerticalLayout {
+                        alignment: center; spacing: 4px; width: 190px;
+                        Text { text: adapter.name; font-size: 13px; font-weight: 600; color: Theme.ink; }
+                        Text { text: adapter.counts; font-size: 10px; color: Theme.muted; overflow: elide; }
+                    }
+                    VerticalLayout {
+                        alignment: center; spacing: 4px; horizontal-stretch: 1;
+                        Text { text: adapter.formats; font-size: 10px; color: Theme.ink; overflow: elide; }
+                        Text { text: adapter.limits; font-size: 9px; color: Theme.muted; overflow: elide; }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px; alignment: end;
+                        Pill { label: "Inventar: " + adapter.inventory; kind: adapter.inventory == "nicht unterstützt" ? "" : "running"; y: (parent.height - self.height) / 2; }
+                        Pill { label: "Updates: " + adapter.updates; kind: adapter.updates == "nicht unterstützt" ? "" : "running"; y: (parent.height - self.height) / 2; }
+                        Pill { label: "Bereinigung: " + adapter.cleanup; kind: "protected"; y: (parent.height - self.height) / 2; }
+                    }
+                }
+                touch := TouchArea { enabled: Store.modal == 0; mouse-cursor: pointer; clicked => { Actions.open-adapter(adapter.id); } }
+            }
+        }
+    }
+}
+
+export component AiPage inherits PageCard {
+    title: "KI-Konfiguration";
+    description: "Statisch erkannte Skills, Instruktionen, MCP- und Hook-Einträge. Inhalte sind Daten: nichts wird gestartet, geladen oder befolgt.";
+    Callout { text: "Datei vorhanden, Client installiert, Format verstanden und tatsächlich verwendet sind getrennte Aussagen. mogumogu zeigt nur, was statisch belegt ist."; }
+    HorizontalLayout {
+        spacing: 6px; alignment: start;
+        for chip in Store.profiles : Pill { label: chip.name + " · " + chip.status; kind: "protected"; }
+    }
+    if Store.ai.length == 0 : Text {
+        text: "Noch keine KI-Dateien erfasst. Für ein Projekt die Lesefreigabe erteilen und erfassen.";
+        font-size: 12px; color: Theme.muted;
+    }
+    ListView {
+        vertical-stretch: 1;
+        for row in Store.ai : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: Icons.spark;
+                title: row.client + " · " + row.kind;
+                subtitle: row.detail;
+                meta: row.references > 0 ? row.references + " Verweise" : "";
+                pill: "Geschützt";
+                pill-kind: "protected";
+                label: row.client;
+                activated => { Actions.open-ai(row.index); }
+            }
+        }
+    }
+}
+
+export component ResourcesPage inherits PageCard {
+    title: "Ressourcen";
+    description: "Besitzer, Typ, Größe und Aktivität. Größen bleiben ohne Messung unbekannt; Pfade werden ohne Lesefreigabe nicht gelesen.";
+    HorizontalLayout {
+        spacing: 5px; alignment: start;
+        FilterChip { label: "Alle"; selected: Store.resource-tab == 0; activated => { Store.resource-tab = 0; Actions.search(Store.query); } }
+        FilterChip { label: "Scratchpads"; selected: Store.resource-tab == 1; activated => { Store.resource-tab = 1; Actions.search(Store.query); } }
+        FilterChip { label: "Sessions"; count: Store.sessions.length; selected: Store.resource-tab == 2; activated => { Store.resource-tab = 2; } }
+        Rectangle { horizontal-stretch: 1; }
+        if !Store.demo : UiButton { label: "Scratchpad anlegen"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-scratch(); } }
+    }
+    if Store.resource-tab < 2 : ListView {
+        vertical-stretch: 1;
+        for row in Store.resources : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: row.kind == "Temporär" ? Icons.clock : row.kind == "Umgebung" ? Icons.package : Icons.folder;
+                title: row.name;
+                subtitle: row.kind + " · " + row.owner + " · " + row.detail;
+                meta: row.size;
+                pill: row.state;
+                pill-kind: row.state-kind;
+                label: row.name;
+                activated => { Actions.open-resource(row.id); }
+            }
+        }
+    }
+    if Store.resource-tab == 2 : ListView {
+        vertical-stretch: 1;
+        for session in Store.sessions : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: Icons.activity;
+                title: "Session " + session.id + " · " + session.purpose;
+                subtitle: session.scratch + " · gestartet " + session.started;
+                pill: session.state;
+                pill-kind: session.state-kind;
+                label: "Session " + session.id;
+            }
+        }
+    }
+}
+
+export component ReviewPage inherits PageCard {
+    title: "Prüfliste";
+    description: "Eine Prüfliste ist kein Löschplan. Hinweise nennen Auslöser, Beleg, Besitzer und Unsicherheit; Schutz gewinnt immer.";
+    Callout { warn: true; icon: Icons.shield; text: "Keine Nutzung beobachtet ≠ sicher entbehrlich. Geschützte Quellen und unklare Ergebnisse bleiben erhalten. Bereinigt wird nur verwaltete Temp-Ausgabe nach bestätigtem Plan – vor dem unabhängigen Review (G5) ausschließlich in Wegwerf-Testwurzeln."; }
+    if Store.hints.length == 0 : Text { text: "Keine Prüfhinweise. Unbekannte Nutzung wird nicht automatisch als entbehrlich eingestuft."; font-size: 12px; color: Theme.muted; }
+    ListView {
+        vertical-stretch: 1;
+        for hint in Store.hints : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: hint.kind == "Prüftermin erreicht" ? Icons.clock : hint.kind == "Möglicherweise verwaist" ? Icons.folder : Icons.package;
+                title: hint.name + " · " + hint.kind;
+                subtitle: hint.trigger != "" ? hint.trigger + " " + hint.evidence : hint.evidence;
+                meta: hint.size;
+                pill: hint.protected ? "Geschützt" : hint.plannable ? "Planbar" : "Prüfen";
+                pill-kind: hint.protected ? "protected" : "review";
+                label: hint.name;
+                activated => { Actions.open-hint(hint.id); }
+            }
+        }
+    }
+    if Store.plans.length > 0 : VerticalLayout {
+        spacing: 6px;
+        Text { text: "Pläne"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+        for plan in Store.plans : RowCard {
+            icon: Icons.check;
+            title: "Plan " + plan.id + " · " + plan.summary;
+            subtitle: "Fingerabdruck " + plan.fingerprint + " · " + plan.created;
+            pill: plan.state;
+            pill-kind: "protected";
+            label: "Plan " + plan.id;
+            activated => { Actions.open-plan(plan.id); }
+        }
+    }
+}
+
+export component ActivityPage inherits PageCard {
+    title: "Aktivität & Abdeckung";
+    description: "Was erfasst ist, was teilweise blieb und was sich geändert hat. Ein Limit oder Fehler bedeutet unvollständige Abdeckung, nicht Abwesenheit.";
+    Text { text: "Lesefreigaben"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+    if Store.scopes.length == 0 : Text { text: "Noch keine Lesefreigaben. Im Projekt-Detail „Lesefreigabe erteilen“ wählen."; font-size: 11px; color: Theme.muted; }
+    for scope in Store.scopes : RowCard {
+        icon: scope.watched ? Icons.monitor : Icons.shield;
+        title: scope.kind + " · " + scope.path;
+        subtitle: scope.coverage + (scope.last != "" ? " · " + scope.last : "") + (scope.watched ? " · wird beobachtet" : "");
+        pill: scope.status;
+        pill-kind: scope.healthy ? "ok" : "warn";
+        label: scope.path;
+        activated => { Actions.open-scope(scope.id); }
+    }
+    Text { text: "Ereignisse"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+    ListView {
+        vertical-stretch: 1;
+        for event in Store.events : Rectangle {
+            height: 58px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: Icons.activity;
+                title: event.title;
+                subtitle: event.detail;
+                meta: event.time;
+                label: event.title;
+            }
+        }
+    }
+}
+
+export component SettingsPage inherits PageCard {
+    title: "Einstellungen";
+    description: "Alles bleibt lokal. Überwachung, Hinweise und Netzwerk sind ausdrückliche, abschaltbare Entscheidungen.";
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            spacing: 14px; alignment: start;
+            HorizontalLayout {
+                spacing: 14px;
+                Panel {
+                    title: "Datenort und Modus"; horizontal-stretch: 1;
+                    Text { text: Store.demo ? "Demodaten · eigene Datenbank, schreibgeschützt" : "Lokales Inventar · explizite Registrierung"; font-size: 11px; color: Theme.ink; }
+                    Text { text: Store.data-path; font-size: 10px; color: Theme.muted; wrap: word-wrap; }
+                    Text { text: "SQLite " + Store.sqlite-version + " · Tray-Betrieb: Fenster schließen beendet die App nicht."; font-size: 10px; color: Theme.muted; wrap: word-wrap; }
+                }
+                Panel {
+                    title: "Bereinigung"; horizontal-stretch: 1;
+                    Text { text: Store.cleanup-status; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 14px;
+                SettingToggle {
+                    horizontal-stretch: 1; title: "Überwachung";
+                    description: "Entprellte Dateiereignisse in freigegebenen Projektordnern lösen eine begrenzte Neuerfassung aus. Aus: nur manuelle Erfassung.";
+                    checked: Store.monitoring; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-monitoring(on); }
+                }
+                SettingToggle {
+                    horizontal-stretch: 1; title: "Tray-Hinweise";
+                    description: "Generische Hinweise im Tray-Tooltip (Anzahl Prüfhinweise) – ohne Pfade oder Paketnamen.";
+                    checked: Store.notifications; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-notifications(on); }
+                }
+            }
+            HorizontalLayout {
+                spacing: 14px;
+                SettingToggle {
+                    horizontal-stretch: 1; title: "Updatehinweise (Netzwerk)";
+                    description: "Aus = keine Netzwerkzugriffe. Ein = nur einzeln freigegebene öffentliche Quellen; private Quellen nie.";
+                    checked: Store.updates; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-updates(on); }
+                    for source in Store.sources : HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: source.host; font-size: 11px; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
+                        UiButton {
+                            label: source.enabled ? "Freigegeben" : "Freigeben";
+                            primary: source.enabled;
+                            available: Store.updates && !Store.demo;
+                            activated => { Actions.set-source(source.host, !source.enabled); }
+                        }
+                    }
+                }
+                Panel {
+                    title: "Scratchpad-Wurzel"; horizontal-stretch: 1;
+                    Text { text: "Hier legt mogumogu verwaltete Scratchpads an (source, environment, temporary, results)."; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        root-field := LineEdit { text: Store.scratch-root; placeholder-text: "C:\\dev\\scratch"; enabled: !Store.demo && Store.modal == 0; horizontal-stretch: 1; }
+                        UiButton { label: "Speichern"; available: !Store.demo; activated => { Actions.save-scratch-root(root-field.text); } }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 12px; alignment: start;
+                UiButton { label: "In den Tray wechseln"; activated => { Actions.hide-dashboard(); } }
+                Text { text: "Tastatur: Strg+K Suche · Alt+1…8 Bereiche · Esc schließt Dialoge · Tab wechselt den Fokus"; font-size: 11px; color: Theme.muted; vertical-alignment: center; }
+            }
+        }
+    }
+}

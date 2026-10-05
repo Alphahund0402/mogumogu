@@ -1,0 +1,118 @@
+// The only interface between Rust and the UI: data in `Store`, intents in
+// `Actions`. Pages read from Store and call Actions; no page knows Rust.
+
+export struct ProjectRow { id: int, name: string, path: string, ecosystem: string, state: string, state-kind: string, size: string, detail: string, approved: bool, coverage: string }
+export struct ResourceRow { id: int, name: string, kind: string, owner: string, size: string, state: string, state-kind: string, detail: string }
+export struct AiRow { index: int, client: string, kind: string, detail: string, path: string, letter: string, references: int }
+export struct EventRow { title: string, detail: string, time: string, kind: string }
+export struct AdapterRow { id: string, name: string, inventory: string, updates: string, cleanup: string, counts: string, formats: string, limits: string }
+export struct HintRow { id: int, name: string, kind: string, trigger: string, evidence: string, size: string, protected: bool, plannable: bool }
+export struct ScopeRow { id: int, kind: string, path: string, status: string, coverage: string, last: string, watched: bool, healthy: bool }
+export struct SessionRow { id: int, scratch: string, purpose: string, state: string, state-kind: string, started: string }
+export struct PlanRow { id: int, state: string, created: string, summary: string, fingerprint: string }
+export struct DonutSegment { commands: string, color: color }
+export struct LegendRow { label: string, value: string, color: color }
+export struct ProfileChip { name: string, status: string }
+export struct DetailRow { label: string, value: string }
+export struct DetailAction { id: string, label: string, primary: bool }
+export struct SourceToggle { host: string, enabled: bool }
+
+export global Store {
+    // Mode and status
+    in property <bool> demo: true;
+    in property <bool> busy: false;
+    in property <string> status: "Inventar wird geladen …";
+    in property <string> sqlite-version;
+    in property <string> data-path;
+    in property <string> version: "0.1.0";
+
+    // Overview metrics
+    in property <string> project-count: "0";
+    in property <string> project-note;
+    in property <string> package-count: "—";
+    in property <string> package-note;
+    in property <string> footprint: "—";
+    in property <string> footprint-note;
+    in property <string> ai-count: "0";
+    in property <string> ai-note;
+    in property <int> review-count: 0;
+    in property <string> count-all: "0";
+    in property <string> count-observed: "0";
+    in property <string> count-review: "0";
+
+    // Models (bounded by Rust to one UI page each)
+    in property <[ProjectRow]> projects;
+    in property <[ResourceRow]> resources;
+    in property <[AiRow]> ai;
+    in property <[EventRow]> events;
+    in property <[AdapterRow]> adapters;
+    in property <[HintRow]> hints;
+    in property <[ScopeRow]> scopes;
+    in property <[SessionRow]> sessions;
+    in property <[PlanRow]> plans;
+    in property <[ProfileChip]> profiles;
+
+    // Storage overview
+    in property <[DonutSegment]> donut;
+    in property <[LegendRow]> legend;
+    in property <string> donut-value: "—";
+    in property <string> donut-caption: "Unbekannt";
+    in property <string> storage-subtitle;
+
+    // Settings
+    in property <bool> monitoring: false;
+    in property <bool> notifications: false;
+    in property <bool> updates: false;
+    in property <[SourceToggle]> sources;
+    in property <string> scratch-root;
+    in property <string> cleanup-status;
+
+    // Navigation and filters
+    in-out property <int> page: 0;
+    in-out property <int> filter: 0;
+    in-out property <int> resource-tab: 0;
+    in-out property <string> query;
+
+    // Modal layer: 0 none, 1 detail, 2 form
+    in-out property <int> modal: 0;
+    in property <string> detail-title;
+    in property <string> detail-path;
+    in property <string> detail-body;
+    in property <[DetailRow]> detail-rows;
+    in property <[DetailAction]> detail-actions;
+    in property <string> form-title;
+    in property <string> form-text;
+    in property <string> form-label-1;
+    in property <string> form-hint-1;
+    in property <string> form-label-2;
+    in property <string> form-hint-2;
+    in property <string> form-submit;
+    in-out property <string> form-value-1;
+    in-out property <string> form-value-2;
+}
+
+export global Actions {
+    callback refresh();
+    callback scan-all();
+    callback search(string);
+    callback open-project(int);
+    callback open-resource(int);
+    callback open-ai(int);
+    callback open-hint(int);
+    callback open-scope(int);
+    callback open-plan(int);
+    callback open-adapter(string);
+    callback new-project();
+    callback new-scratch();
+    callback show-cli();
+    callback detail-action(string);
+    callback submit-form(string, string);
+    callback set-monitoring(bool);
+    callback set-notifications(bool);
+    callback set-updates(bool);
+    callback set-source(string, bool);
+    callback save-scratch-root(string);
+    callback approve-system(string);
+    callback check-updates();
+    callback hide-dashboard();
+}

@@ -1,0 +1,85 @@
+[package]
+name = "mogumogu"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "GPL-3.0-only"
+description = "Local development inventory and a nature-inspired Windows tray dashboard"
+build = "build.rs"
+default-run = "mogumogu"
+publish = false
+
+[lib]
+name = "mogumogu"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mogumogu"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[[bin]]
+name = "mogumogu-cli"
+path = "src/bin/cli/main.rs"
+
+[features]
+default = ["desktop", "network"]
+# Native Slint dashboard and tray. Core tests run without it.
+desktop = ["dep:slint", "dep:slint-build"]
+# Opt-in update hints. Compiled in, but every request still needs a local,
+# per-source approval at runtime. Without this feature no HTTP client exists.
+network = ["dep:ureq"]
+
+[dependencies]
+notify = { version = "8.2", default-features = false }
+quick-xml = "0.41"
+regex = "1"
+rusqlite = { version = "=0.40.2", features = ["bundled", "backup"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+slint = { version = "=1.18.1", optional = true, default-features = false, features = ["std", "backend-winit", "renderer-software", "system-tray", "accessibility", "compat-1-18"] }
+toml = "0.9"
+ureq = { version = "3", optional = true, default-features = false, features = ["native-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
+    "Wdk_System_SystemServices",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_JobObjects",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+    "Win32_System_Time",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+slint-build = { version = "=1.18.1", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.dev]
+debug = 1

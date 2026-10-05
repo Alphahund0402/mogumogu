@@ -1,0 +1,154 @@
+# mogumogu AI profile catalog (declarative, PROJEKTPLAN §8.2/§8.3).
+#
+# Patterns are relative paths matched against the end of a file's path below
+# an approved folder. Each segment may contain one `*`. No absolute paths,
+# no `..`, no `**`, no code, no network. Unknown fields are rejected.
+# Parsers: skill, instructions, mcp-json, mcp-jsonc, settings-json,
+# codex-toml, rules, presence. Limits may only be lower than host limits.
+# "status" follows the published support matrix: a detection candidate is
+# not a tested client integration.
+
+schema = 1
+version = "2026-10-04.1"
+
+[[profile]]
+id = "agent-skills"
+name = "Agent Skills"
+status = "experimental"
+source = "https://agentskills.io/specification"
+detect = [
+  { pattern = ".agents/skills/*/SKILL.md", parser = "skill", kind = "Skill" },
+]
+
+[[profile]]
+id = "codex"
+name = "Codex"
+status = "experimental"
+source = "https://developers.openai.com/codex"
+detect = [
+  { pattern = "AGENTS.md", parser = "instructions", kind = "Instruktionen" },
+  { pattern = "AGENTS.override.md", parser = "instructions", kind = "Instruktionen (Override)" },
+  { pattern = ".codex/config.toml", parser = "codex-toml", kind = "Konfiguration" },
+]
+
+[[profile]]
+id = "claude-code"
+name = "Claude Code"
+status = "experimental"
+source = "https://docs.claude.com/en/docs/claude-code"
+detect = [
+  { pattern = "CLAUDE.md", parser = "instructions", kind = "Instruktionen" },
+  { pattern = "CLAUDE.local.md", parser = "instructions", kind = "Lokale Instruktionen" },
+  { pattern = ".claude/CLAUDE.md", parser = "instructions", kind = "Instruktionen" },
+  { pattern = ".claude/skills/*/SKILL.md", parser = "skill", kind = "Skill" },
+  { pattern = ".claude/agents/*.md", parser = "rules", kind = "Agent" },
+  { pattern = ".claude/commands/*.md", parser = "rules", kind = "Befehl" },
+  { pattern = ".claude/rules/*.md", parser = "rules", kind = "Regel" },
+  { pattern = ".claude/settings.json", parser = "settings-json", kind = "Projekteinstellungen" },
+  { pattern = ".claude/settings.local.json", parser = "settings-json", kind = "Lokale Einstellungen" },
+  { pattern = ".mcp.json", parser = "mcp-json", kind = "MCP-Konfiguration", mcp_key = "mcpServers" },
+]
+
+[[profile]]
+id = "copilot"
+name = "GitHub Copilot / VS Code"
+status = "experimental"
+source = "https://code.visualstudio.com/docs/copilot/customization/custom-instructions"
+detect = [
+  { pattern = ".github/copilot-instructions.md", parser = "instructions", kind = "Instruktionen" },
+  { pattern = ".github/instructions/*.instructions.md", parser = "rules", kind = "Instruktionen" },
+  { pattern = ".github/prompts/*.prompt.md", parser = "rules", kind = "Prompt" },
+  { pattern = ".github/agents/*.md", parser = "rules", kind = "Agent" },
+  { pattern = ".github/skills/*/SKILL.md", parser = "skill", kind = "Skill" },
+  { pattern = ".vscode/mcp.json", parser = "mcp-jsonc", kind = "MCP-Konfiguration", mcp_key = "servers" },
+  { pattern = "AGENTS.md", parser = "instructions", kind = "Instruktionen (AGENTS.md)" },
+]
+
+[[profile]]
+id = "cursor"
+name = "Cursor"
+status = "experimental"
+source = "https://docs.cursor.com/context/rules"
+detect = [
+  { pattern = ".cursor/rules/*.mdc", parser = "rules", kind = "Projektregel" },
+  { pattern = ".cursor/rules/*.md", parser = "rules", kind = "Projektregel" },
+  { pattern = ".cursorrules", parser = "presence", kind = "Altformat-Regeln" },
+  { pattern = ".cursor/mcp.json", parser = "mcp-json", kind = "MCP-Konfiguration", mcp_key = "mcpServers" },
+  { pattern = "AGENTS.md", parser = "instructions", kind = "Instruktionen (AGENTS.md)" },
+]
+
+[[profile]]
+id = "gemini"
+name = "Gemini CLI"
+status = "experimental"
+source = "https://github.com/google-gemini/gemini-cli/tree/main/docs"
+detect = [
+  { pattern = "GEMINI.md", parser = "instructions", kind = "Kontextdatei" },
+  { pattern = ".gemini/settings.json", parser = "mcp-json", kind = "Einstellungen", mcp_key = "mcpServers" },
+  { pattern = ".gemini/skills/*/SKILL.md", parser = "skill", kind = "Skill" },
+]
+
+[[profile]]
+id = "windsurf"
+name = "Windsurf / Cascade"
+status = "experimental"
+source = "https://docs.windsurf.com/windsurf/cascade/memories"
+detect = [
+  { pattern = ".windsurf/rules/*.md", parser = "rules", kind = "Regel" },
+  { pattern = ".windsurfrules", parser = "presence", kind = "Altformat-Regeln" },
+]
+
+[[profile]]
+id = "cline"
+name = "Cline"
+status = "experimental"
+source = "https://docs.cline.bot/features/cline-rules"
+detect = [
+  { pattern = ".clinerules", parser = "presence", kind = "Regeldatei" },
+  { pattern = ".clinerules/*.md", parser = "rules", kind = "Regel" },
+]
+
+[[profile]]
+id = "roo"
+name = "Roo Code"
+status = "experimental"
+source = "https://docs.roocode.com/features/custom-instructions"
+detect = [
+  { pattern = ".roo/rules/*.md", parser = "rules", kind = "Regel" },
+  { pattern = ".roo/rules-*/*.md", parser = "rules", kind = "Modusregel" },
+  { pattern = ".roomodes", parser = "presence", kind = "Modusdefinition" },
+  { pattern = ".roo/mcp.json", parser = "mcp-json", kind = "MCP-Konfiguration", mcp_key = "mcpServers" },
+]
+
+[[profile]]
+id = "opencode"
+name = "OpenCode"
+status = "experimental"
+source = "https://opencode.ai/docs/config"
+detect = [
+  { pattern = "opencode.json", parser = "mcp-jsonc", kind = "Konfiguration", mcp_key = "mcp" },
+  { pattern = "opencode.jsonc", parser = "mcp-jsonc", kind = "Konfiguration", mcp_key = "mcp" },
+  { pattern = ".opencode/agent/*.md", parser = "rules", kind = "Agent" },
+  { pattern = ".opencode/command/*.md", parser = "rules", kind = "Befehl" },
+  { pattern = "AGENTS.md", parser = "instructions", kind = "Instruktionen (AGENTS.md)" },
+]
+
+[[profile]]
+id = "continue"
+name = "Continue"
+status = "experimental"
+source = "https://docs.continue.dev/customize/deep-dives/rules"
+detect = [
+  { pattern = ".continue/rules/*.md", parser = "rules", kind = "Regel" },
+  { pattern = ".continue/config.yaml", parser = "presence", kind = "Konfiguration" },
+  { pattern = ".continue/mcpServers/*.yaml", parser = "presence", kind = "MCP-Konfiguration" },
+]
+
+[[profile]]
+id = "aider"
+name = "Aider"
+status = "experimental"
+source = "https://aider.chat/docs/config/aider_conf.html"
+detect = [
+  { pattern = ".aider.conf.yml", parser = "presence", kind = "Konfiguration" },
+]
