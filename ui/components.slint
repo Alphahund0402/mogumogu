@@ -1,0 +1,367 @@
+import { Switch, ListView } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { Store, ProjectRow, DonutSegment, LegendRow } from "store.slint";
+
+export component Card inherits Rectangle {
+    background: Theme.surface;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.line;
+    drop-shadow-blur: 14px;
+    drop-shadow-offset-y: 3px;
+    drop-shadow-color: #16354f0a;
+}
+
+export component Icon inherits Image {
+    in property <color> tone: Theme.ink;
+    width: 18px;
+    height: 18px;
+    colorize: root.tone;
+    image-fit: contain;
+    accessible-role: none;
+}
+
+// Keyboard-activatable surface: Enter/Space trigger, focus ring visible.
+// Disabled while a dialog is open unless the element lives in the dialog.
+component Activatable inherits Rectangle {
+    in property <bool> available: true;
+    in property <bool> in-dialog: false;
+    in property <string> label;
+    out property <bool> hovered: touch.has-hover && root.active;
+    out property <bool> focused: focus.has-focus;
+    property <bool> active: root.available && (Store.modal == 0 || root.in-dialog);
+    callback activated();
+    public function grab-focus() { focus.focus(); }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.active;
+    accessible-action-default => { if root.active { root.activated(); } }
+    focus := FocusScope {
+        enabled: root.active;
+        key-pressed(event) => {
+            if event.text == " " || event.text == "\n" { root.activated(); return accept; }
+            return reject;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.active;
+        mouse-cursor: pointer;
+        clicked => { focus.focus(); root.activated(); }
+    }
+    @children
+    Rectangle {
+        border-radius: root.border-radius + 2px;
+        border-width: root.focused ? 2px : 0px;
+        border-color: Theme.focus;
+        x: -3px; y: -3px; width: parent.width + 6px; height: parent.height + 6px;
+    }
+}
+
+export component UiButton inherits Activatable {
+    in property <bool> primary: false;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <length> font-size: 11px;
+    height: 32px;
+    min-width: 72px;
+    border-radius: 7px;
+    border-width: 1px;
+    border-color: root.primary ? Theme.blue : #e0e7ef;
+    background: !root.available ? #edf1f5 : root.primary ? (root.hovered ? Theme.blue-hover : Theme.blue) : (root.hovered ? #f4f8fd : white);
+    HorizontalLayout {
+        padding-left: 12px; padding-right: 12px; spacing: 7px; alignment: center;
+        if root.has-icon : Icon { source: root.icon; width: 13px; height: 13px; y: (parent.height - self.height) / 2; tone: root.primary ? white : Theme.ink; }
+        Text {
+            text: root.label;
+            font-size: root.font-size;
+            vertical-alignment: center;
+            color: !root.available ? #94a1b0 : root.primary ? white : Theme.ink;
+        }
+    }
+}
+
+export component NavItem inherits Activatable {
+    in property <image> icon;
+    in property <bool> selected;
+    height: 42px;
+    border-radius: 8px;
+    background: root.selected ? Theme.blue-soft : root.hovered ? #f0f4f8 : transparent;
+    accessible-label: root.label + (root.selected ? ", ausgewählt" : "");
+    if root.selected : Rectangle { x: 0; y: 13px; width: 3px; height: 17px; border-radius: 2px; background: Theme.blue; }
+    HorizontalLayout {
+        padding-left: 13px; spacing: 12px;
+        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.blue : Theme.ink; }
+        Text { text: root.label; vertical-alignment: center; font-size: 12px; color: root.selected ? Theme.blue : Theme.ink; font-weight: root.selected ? 600 : 400; }
+    }
+}
+
+export component Metric inherits Activatable {
+    in property <string> value;
+    in property <string> caption;
+    in property <string> note;
+    in property <image> icon;
+    in property <color> tone: Theme.blue;
+    in property <color> tint: #edf4ff;
+    min-height: 96px;
+    background: white;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: root.hovered ? #bed5ef : Theme.line;
+    drop-shadow-blur: 14px;
+    drop-shadow-offset-y: 3px;
+    drop-shadow-color: #16354f0a;
+    accessible-label: root.value + " " + root.caption + ". " + root.note;
+    HorizontalLayout {
+        padding-left: 16px; padding-right: 12px; spacing: 15px; alignment: start;
+        Rectangle {
+            width: 44px; height: 44px; y: (parent.height - self.height) / 2; border-radius: 12px; background: root.tint;
+            Icon { source: root.icon; width: 25px; height: 25px; tone: root.tone; }
+        }
+        VerticalLayout {
+            alignment: center; spacing: 3px;
+            Text { text: root.value; font-size: 24px; font-weight: 720; color: Theme.ink; }
+            Text { text: root.caption; font-size: 11px; color: #6d7f93; }
+            Text { text: root.note; font-size: 9px; color: root.tone; overflow: elide; }
+        }
+    }
+}
+
+export component CardTitle inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> eyebrow;
+    padding-left: 17px; padding-right: 17px; padding-top: 14px; height: 38px;
+    Text { text: root.title; font-size: 14px; font-weight: 700; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
+    if root.eyebrow != "" : Text { text: root.eyebrow; font-size: 7px; font-weight: 650; letter-spacing: 0.8px; color: Theme.muted; vertical-alignment: center; }
+}
+
+export component Pill inherits Rectangle {
+    in property <string> label;
+    in property <string> kind;
+    height: 21px;
+    min-width: 62px;
+    border-radius: 5px;
+    background: root.kind == "observed" || root.kind == "ok" ? #e7f7ef
+        : root.kind == "review" || root.kind == "warn" ? Theme.amber-soft
+        : root.kind == "protected" ? #edf3fc
+        : root.kind == "running" ? #e5efff
+        : root.kind == "danger" ? #fde8e8 : #f0f3f7;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.label;
+    HorizontalLayout {
+        padding-left: 8px; padding-right: 8px;
+        Text {
+            text: root.label;
+            font-size: 9px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            color: root.kind == "observed" || root.kind == "ok" ? #1b8b67
+                : root.kind == "review" || root.kind == "warn" ? Theme.amber
+                : root.kind == "protected" ? #6080a1
+                : root.kind == "running" ? Theme.blue
+                : root.kind == "danger" ? #b23b3b : #7b899b;
+        }
+    }
+}
+
+export component FilterChip inherits Activatable {
+    in property <bool> selected;
+    in property <string> count;
+    height: 26px;
+    border-radius: 6px;
+    background: root.selected ? #e6f0ff : root.hovered ? #eef3f8 : #f6f8fb;
+    accessible-label: root.label + " " + root.count + (root.selected ? ", aktiv" : "");
+    HorizontalLayout {
+        padding-left: 13px; padding-right: 13px; spacing: 5px;
+        Text { text: root.label; font-size: 10px; vertical-alignment: center; color: root.selected ? Theme.blue : #718196; }
+        Text { text: root.count; font-size: 8px; vertical-alignment: center; color: root.selected ? Theme.blue : #9aa7b6; }
+    }
+}
+
+export component QuickAction inherits Activatable {
+    in property <string> subtitle;
+    in property <image> icon;
+    height: 50px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.hovered ? #c5daee : #e8edf3;
+    background: root.hovered ? #eff5fd : #fafbfd;
+    HorizontalLayout {
+        padding-left: 12px; padding-right: 12px; spacing: 12px;
+        Icon { source: root.icon; y: (parent.height - self.height) / 2; }
+        VerticalLayout {
+            alignment: center; spacing: 3px; horizontal-stretch: 1;
+            Text { text: root.label; font-size: 10px; color: Theme.ink; }
+            Text { text: root.subtitle; font-size: 8px; color: Theme.muted; overflow: elide; }
+        }
+        Icon { source: Icons.chevron; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: #8191a3; }
+    }
+}
+
+export component RowCard inherits Activatable {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <string> meta;
+    in property <string> pill;
+    in property <string> pill-kind;
+    in property <image> icon;
+    height: 62px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: #e9eff4;
+    background: root.hovered ? Theme.row-hover : Theme.row;
+    accessible-label: root.title + ". " + root.subtitle + ". " + root.pill;
+    HorizontalLayout {
+        padding-left: 16px; padding-right: 16px; spacing: 14px;
+        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: #6585a0; }
+        VerticalLayout {
+            alignment: center; spacing: 4px; horizontal-stretch: 1;
+            Text { text: root.title; font-size: 12px; font-weight: 600; color: Theme.ink; overflow: elide; }
+            Text { text: root.subtitle; font-size: 10px; color: Theme.muted; overflow: elide; }
+        }
+        if root.meta != "" : Text { text: root.meta; font-size: 12px; color: #49617b; vertical-alignment: center; }
+        if root.pill != "" : Pill { label: root.pill; kind: root.pill-kind; y: (parent.height - self.height) / 2; }
+    }
+}
+
+export component Callout inherits Rectangle {
+    in property <string> text;
+    in property <bool> warn: false;
+    in property <image> icon: Icons.info;
+    min-height: 46px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: root.warn ? #f5e6c9 : #dceaf9;
+    background: root.warn ? #fff8ed : #edf5fd;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+    HorizontalLayout {
+        padding: 14px; spacing: 10px;
+        Icon { source: root.icon; width: 16px; height: 16px; tone: root.warn ? #987340 : #496c92; }
+        Text { text: root.text; wrap: word-wrap; font-size: 11px; color: root.warn ? #987340 : #496c92; horizontal-stretch: 1; vertical-alignment: center; }
+    }
+}
+
+export component PageHeader inherits VerticalLayout {
+    in property <string> title;
+    in property <string> description;
+    spacing: 6px;
+    Text { text: root.title; font-size: 22px; font-weight: 700; color: Theme.ink; accessible-role: AccessibleRole.text; }
+    Text { text: root.description; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+}
+
+export component Donut inherits Rectangle {
+    in property <[DonutSegment]> segments;
+    in property <string> value;
+    in property <string> caption;
+    width: 166px;
+    height: 166px;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.value + " " + root.caption;
+    if root.segments.length == 0 : Rectangle {
+        border-radius: self.width / 2; border-width: 19px; border-color: Theme.line;
+    }
+    for segment in root.segments : Path {
+        width: parent.width; height: parent.height;
+        viewbox-width: 100; viewbox-height: 100;
+        commands: segment.commands;
+        fill: segment.color;
+        stroke-width: 0px;
+    }
+    VerticalLayout {
+        alignment: center;
+        Text { text: root.value; font-size: 21px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; }
+        Text { text: root.caption; font-size: 8px; color: Theme.muted; horizontal-alignment: center; }
+    }
+}
+
+export component Legend inherits VerticalLayout {
+    in property <[LegendRow]> rows;
+    spacing: 10px;
+    alignment: center;
+    for row in root.rows : HorizontalLayout {
+        spacing: 7px;
+        Rectangle { width: 7px; height: 7px; y: (parent.height - self.height) / 2; border-radius: 4px; background: row.color; }
+        Text { text: row.label; font-size: 9px; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; }
+        Text { text: row.value; font-size: 9px; color: #6f8196; vertical-alignment: center; horizontal-alignment: right; }
+    }
+}
+
+// Light grey settings card; its height follows its content.
+export component Panel inherits Rectangle {
+    in property <string> title;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: Theme.line;
+    background: Theme.row;
+    VerticalLayout {
+        padding: 18px; spacing: 8px; alignment: start;
+        Text { text: root.title; font-size: 13px; font-weight: 700; color: Theme.ink; }
+        @children
+    }
+}
+
+export component SettingToggle inherits Panel {
+    in property <string> description;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    HorizontalLayout {
+        spacing: 12px;
+        Text { text: root.description; font-size: 11px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+        Switch {
+            checked: root.checked;
+            enabled: root.enabled && Store.modal == 0;
+            text: root.checked ? "Ein" : "Aus";
+            accessible-label: root.title;
+            toggled => { root.toggled(self.checked); }
+        }
+    }
+}
+
+component ProjectLine inherits Activatable {
+    in property <ProjectRow> data;
+    height: 40px;
+    label: root.data.name + ", " + root.data.state + ", " + root.data.path;
+    background: root.hovered ? #f4f8ff : transparent;
+    Rectangle { y: parent.height - 1px; height: 1px; background: #edf2f6; }
+    HorizontalLayout {
+        padding-left: 10px; padding-right: 10px; spacing: 10px;
+        HorizontalLayout {
+            width: 150px; spacing: 8px;
+            Icon { source: Icons.folder; width: 14px; height: 14px; y: (parent.height - self.height) / 2; tone: #3482cf; }
+            Text { text: root.data.name; font-size: 10px; font-weight: 500; color: Theme.ink; vertical-alignment: center; overflow: elide; }
+        }
+        Text { text: root.data.path; horizontal-stretch: 1; font-size: 9px; color: #7e8da0; vertical-alignment: center; overflow: elide; }
+        Text { text: root.data.size; width: 72px; font-size: 10px; color: Theme.ink; vertical-alignment: center; }
+        HorizontalLayout { width: 92px; alignment: start; Pill { label: root.data.state; kind: root.data.state-kind; y: (parent.height - self.height) / 2; } }
+        Text { text: root.data.ecosystem; width: 130px; font-size: 9px; color: #6f8197; vertical-alignment: center; overflow: elide; }
+    }
+}
+
+export component ProjectTable inherits Rectangle {
+    in property <[ProjectRow]> rows;
+    in property <bool> compact: false;
+    callback selected(int);
+    VerticalLayout {
+        spacing: 2px;
+        Rectangle {
+            height: 30px; border-radius: 6px; background: #f7f9fc;
+            HorizontalLayout {
+                padding-left: 10px; padding-right: 10px; spacing: 10px;
+                Text { text: "PROJEKT"; width: 150px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
+                Text { text: "PFAD"; horizontal-stretch: 1; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
+                Text { text: "GRÖSSE"; width: 72px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
+                Text { text: "BEOBACHTUNG"; width: 92px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
+                Text { text: "TECHNOLOGIE"; width: 130px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
+            }
+        }
+        if root.rows.length == 0 : Text {
+            text: "Keine Projekte gefunden. Ein Projekt registrieren oder den Filter ändern.";
+            font-size: 11px; color: Theme.muted; wrap: word-wrap; height: 60px; vertical-alignment: center; horizontal-alignment: center;
+        }
+        ListView {
+            vertical-stretch: 1;
+            for row in root.rows : ProjectLine { data: row; activated => { root.selected(row.id); } }
+        }
+    }
+}

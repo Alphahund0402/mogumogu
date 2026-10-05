@@ -1,0 +1,191 @@
+import { LineEdit } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, AdapterRow, HintRow, ScopeRow, SessionRow, PlanRow,
+         DonutSegment, LegendRow, ProfileChip, DetailRow, DetailAction, SourceToggle } from "store.slint";
+import { Card, Icon, NavItem, Metric } from "components.slint";
+import { OverviewPage } from "pages/overview.slint";
+import { ProjectsPage, PackagesPage, AiPage, ResourcesPage, ReviewPage, ActivityPage, SettingsPage } from "pages/pages.slint";
+import { DialogLayer } from "dialogs.slint";
+
+export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, AdapterRow, HintRow, ScopeRow, SessionRow, PlanRow,
+         DonutSegment, LegendRow, ProfileChip, DetailRow, DetailAction, SourceToggle }
+
+component Sidebar inherits Rectangle {
+    width: 196px;
+    background: #fafcfe;
+    Rectangle { x: parent.width - 1px; width: 1px; background: Theme.line; }
+    VerticalLayout {
+        padding-left: 12px; padding-right: 12px; padding-top: 22px; padding-bottom: 17px; spacing: 5px;
+        VerticalLayout {
+            spacing: 2px; padding-bottom: 24px;
+            Image { source: Icons.logo; height: 72px; image-fit: contain; accessible-role: none; }
+            Text { text: "mogumogu"; font-size: 24px; font-weight: 760; color: Theme.ink; horizontal-alignment: center; accessible-role: AccessibleRole.text; }
+            Text { text: "Weniger Ballast. Mehr Fokus."; font-size: 9px; color: Theme.muted; horizontal-alignment: center; }
+        }
+        NavItem { label: "Übersicht"; icon: Icons.home; selected: Store.page == 0; activated => { Store.page = 0; } }
+        NavItem { label: "Projekte"; icon: Icons.folder; selected: Store.page == 1; activated => { Store.page = 1; } }
+        NavItem { label: "Paketmanager"; icon: Icons.package; selected: Store.page == 2; activated => { Store.page = 2; } }
+        NavItem { label: "KI-Konfiguration"; icon: Icons.spark; selected: Store.page == 3; activated => { Store.page = 3; } }
+        NavItem { label: "Ressourcen"; icon: Icons.database; selected: Store.page == 4; activated => { Store.page = 4; } }
+        NavItem { label: "Prüfliste"; icon: Icons.leaf; selected: Store.page == 5; activated => { Store.page = 5; } }
+        NavItem { label: "Aktivität"; icon: Icons.monitor; selected: Store.page == 6; activated => { Store.page = 6; } }
+        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 7; activated => { Store.page = 7; } }
+        Rectangle { vertical-stretch: 1; }
+        Rectangle {
+            height: 88px; border-radius: 10px; border-width: 1px; border-color: #e2ecf6; background: #f0f6fc;
+            VerticalLayout {
+                padding: 12px; spacing: 7px;
+                HorizontalLayout {
+                    spacing: 7px;
+                    Icon { source: Icons.shield; width: 15px; height: 15px; tone: Theme.blue; }
+                    Text { text: "Deine Arbeit bleibt."; font-size: 10px; font-weight: 600; color: Theme.ink; vertical-alignment: center; }
+                }
+                Text {
+                    text: Store.demo ? "Demodaten sind schreibgeschützt. Alles bleibt lokal." : "Bereinigung nur nach bestätigtem Plan. Alles bleibt lokal.";
+                    font-size: 10px; color: Theme.muted; wrap: word-wrap;
+                }
+            }
+        }
+        Rectangle { height: 12px; }
+        HorizontalLayout {
+            spacing: 7px; padding-left: 4px;
+            Rectangle { width: 7px; height: 7px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Store.busy ? #d5a55e : Theme.green; }
+            Text { text: Store.busy ? "Wird aktualisiert" : (Store.demo ? "Demo · bereit" : "Lokal · bereit"); font-size: 10px; color: Theme.ink; }
+        }
+        Text { text: "v" + Store.version + " · Prototyp"; font-size: 9px; color: Theme.muted; x: 4px; }
+    }
+}
+
+component Hero inherits Rectangle {
+    callback focus-search();
+    in-out property <bool> search-focused;
+    height: 242px;
+    clip: true;
+    Image { width: parent.width; height: parent.height; source: Icons.mountains; image-fit: cover; accessible-role: none; }
+    Rectangle { background: @linear-gradient(180deg, #1d36560d 0%, #1333485c 55%, #f3f6f9 100%); }
+    Rectangle {
+        x: 27px; y: 23px; height: 25px; width: badge.preferred-width + 22px; border-radius: 13px; background: #ffffffdf;
+        badge := Text { text: Store.demo ? "DEMODATEN  /  VORSCHAU" : "LOKALES INVENTAR  /  V0.1"; font-size: 8px; font-weight: 650; letter-spacing: 0.65px; color: #273c55; }
+    }
+    HorizontalLayout {
+        x: parent.width - self.preferred-width - 27px; y: 26px; spacing: 7px;
+        Icon { source: Icons.shield; width: 15px; height: 15px; tone: white; }
+        Text { text: "Kein Konto. Keine Cloud."; font-size: 10px; color: white; }
+    }
+    Text { x: 27px; y: 68px; text: "Willkommen zurück!"; font-size: 29px; font-weight: 690; color: white; accessible-role: AccessibleRole.text; }
+    Text { x: 28px; y: 112px; text: "Deine Entwicklungswelt. Ein bisschen aufgeräumter."; font-size: 12px; color: #eef5fb; }
+    Rectangle {
+        x: parent.width - self.width - 27px; y: 76px; width: min(363px, parent.width * 0.42); height: 40px;
+        border-radius: 8px; background: #ffffffed; border-width: 1px; border-color: search.has-focus ? Theme.focus : #e3eaf166;
+        HorizontalLayout {
+            padding-left: 12px; padding-right: 10px; spacing: 8px;
+            Icon { source: Icons.search; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: #63758a; }
+            search := LineEdit {
+                font-size: 11px;
+                horizontal-stretch: 1;
+                placeholder-text: "Projekte durchsuchen …";
+                text <=> Store.query;
+                enabled: Store.modal == 0;
+                accessible-label: "Projekte durchsuchen";
+                edited(value) => { Actions.search(value); }
+            }
+            Rectangle {
+                width: 38px; height: 18px; y: (parent.height - self.height) / 2; border-radius: 4px; border-width: 1px; border-color: #dfe6ed; background: #f6f8fb;
+                Text { text: "Strg K"; font-size: 8px; color: #738296; }
+            }
+        }
+    }
+    public function focus-search-field() { search.focus(); }
+}
+
+export component Dashboard inherits Window {
+    title: "mogumogu — Entwicklungsressourcen";
+    preferred-width: 1460px;
+    preferred-height: 930px;
+    min-width: 1180px;
+    min-height: 830px;
+    default-font-family: "Segoe UI";
+    default-font-size: 13px;
+    background: Theme.canvas;
+    icon: @image-url("../assets/tray.png");
+
+    forward-focus: keys;
+    public function focus-search() { hero.focus-search-field(); }
+    public function focus-dialog() { dialog.focus-first(); }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.modifiers.control && (event.text == "k" || event.text == "K") { root.focus-search(); return accept; }
+            if event.text == Key.Escape && Store.modal != 0 { Store.modal = 0; return accept; }
+            if event.modifiers.alt && Store.modal == 0 {
+                if event.text == "1" { Store.page = 0; return accept; }
+                if event.text == "2" { Store.page = 1; return accept; }
+                if event.text == "3" { Store.page = 2; return accept; }
+                if event.text == "4" { Store.page = 3; return accept; }
+                if event.text == "5" { Store.page = 4; return accept; }
+                if event.text == "6" { Store.page = 5; return accept; }
+                if event.text == "7" { Store.page = 6; return accept; }
+                if event.text == "8" { Store.page = 7; return accept; }
+            }
+            return reject;
+        }
+        HorizontalLayout {
+            Sidebar { }
+            main := Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.canvas;
+                hero := Hero { y: 0; width: parent.width; }
+                VerticalLayout {
+                    y: 190px; height: parent.height - 190px;
+                    padding-left: 26px; padding-right: 26px; spacing: 14px;
+                    HorizontalLayout {
+                        spacing: 13px; height: 100px;
+                        Metric { label: "Projekte"; value: Store.project-count; caption: "Projekte"; note: Store.project-note; icon: Icons.folder; activated => { Store.page = 1; } }
+                        Metric { label: "Paketinstallationen"; value: Store.package-count; caption: "Paketinstallationen"; note: Store.package-note; icon: Icons.package; tint: #fff5e6; tone: #b67b27; activated => { Store.page = 2; } }
+                        Metric { label: "Erfasster Umfang"; value: Store.footprint; caption: "Erfasster Umfang"; note: Store.footprint-note; icon: Icons.database; tint: #eaf8f4; tone: #159875; activated => { Store.page = 4; } }
+                        Metric { label: "KI-Konfigurationen"; value: Store.ai-count; caption: "KI-Konfigurationen"; note: Store.ai-note; icon: Icons.spark; tint: #f3effc; tone: #8763ce; activated => { Store.page = 3; } }
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        if Store.page == 0 : OverviewPage { }
+                        if Store.page == 1 : ProjectsPage { }
+                        if Store.page == 2 : PackagesPage { }
+                        if Store.page == 3 : AiPage { }
+                        if Store.page == 4 : ResourcesPage { }
+                        if Store.page == 5 : ReviewPage { }
+                        if Store.page == 6 : ActivityPage { }
+                        if Store.page == 7 : SettingsPage { }
+                    }
+                    HorizontalLayout {
+                        height: 34px;
+                        Text { text: Store.status; font-size: 9px; color: #7d8c9c; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; accessible-role: AccessibleRole.text; }
+                        Text { text: "Arbeit behalten. Überblick gewinnen."; font-size: 9px; color: #54768d; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+        dialog := DialogLayer { visible: Store.modal != 0; width: parent.width; height: parent.height; }
+    }
+}
+
+export component MoguTray inherits SystemTrayIcon {
+    in property <string> hint: "mogumogu · lokales Entwicklungsinventar";
+    in property <bool> local: false;
+    in property <bool> monitoring: false;
+    icon: @image-url("../assets/tray.png");
+    tooltip: root.hint;
+    callback show-dashboard();
+    callback refresh-inventory();
+    callback scan-all();
+    callback toggle-monitoring();
+    callback exit-app();
+    clicked => { root.show-dashboard(); }
+    Menu {
+        MenuItem { title: "Dashboard öffnen"; activated => { root.show-dashboard(); } }
+        MenuItem { title: "Ansicht aktualisieren"; activated => { root.refresh-inventory(); } }
+        MenuItem { title: "Freigegebene Bereiche erfassen"; enabled: root.local; activated => { root.scan-all(); } }
+        MenuItem { title: root.monitoring ? "Überwachung pausieren" : "Überwachung fortsetzen"; enabled: root.local; activated => { root.toggle-monitoring(); } }
+        MenuSeparator { }
+        MenuItem { title: "Beenden"; activated => { root.exit-app(); } }
+    }
+}

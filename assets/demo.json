@@ -1,0 +1,236 @@
+{
+  "projects": [
+    {
+      "id": 1,
+      "name": "my-app",
+      "path": "C:\\dev\\my-app",
+      "ecosystem": "npm · TypeScript",
+      "state": "observed",
+      "evidence": "Beispiel: Testlauf heute um 14:20 registriert.",
+      "bytes": 12400000000,
+      "packages": 160,
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 2,
+      "name": "website",
+      "path": "D:\\code\\website",
+      "ecosystem": "pnpm · TypeScript",
+      "state": "observed",
+      "evidence": "Beispiel: Build heute um 10:11 registriert.",
+      "bytes": 856000000,
+      "packages": 88,
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 3,
+      "name": "ml-experiments",
+      "path": "C:\\dev\\ml",
+      "ecosystem": "uv · Python",
+      "state": "review",
+      "evidence": "Beispiel: Reviewtermin erreicht. Nutzung nicht bewiesen.",
+      "bytes": 25402000000,
+      "packages": 112,
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 4,
+      "name": "tools",
+      "path": "C:\\tools\\dev",
+      "ecosystem": "Cargo · Rust",
+      "state": "observed",
+      "evidence": "Beispiel: registrierter Lauf gestern.",
+      "bytes": 342000000,
+      "packages": 18,
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 5,
+      "name": "game-prototype",
+      "path": "D:\\projects\\game",
+      "ecosystem": "NuGet · C#",
+      "state": "unknown",
+      "evidence": "Beispiel: keine belastbare Nutzungshistorie.",
+      "bytes": 7600000000,
+      "packages": 38,
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 6,
+      "name": "old-stuff",
+      "path": "D:\\archive\\experiments",
+      "ecosystem": "npm · JavaScript",
+      "state": "unknown",
+      "evidence": "Beispiel: Besitzer bestätigt, Nutzung unbekannt.",
+      "bytes": 5400000000,
+      "packages": 12,
+      "protected": true,
+      "origin": "demo"
+    }
+  ],
+  "resources": [
+    {
+      "id": 1,
+      "project_id": null,
+      "name": "Projektquellen",
+      "path": "DEMO:\\projects",
+      "kind": "source",
+      "bytes": 52000000000,
+      "state": "protected",
+      "evidence": "Beispielbestand; Quellcode bleibt geschützt.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 2,
+      "project_id": null,
+      "name": "Gemeinsame Paket-Caches",
+      "path": "DEMO:\\shared-cache",
+      "kind": "cache",
+      "bytes": 38000000000,
+      "state": "protected",
+      "evidence": "Gemeinsamer Speicher. Nicht pro Projekt freigegeben.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 3,
+      "project_id": null,
+      "name": "Temporäre Arbeitsverzeichnisse",
+      "path": "DEMO:\\temp",
+      "kind": "temporary",
+      "bytes": 22700000000,
+      "state": "unknown",
+      "evidence": "Nicht als entbehrlich bestätigt.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 4,
+      "project_id": 3,
+      "name": "parser-spike · Scratchpad",
+      "path": "C:\\dev\\ml\\.scratch\\parser-spike",
+      "kind": "temporary",
+      "bytes": 1300000000,
+      "state": "review",
+      "evidence": "Beispiel: Prüfdatum erreicht. Nur Vorschau, keine Löschfreigabe.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 5,
+      "project_id": null,
+      "name": "Virtuelle Umgebungen",
+      "path": "DEMO:\\environments",
+      "kind": "environment",
+      "bytes": 15900000000,
+      "state": "protected",
+      "evidence": "Benötigte Umgebungen aus dem Beispielbestand.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 6,
+      "project_id": 1,
+      "name": "api-lab · Python-Umgebung",
+      "path": "C:\\dev\\my-app\\.scratch\\api-lab\\.venv",
+      "kind": "environment",
+      "bytes": 2100000000,
+      "state": "review",
+      "evidence": "Beispiel: Besitzer my-app; keine jüngere Session registriert.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 7,
+      "project_id": null,
+      "name": "Build- und Testausgaben",
+      "path": "DEMO:\\outputs",
+      "kind": "output",
+      "bytes": 9200000000,
+      "state": "protected",
+      "evidence": "Unbekannte und geschützte Ergebnisse bleiben erhalten.",
+      "protected": true,
+      "origin": "demo"
+    },
+    {
+      "id": 8,
+      "project_id": 1,
+      "name": "smoke-test · Ausgabe",
+      "path": "C:\\dev\\my-app\\.scratch\\smoke-test\\output",
+      "kind": "output",
+      "bytes": 800000000,
+      "state": "review",
+      "evidence": "Beispiel: beendeter Test. Schutz muss separat geprüft werden.",
+      "protected": true,
+      "origin": "demo"
+    }
+  ],
+  "ai": [
+    {
+      "client": "Claude Code",
+      "label": "2 Skills · 1 MCP-Referenz",
+      "path": "C:\\dev\\my-app\\.claude",
+      "state": "protected"
+    },
+    {
+      "client": "GitHub Copilot",
+      "label": "1 Instruktionsdatei",
+      "path": "D:\\code\\website\\.github\\copilot-instructions.md",
+      "state": "protected"
+    },
+    {
+      "client": "Cursor",
+      "label": "3 Projektregeln",
+      "path": "D:\\code\\website\\.cursor\\rules",
+      "state": "protected"
+    },
+    {
+      "client": "Codex",
+      "label": "1 Skill · AGENTS.md",
+      "path": "C:\\tools\\dev\\.agents\\skills",
+      "state": "protected"
+    },
+    {
+      "client": "Gemini CLI",
+      "label": "1 Konfiguration",
+      "path": "C:\\dev\\ml\\.gemini\\settings.json",
+      "state": "protected"
+    },
+    {
+      "client": "Weitere Profile",
+      "label": "Erweiterbarer Dateikatalog",
+      "path": "DEMO:\\profiles",
+      "state": "protected"
+    }
+  ],
+  "activity": [
+    {
+      "title": "Inventar geladen",
+      "detail": "6 Beispielprojekte · keine Laufwerksprüfung",
+      "created_at": "Beispiel"
+    },
+    {
+      "title": "Scratchpad zur Prüfung",
+      "detail": "parser-spike · Prüfdatum erreicht",
+      "created_at": "Beispiel"
+    },
+    {
+      "title": "Paketstände im Beispiel",
+      "detail": "428 Paketinstallationen · keine Updateabfrage",
+      "created_at": "Beispiel"
+    },
+    {
+      "title": "KI-Konfiguration erfasst",
+      "detail": "Metadatenbeispiele · Quellen bleiben geschützt",
+      "created_at": "Beispiel"
+    }
+  ],
+  "demo": true,
+  "sqlite_version": ""
+}

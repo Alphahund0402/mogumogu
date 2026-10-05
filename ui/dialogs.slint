@@ -1,0 +1,81 @@
+import { LineEdit, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { Store, Actions } from "store.slint";
+import { Card, UiButton } from "components.slint";
+
+// One generic detail dialog ("Warum ist das hier?", plans, hints, help)
+// and one generic two-field form. Content is prepared in Rust.
+export component DialogLayer inherits Rectangle {
+    background: #17314b63;
+    accessible-role: none;
+    public function focus-first() { close-button.grab-focus(); }
+    TouchArea { }
+    Card {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(620px, parent.width - 48px);
+        height: min(Store.modal == 2 ? 360px : 560px, parent.height - 48px);
+        border-radius: 15px;
+        VerticalLayout {
+            padding: 25px; spacing: 14px;
+            HorizontalLayout {
+                Text {
+                    text: Store.modal == 2 ? Store.form-title : Store.detail-title;
+                    font-size: 19px; font-weight: 700; color: Theme.ink; horizontal-stretch: 1; wrap: word-wrap;
+                    accessible-role: AccessibleRole.text;
+                }
+            }
+            if Store.modal == 1 : ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 12px; alignment: start;
+                    if Store.detail-path != "" : Rectangle {
+                        border-radius: 8px; border-width: 1px; border-color: Theme.line; background: #f4f7fa;
+                        vertical-stretch: 0;
+                        HorizontalLayout {
+                            padding: 12px;
+                            Text { text: Store.detail-path; font-family: "Consolas"; font-size: 11px; color: Theme.ink; wrap: word-wrap; }
+                        }
+                    }
+                    for row in Store.detail-rows : HorizontalLayout {
+                        spacing: 12px;
+                        Text { text: row.label; width: 140px; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                        Text { text: row.value; font-size: 11px; color: Theme.ink; wrap: word-wrap; horizontal-stretch: 1; }
+                    }
+                    if Store.detail-body != "" : Text { text: Store.detail-body; font-size: 12px; color: #6b7f95; wrap: word-wrap; }
+                }
+            }
+            if Store.modal == 2 : VerticalLayout {
+                spacing: 9px; vertical-stretch: 1; alignment: start;
+                Text { text: Store.form-text; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+                Text { text: Store.form-label-1; font-size: 11px; font-weight: 600; color: Theme.ink; }
+                first := LineEdit {
+                    text <=> Store.form-value-1;
+                    placeholder-text: Store.form-hint-1;
+                    accepted => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
+                }
+                if Store.form-label-2 != "" : Text { text: Store.form-label-2; font-size: 11px; font-weight: 600; color: Theme.ink; }
+                if Store.form-label-2 != "" : LineEdit {
+                    text <=> Store.form-value-2;
+                    placeholder-text: Store.form-hint-2;
+                    accepted => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px; alignment: end;
+                if Store.modal == 1 : HorizontalLayout {
+                    spacing: 8px;
+                    for action in Store.detail-actions : UiButton {
+                        label: action.label; primary: action.primary; in-dialog: true; available: !Store.busy;
+                        activated => { Actions.detail-action(action.id); }
+                    }
+                }
+                if Store.modal == 2 : UiButton {
+                    label: Store.form-submit; primary: true; in-dialog: true; available: !Store.busy;
+                    activated => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
+                }
+                close-button := UiButton { label: "Schließen"; in-dialog: true; activated => { Store.modal = 0; } }
+            }
+        }
+    }
+}

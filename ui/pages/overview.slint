@@ -1,0 +1,177 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Card, CardTitle, Icon, UiButton, FilterChip, QuickAction, Donut, Legend, ProjectTable } from "../components.slint";
+
+component ActivityCard inherits Card {
+    VerticalLayout {
+        CardTitle { title: "Aktivität"; eyebrow: "LETZTE EINTRÄGE"; }
+        VerticalLayout {
+            padding-left: 16px; padding-right: 16px; padding-top: 6px; spacing: 0px; alignment: start;
+            for event[index] in Store.events : Rectangle {
+                height: index < 4 ? 52px : 0px;
+                visible: index < 4;
+                HorizontalLayout {
+                    spacing: 11px; padding-top: 8px; padding-bottom: 8px;
+                    Rectangle {
+                        width: 30px; height: 30px; border-radius: 9px;
+                        background: event.kind == "session" || event.kind == "cleanup" ? #fff3df : #eaf4fc;
+                        Icon {
+                            width: 15px; height: 15px;
+                            source: event.kind == "session" || event.kind == "cleanup" ? Icons.clock : Icons.activity;
+                            tone: event.kind == "session" || event.kind == "cleanup" ? #bc8a3f : Theme.blue;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: 3px; horizontal-stretch: 1;
+                        Text { text: event.title; font-size: 10px; color: Theme.ink; overflow: elide; }
+                        Text { text: event.detail + (event.time != "" ? " · " + event.time : ""); font-size: 9px; color: Theme.muted; overflow: elide; }
+                    }
+                }
+                Rectangle { y: parent.height - 1px; height: 1px; background: #f0f3f7; visible: index < 3; }
+            }
+            if Store.events.length == 0 : Text {
+                text: "Noch keine Ereignisse. Starte mit einer Projektregistrierung.";
+                wrap: word-wrap; font-size: 11px; color: Theme.muted;
+            }
+        }
+    }
+}
+
+component StorageCard inherits Card {
+    VerticalLayout {
+        CardTitle { title: "Speicherüberblick"; }
+        HorizontalLayout {
+            padding-left: 18px; height: 16px;
+            Text { text: Store.storage-subtitle; font-size: 8px; color: Theme.muted; }
+        }
+        HorizontalLayout {
+            padding-left: 12px; padding-right: 16px; spacing: 14px; vertical-stretch: 1;
+            Donut { segments: Store.donut; value: Store.donut-value; caption: Store.donut-caption; y: (parent.height - self.height) / 2; }
+            Legend { rows: Store.legend; horizontal-stretch: 1; }
+        }
+        Rectangle {
+            height: 44px;
+            note := Rectangle {
+                x: 16px; y: 2px; width: parent.width - 32px; height: 32px; border-radius: 7px;
+                background: touch.has-hover ? #e2f4ec : Theme.green-soft;
+                accessible-role: button;
+                accessible-label: self.label;
+                property <string> label: Store.review-count + " Ressourcen prüfen · nichts wird gelöscht";
+                accessible-action-default => { Store.page = 5; }
+                HorizontalLayout {
+                    padding-left: 10px; spacing: 8px;
+                    Icon { source: Icons.leaf; width: 15px; height: 15px; y: (parent.height - self.height) / 2; tone: #21856d; }
+                    Text { text: note.label; font-size: 9px; color: #21856d; vertical-alignment: center; }
+                }
+                touch := TouchArea { enabled: Store.modal == 0; mouse-cursor: pointer; clicked => { Store.page = 5; } }
+            }
+        }
+    }
+}
+
+component QuickCard inherits Card {
+    VerticalLayout {
+        CardTitle { title: "Schnellaktionen"; }
+        VerticalLayout {
+            padding: 14px; padding-top: 12px; spacing: 7px;
+            QuickAction {
+                label: Store.demo ? "Ansicht aktualisieren" : "Freigaben erfassen";
+                subtitle: Store.demo ? "Demodaten neu laden · kein Dateiscan" : "Statisch lesen · keine Programme";
+                icon: Icons.refresh;
+                activated => { if Store.demo { Actions.refresh(); } else { Actions.scan-all(); } }
+            }
+            QuickAction { label: "Projekt registrieren"; subtitle: "Name und Pfad hinterlegen"; icon: Icons.plus; activated => { Actions.new-project(); } }
+            QuickAction { label: "Prüfliste öffnen"; subtitle: "Herkunft und Schutz verstehen"; icon: Icons.leaf; activated => { Store.page = 5; } }
+            QuickAction { label: "CLI-Befehle anzeigen"; subtitle: "Für Skripte und Integrationen"; icon: Icons.command; activated => { Actions.show-cli(); } }
+        }
+    }
+}
+
+component ProjectsCard inherits Card {
+    VerticalLayout {
+        HorizontalLayout {
+            padding-left: 17px; padding-right: 17px; padding-top: 14px; height: 46px;
+            Text { text: "Deine Projekte"; font-size: 14px; font-weight: 700; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
+            UiButton { label: "Projekt"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-project(); } }
+        }
+        HorizontalLayout {
+            padding-left: 17px; padding-right: 17px; padding-top: 10px; padding-bottom: 8px; spacing: 5px; alignment: start;
+            FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.search(Store.query); } }
+            FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.search(Store.query); } }
+            FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.search(Store.query); } }
+            Rectangle { horizontal-stretch: 1; }
+            Text { text: "Zeile öffnen für Herkunft & Schutz"; font-size: 8px; color: Theme.muted; vertical-alignment: center; }
+        }
+        HorizontalLayout {
+            padding-left: 12px; padding-right: 12px; vertical-stretch: 1;
+            ProjectTable { rows: Store.projects; selected(id) => { Actions.open-project(id); } }
+        }
+        Rectangle { height: 10px; }
+    }
+}
+
+component AiCard inherits Card {
+    VerticalLayout {
+        CardTitle { title: "KI-Konfiguration"; }
+        HorizontalLayout {
+            padding-left: 17px; padding-right: 17px;
+            VerticalLayout {
+                spacing: 6px;
+                Text { text: "STATISCH · GESCHÜTZT"; font-size: 7px; letter-spacing: 0.8px; color: Theme.muted; height: 18px; }
+                if Store.ai.length == 0 : Text {
+                    text: Store.demo ? "" : "Noch keine KI-Konfiguration erfasst. Lesefreigabe erteilen und erfassen.";
+                    wrap: word-wrap; font-size: 11px; color: Theme.muted;
+                }
+            }
+        }
+        ListView {
+            vertical-stretch: 1;
+            for row[index] in Store.ai : Rectangle {
+                height: 46px;
+                accessible-role: button;
+                accessible-label: row.client + ", " + row.detail;
+                accessible-action-default => { Actions.open-ai(row.index); }
+                background: touch.has-hover ? #f6f9fd : transparent;
+                HorizontalLayout {
+                    padding-left: 15px; padding-right: 15px; spacing: 10px;
+                    Rectangle {
+                        width: 28px; height: 28px; y: (parent.height - self.height) / 2; border-radius: 7px;
+                        border-width: 1px;
+                        border-color: index == 0 ? #f4e5db : #e7ecf5;
+                        background: index == 0 ? #f9ede7 : index == 1 ? #e7efff : #eff2fa;
+                        Text { text: row.letter; font-size: 12px; font-weight: 650; color: index == 0 ? #9b6a4c : index == 1 ? #3479de : #5c70a0; }
+                    }
+                    VerticalLayout {
+                        alignment: center; spacing: 2px; horizontal-stretch: 1;
+                        Text { text: row.client; font-size: 10px; font-weight: 500; color: Theme.ink; overflow: elide; }
+                        Text { text: row.detail; font-size: 8px; color: Theme.muted; overflow: elide; }
+                    }
+                    Icon { source: Icons.lock; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: #8191a3; }
+                }
+                Rectangle { y: parent.height - 1px; x: 15px; width: parent.width - 30px; height: 1px; background: #eff3f7; }
+                touch := TouchArea { enabled: Store.modal == 0; mouse-cursor: pointer; clicked => { Actions.open-ai(row.index); } }
+            }
+        }
+    }
+}
+
+export component OverviewPage inherits Rectangle {
+    HorizontalLayout {
+        spacing: 14px;
+        VerticalLayout {
+            spacing: 14px; horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 13px; height: 288px;
+                ActivityCard { horizontal-stretch: 0.92; }
+                StorageCard { horizontal-stretch: 1.2; }
+            }
+            ProjectsCard { vertical-stretch: 1; min-height: 240px; }
+        }
+        VerticalLayout {
+            spacing: 14px; width: 292px;
+            QuickCard { height: 288px; }
+            AiCard { vertical-stretch: 1; min-height: 240px; }
+        }
+    }
+}

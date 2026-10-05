@@ -1,0 +1,6 @@
+[toolchain]
+# Pinned after the first verified Windows build (F-03). Change deliberately.
+channel = "1.98.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-pc-windows-msvc"]

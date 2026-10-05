@@ -1,0 +1,66 @@
+name: Windows
+on: [push, pull_request, workflow_dispatch]
+
+# Least privilege: no write tokens, no release secrets. Fork pull requests run
+# the same unprivileged checks and never see secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      # Actions pinned to reviewed commits (v4.4.0 / v4.6.2).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Rust toolchain from rust-toolchain.toml
+        shell: pwsh
+        run: |
+          rustup show active-toolchain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Static contracts (schema, catalog, skills, allowlists)
+        run: python scripts/validate.py
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Tests and release build (build.ps1, --locked)
+        shell: pwsh
+        run: .\build.ps1 -NoRun
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Headless owner and CLI smoke test
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP "mogumogu-smoke-$env:GITHUB_RUN_ID"
+          $exe = '.\dist\mogumogu\mogumogu.exe'
+          $cli = '.\dist\mogumogu\mogumogu-cli.exe'
+          $owner = Start-Process -FilePath $exe -ArgumentList '--headless', '--data-dir', $data -PassThru
+          Start-Sleep -Seconds 3
+          & $cli --data-dir $data --no-start project register --name smoke --path 'C:\mogumogu-not-created\smoke'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $cli --data-dir $data --no-start --json list
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $cli --data-dir $data --no-start owner stop
+          if (-not $owner.WaitForExit(15000)) { throw 'Owner did not stop.' }
+
+      - name: Bootstrap build evidence (not a signed release)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mogumogu-windows
+          path: |
+            dist/mogumogu/
+            Cargo.lock
+
+# windows-latest is a CI host, not proof of Windows 10/11 desktop behaviour.
+# Tray, DPI, Explorer restart and sleep remain manual checks (docs/WINDOWS-ABNAHME.md).
