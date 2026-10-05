@@ -5,6 +5,10 @@ Stand: 4. Oktober 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experime
 
 Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 1.98.0, Slint 1.18.1 (winit, Software-Renderer), SQLite 3.53.2 (gebündelt über rusqlite 0.40.2). Windows 11 ist **nicht** abgenommen.
 
+Linux/Docker unterstützt die portablen Entwicklungsprüfungen, keine Inventar-Laufzeit.
+Tray, Named Pipes, Job Objects und Windows-Lese-/Löschgrenzen bleiben dort nicht
+unterstützt. Anleitung: [DOCKER.md](DOCKER.md).
+
 ## Paketmanager
 
 Alle Adapter lesen ausschließlich statische Dateien in freigegebenen Bereichen. Kein Adapter startet den Manager, einen Interpreter, Skripte oder Lifecycle-Hooks, und keiner besitzt eine Bereinigungsfähigkeit.

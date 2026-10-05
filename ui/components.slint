@@ -1,6 +1,6 @@
 import { Switch, ListView } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
-import { Store, ProjectRow, DonutSegment, LegendRow } from "store.slint";
+import { Store, Actions, ProjectRow, DonutSegment, LegendRow } from "store.slint";
 
 export component Card inherits Rectangle {
     background: Theme.surface;
@@ -23,7 +23,7 @@ export component Icon inherits Image {
 
 // Keyboard-activatable surface: Enter/Space trigger, focus ring visible.
 // Disabled while a dialog is open unless the element lives in the dialog.
-component Activatable inherits Rectangle {
+export component Activatable inherits Rectangle {
     in property <bool> available: true;
     in property <bool> in-dialog: false;
     in property <string> label;
@@ -58,6 +58,7 @@ component Activatable inherits Rectangle {
 }
 
 export component UiButton inherits Activatable {
+    available: !Store.busy;
     in property <bool> primary: false;
     in property <image> icon;
     in property <bool> has-icon: false;
@@ -310,7 +311,7 @@ export component SettingToggle inherits Panel {
         Text { text: root.description; font-size: 11px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
         Switch {
             checked: root.checked;
-            enabled: root.enabled && Store.modal == 0;
+            enabled: root.enabled && Store.modal == 0 && !Store.busy;
             text: root.checked ? "Ein" : "Aus";
             accessible-label: root.title;
             toggled => { root.toggled(self.checked); }
@@ -355,9 +356,24 @@ export component ProjectTable inherits Rectangle {
                 Text { text: "TECHNOLOGIE"; width: 130px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
             }
         }
-        if root.rows.length == 0 : Text {
-            text: "Keine Projekte gefunden. Ein Projekt registrieren oder den Filter ändern.";
-            font-size: 11px; color: Theme.muted; wrap: word-wrap; height: 60px; vertical-alignment: center; horizontal-alignment: center;
+        if root.rows.length == 0 : VerticalLayout {
+            padding: 16px; spacing: 10px; alignment: center;
+            Text {
+                text: Store.project-count == "0" ? "Noch keine Projekte registriert. Beginne mit einem Projektordner." : "Keine Projekte passen zur Suche und zum Filter.";
+                font-size: 11px; color: Theme.muted; wrap: word-wrap; horizontal-alignment: center;
+                accessible-role: text;
+            }
+            HorizontalLayout {
+                alignment: center;
+                if Store.project-count == "0" : UiButton {
+                    label: "Projekt registrieren";
+                    activated => { Actions.new-project(); }
+                }
+                if Store.project-count != "0" : UiButton {
+                    label: "Suche und Filter zurücksetzen";
+                    activated => { Store.query = ""; Store.filter = 0; Actions.filter-projects(); }
+                }
+            }
         }
         ListView {
             vertical-stretch: 1;

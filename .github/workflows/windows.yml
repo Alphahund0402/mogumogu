@@ -26,18 +26,12 @@ jobs:
           rustup show active-toolchain
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Static contracts (schema, catalog, skills, allowlists)
-        run: python scripts/validate.py
+      - name: Contracts, formatting, Clippy and tests
+        run: python scripts/check.py
 
-      - name: Formatting
-        run: cargo fmt --all -- --check
-
-      - name: Tests and release build (build.ps1, --locked)
+      - name: Native release build (tests already passed, --locked)
         shell: pwsh
-        run: .\build.ps1 -NoRun
-
-      - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: .\build.ps1 -NoRun -SkipTests
 
       - name: Headless owner and CLI smoke test
         shell: pwsh

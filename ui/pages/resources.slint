@@ -1,0 +1,50 @@
+import { ListView } from "std-widgets.slint";
+import { Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { UiButton, FilterChip, RowCard } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component ResourcesPage inherits PageCard {
+    title: "Ressourcen";
+    description: "Besitzer, Typ, Größe und Aktivität. Größen bleiben ohne Messung unbekannt; Pfade werden ohne Lesefreigabe nicht gelesen.";
+    HorizontalLayout {
+        spacing: 5px; alignment: start;
+        FilterChip { label: "Alle"; selected: Store.resource-tab == 0; activated => { Store.resource-tab = 0; Actions.filter-resources(); } }
+        FilterChip { label: "Scratchpads"; selected: Store.resource-tab == 1; activated => { Store.resource-tab = 1; Actions.filter-resources(); } }
+        FilterChip { label: "Sessions"; count: Store.sessions.length; selected: Store.resource-tab == 2; activated => { Store.resource-tab = 2; } }
+        Rectangle { horizontal-stretch: 1; }
+        if !Store.demo : UiButton { label: "Scratchpad anlegen"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-scratch(); } }
+    }
+    if Store.resource-tab < 2 : ListView {
+        vertical-stretch: 1;
+        for row in Store.resources : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: row.kind == "Temporär" ? Icons.clock : row.kind == "Umgebung" ? Icons.package : Icons.folder;
+                title: row.name;
+                subtitle: row.kind + " · " + row.owner + " · " + row.detail;
+                meta: row.size;
+                pill: row.state;
+                pill-kind: row.state-kind;
+                label: row.name;
+                activated => { Actions.open-resource(row.id); }
+            }
+        }
+    }
+    if Store.resource-tab == 2 : ListView {
+        vertical-stretch: 1;
+        for session in Store.sessions : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: Icons.activity;
+                title: "Session " + session.id + " · " + session.purpose;
+                subtitle: session.scratch + " · gestartet " + session.started;
+                pill: session.state;
+                pill-kind: session.state-kind;
+                label: "Session " + session.id;
+            }
+        }
+    }
+}

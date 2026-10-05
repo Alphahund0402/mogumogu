@@ -131,7 +131,9 @@ mod tests {
 
     #[test]
     fn noise_paths_are_ignored() {
-        assert!(ignored(Path::new(r"C:\p\.git\index")));
-        assert!(!ignored(Path::new(r"C:\p\package.json")));
+        // Construct native path components so this pure filter is also tested
+        // by the Linux container; Windows backslashes are one Unix component.
+        assert!(ignored(&Path::new("p").join(".git").join("index")));
+        assert!(!ignored(&Path::new("p").join("package.json")));
     }
 }

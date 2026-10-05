@@ -1,7 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { Card, CardTitle, Icon, UiButton, FilterChip, QuickAction, Donut, Legend, ProjectTable } from "../components.slint";
+import { Activatable, Card, CardTitle, Icon, UiButton, FilterChip, QuickAction, Donut, Legend, ProjectTable } from "../components.slint";
 
 component ActivityCard inherits Card {
     VerticalLayout {
@@ -52,19 +52,16 @@ component StorageCard inherits Card {
         }
         Rectangle {
             height: 44px;
-            note := Rectangle {
+            note := Activatable {
                 x: 16px; y: 2px; width: parent.width - 32px; height: 32px; border-radius: 7px;
-                background: touch.has-hover ? #e2f4ec : Theme.green-soft;
-                accessible-role: button;
-                accessible-label: self.label;
-                property <string> label: Store.review-count + " Ressourcen prüfen · nichts wird gelöscht";
-                accessible-action-default => { Store.page = 5; }
+                background: self.hovered ? #e2f4ec : Theme.green-soft;
+                label: Store.review-count + " Ressourcen prüfen · nichts wird gelöscht";
+                activated => { Store.page = 5; }
                 HorizontalLayout {
                     padding-left: 10px; spacing: 8px;
                     Icon { source: Icons.leaf; width: 15px; height: 15px; y: (parent.height - self.height) / 2; tone: #21856d; }
                     Text { text: note.label; font-size: 9px; color: #21856d; vertical-alignment: center; }
                 }
-                touch := TouchArea { enabled: Store.modal == 0; mouse-cursor: pointer; clicked => { Store.page = 5; } }
             }
         }
     }
@@ -97,9 +94,9 @@ component ProjectsCard inherits Card {
         }
         HorizontalLayout {
             padding-left: 17px; padding-right: 17px; padding-top: 10px; padding-bottom: 8px; spacing: 5px; alignment: start;
-            FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.search(Store.query); } }
-            FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.search(Store.query); } }
-            FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.search(Store.query); } }
+            FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.filter-projects(); } }
+            FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.filter-projects(); } }
+            FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.filter-projects(); } }
             Rectangle { horizontal-stretch: 1; }
             Text { text: "Zeile öffnen für Herkunft & Schutz"; font-size: 8px; color: Theme.muted; vertical-alignment: center; }
         }
@@ -127,12 +124,11 @@ component AiCard inherits Card {
         }
         ListView {
             vertical-stretch: 1;
-            for row[index] in Store.ai : Rectangle {
+            for row[index] in Store.ai : Activatable {
                 height: 46px;
-                accessible-role: button;
-                accessible-label: row.client + ", " + row.detail;
-                accessible-action-default => { Actions.open-ai(row.index); }
-                background: touch.has-hover ? #f6f9fd : transparent;
+                label: row.client + ", " + row.detail;
+                activated => { Actions.open-ai(row.index); }
+                background: self.hovered ? #f6f9fd : transparent;
                 HorizontalLayout {
                     padding-left: 15px; padding-right: 15px; spacing: 10px;
                     Rectangle {
@@ -150,7 +146,6 @@ component AiCard inherits Card {
                     Icon { source: Icons.lock; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: #8191a3; }
                 }
                 Rectangle { y: parent.height - 1px; x: 15px; width: parent.width - 30px; height: 1px; background: #eff3f7; }
-                touch := TouchArea { enabled: Store.modal == 0; mouse-cursor: pointer; clicked => { Actions.open-ai(row.index); } }
             }
         }
     }

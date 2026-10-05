@@ -1,0 +1,43 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { RowCard } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component ActivityPage inherits PageCard {
+    title: "Aktivität & Abdeckung";
+    description: "Was erfasst ist, was teilweise blieb und was sich geändert hat. Ein Limit oder Fehler bedeutet unvollständige Abdeckung, nicht Abwesenheit.";
+    Text { text: "Lesefreigaben"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+    if Store.scopes.length == 0 : Text { text: "Noch keine Lesefreigaben. Im Projekt-Detail „Lesefreigabe erteilen“ wählen."; font-size: 11px; color: Theme.muted; }
+    if Store.scopes.length > 0 : ListView {
+        vertical-stretch: 1;
+        for scope in Store.scopes : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: scope.watched ? Icons.monitor : Icons.shield;
+                title: scope.kind + " · " + scope.path;
+                subtitle: scope.coverage + (scope.last != "" ? " · " + scope.last : "") + (scope.watched ? " · wird beobachtet" : "");
+                pill: scope.status;
+                pill-kind: scope.healthy ? "ok" : "warn";
+                label: scope.path;
+                activated => { Actions.open-scope(scope.id); }
+            }
+        }
+    }
+    Text { text: "Ereignisse"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+    ListView {
+        vertical-stretch: 1;
+        for event in Store.events : Rectangle {
+            height: 58px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: Icons.activity;
+                title: event.title;
+                subtitle: event.detail;
+                meta: event.time;
+                label: event.title;
+            }
+        }
+    }
+}

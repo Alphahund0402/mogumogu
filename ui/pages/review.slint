@@ -1,0 +1,42 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Callout, RowCard } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component ReviewPage inherits PageCard {
+    title: "Prüfliste";
+    description: "Eine Prüfliste ist kein Löschplan. Hinweise nennen Auslöser, Beleg, Besitzer und Unsicherheit; Schutz gewinnt immer.";
+    Callout { warn: true; icon: Icons.shield; text: "Keine Nutzung beobachtet ≠ sicher entbehrlich. Geschützte Quellen und unklare Ergebnisse bleiben erhalten. Bereinigt wird nur verwaltete Temp-Ausgabe nach bestätigtem Plan – vor dem unabhängigen Review (G5) ausschließlich in Wegwerf-Testwurzeln."; }
+    if Store.hints.length == 0 : Text { text: "Keine Prüfhinweise. Unbekannte Nutzung wird nicht automatisch als entbehrlich eingestuft."; font-size: 12px; color: Theme.muted; }
+    ListView {
+        vertical-stretch: 1;
+        for hint in Store.hints : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: hint.kind == "Prüftermin erreicht" ? Icons.clock : hint.kind == "Möglicherweise verwaist" ? Icons.folder : Icons.package;
+                title: hint.name + " · " + hint.kind;
+                subtitle: hint.trigger != "" ? hint.trigger + " " + hint.evidence : hint.evidence;
+                meta: hint.size;
+                pill: hint.protected ? "Geschützt" : hint.plannable ? "Planbar" : "Prüfen";
+                pill-kind: hint.protected ? "protected" : "review";
+                label: hint.name;
+                activated => { Actions.open-hint(hint.id); }
+            }
+        }
+    }
+    if Store.plans.length > 0 : VerticalLayout {
+        spacing: 6px;
+        Text { text: "Pläne"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+        for plan in Store.plans : RowCard {
+            icon: Icons.check;
+            title: "Plan " + plan.id + " · " + plan.summary;
+            subtitle: "Fingerabdruck " + plan.fingerprint + " · " + plan.created;
+            pill: plan.state;
+            pill-kind: "protected";
+            label: "Plan " + plan.id;
+            activated => { Actions.open-plan(plan.id); }
+        }
+    }
+}

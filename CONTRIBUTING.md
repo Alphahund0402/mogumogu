@@ -11,6 +11,11 @@ neue Migration in `migrations/` plus Test; bestehende Migrationen werden nie ge�
 Neue Paketformate brauchen positive und negative Fixtures; neue KI-Formate werden als Eintrag
 in `profiles/ai-catalog.toml` ergänzt.
 
+`python scripts/check.py` bündelt diese Prüfungen und prüft zusätzlich den Kern
+ohne Netzwerkfeature sowie auf Windows die UI-Binärtests. Für Linux-Container:
+`docker compose run --build --rm checks`. Der Container ersetzt die Windows-Abnahme
+nicht. Modulaufbau und gezielte UI-Updates: [Entwicklung](docs/ENTWICKLUNG.md).
+
 Änderungen an `src/cleanup/`, `src/fsread.rs` oder `src/platform/windows.rs` benötigen den
 Review einer zweiten Person. Produktive Bereinigung bleibt deaktiviert, bis Gate G5
 (unabhängiger Review der Löschpfade) dokumentiert bestanden ist.

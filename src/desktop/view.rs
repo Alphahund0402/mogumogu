@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 const SLICE_COLORS: [u32; 5] = [0x2d7cf5, 0x2bb3d7, 0x25bc9d, 0x78899e, 0xb7c2d0];
 
-fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
+pub(super) fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
     Rc::new(VecModel::from(items)).into()
 }
 
@@ -20,14 +20,6 @@ fn s(text: impl Into<SharedString>) -> SharedString {
 
 fn rgb(value: u32) -> Color {
     Color::from_rgb_u8((value >> 16) as u8, (value >> 8) as u8, value as u8)
-}
-
-/// UI-side state that is not part of the snapshot.
-pub struct ViewState<'a> {
-    pub snapshot: &'a Snapshot,
-    pub busy: bool,
-    pub status: &'a str,
-    pub data_path: &'a str,
 }
 
 pub fn observation_kind(state: Observation) -> &'static str {
@@ -49,24 +41,24 @@ pub fn owner_text(snapshot: &Snapshot, resource_id: i64) -> String {
 }
 
 fn matches(project: &Project, query: &str, filter: i32) -> bool {
-    let text = format!("{} {} {}", project.name, project.path, project.ecosystem).to_lowercase();
     let state_ok = match filter {
         1 => project.state == Observation::Observed,
         2 => project.state == Observation::Review,
         _ => true,
     };
-    state_ok && text.contains(&query.to_lowercase())
+    state_ok
+        && (query.is_empty()
+            || [&project.name, &project.path, &project.ecosystem]
+                .iter()
+                .any(|field| field.to_lowercase().contains(query)))
 }
 
-pub fn render(ui: &Dashboard, view: &ViewState<'_>) {
+pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str) {
     let store = ui.global::<Store>();
-    let snapshot = view.snapshot;
     let now = SystemClock.now();
     store.set_demo(snapshot.demo);
-    store.set_busy(view.busy);
-    store.set_status(s(view.status));
     store.set_sqlite_version(s(&snapshot.sqlite_version));
-    store.set_data_path(s(view.data_path));
+    store.set_data_path(s(data_path));
     store.set_version(s(env!("CARGO_PKG_VERSION")));
 
     // Metrics
@@ -94,56 +86,8 @@ pub fn render(ui: &Dashboard, view: &ViewState<'_>) {
     store.set_count_observed(s(observed.to_string()));
     store.set_count_review(s(review.to_string()));
 
-    // Projects (filtered in Rust; the UI holds one bounded page)
-    let query = store.get_query().to_string();
-    let filter = store.get_filter();
-    store.set_projects(model(
-        snapshot
-            .projects
-            .iter()
-            .filter(|p| matches(p, &query, filter))
-            .map(|p| ProjectRow {
-                id: p.id as i32,
-                name: s(&p.name),
-                path: s(&p.path),
-                ecosystem: s(&p.ecosystem),
-                state: s(p.state.label()),
-                state_kind: s(observation_kind(p.state)),
-                size: s(format_bytes(p.bytes)),
-                detail: s(&p.evidence),
-                approved: p.read_approved,
-                coverage: s(&p.coverage),
-            })
-            .collect(),
-    ));
-
-    let tab = store.get_resource_tab();
-    store.set_resources(model(
-        snapshot
-            .resources
-            .iter()
-            .filter(|r| tab != 1 || r.kind == ResourceKind::Scratchpad || r.parent_id.is_some())
-            .map(|r| {
-                let (state, kind) = if r.expendable {
-                    ("Entbehrlich markiert".to_string(), "warn")
-                } else if r.protected {
-                    ("Geschützt".to_string(), "protected")
-                } else {
-                    (r.state.label().to_string(), observation_kind(r.state))
-                };
-                ResourceRow {
-                    id: r.id as i32,
-                    name: s(&r.name),
-                    kind: s(r.kind.label()),
-                    owner: s(owner_text(snapshot, r.id)),
-                    size: s(format_bytes(r.bytes)),
-                    state: s(state),
-                    state_kind: s(kind),
-                    detail: s(&r.evidence),
-                }
-            })
-            .collect(),
-    ));
+    render_projects(ui, snapshot);
+    render_resources(ui, snapshot);
 
     store.set_ai(model(
         snapshot
@@ -294,6 +238,72 @@ pub fn render(ui: &Dashboard, view: &ViewState<'_>) {
 
     render_storage(&store, snapshot);
     render_settings(&store, snapshot);
+}
+
+/// Status changes leave the data models and their scroll/focus state intact.
+pub fn render_status(ui: &Dashboard, busy: bool, status: &str) {
+    let store = ui.global::<Store>();
+    store.set_busy(busy);
+    store.set_status(s(status));
+}
+
+/// Search and project filters rebuild only the project rows.
+pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
+    let store = ui.global::<Store>();
+    // Projects (filtered in Rust; the UI holds one bounded page)
+    let query = store.get_query().trim().to_lowercase();
+    let filter = store.get_filter();
+    store.set_projects(model(
+        snapshot
+            .projects
+            .iter()
+            .filter(|p| matches(p, &query, filter))
+            .map(|p| ProjectRow {
+                id: p.id as i32,
+                name: s(&p.name),
+                path: s(&p.path),
+                ecosystem: s(&p.ecosystem),
+                state: s(p.state.label()),
+                state_kind: s(observation_kind(p.state)),
+                size: s(format_bytes(p.bytes)),
+                detail: s(&p.evidence),
+                approved: p.read_approved,
+                coverage: s(&p.coverage),
+            })
+            .collect(),
+    ));
+}
+
+/// Resource tabs do not affect project search or other pages.
+pub fn render_resources(ui: &Dashboard, snapshot: &Snapshot) {
+    let store = ui.global::<Store>();
+    let tab = store.get_resource_tab();
+    store.set_resources(model(
+        snapshot
+            .resources
+            .iter()
+            .filter(|r| tab != 1 || r.kind == ResourceKind::Scratchpad || r.parent_id.is_some())
+            .map(|r| {
+                let (state, kind) = if r.expendable {
+                    ("Entbehrlich markiert".to_string(), "warn")
+                } else if r.protected {
+                    ("Geschützt".to_string(), "protected")
+                } else {
+                    (r.state.label().to_string(), observation_kind(r.state))
+                };
+                ResourceRow {
+                    id: r.id as i32,
+                    name: s(&r.name),
+                    kind: s(r.kind.label()),
+                    owner: s(owner_text(snapshot, r.id)),
+                    size: s(format_bytes(r.bytes)),
+                    state: s(state),
+                    state_kind: s(kind),
+                    detail: s(&r.evidence),
+                }
+            })
+            .collect(),
+    ));
 }
 
 fn render_storage(store: &Store<'_>, snapshot: &Snapshot) {

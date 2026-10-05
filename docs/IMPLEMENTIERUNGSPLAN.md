@@ -16,6 +16,11 @@ Die Zielmatrix bleibt npm, pnpm, pip, uv, Cargo, NuGet, WinGet, Scoop und Chocol
 
 Ein Cargo-Paket mit klar getrennten Modulen, ein Besitzerprozess mit genau einem Datenbank-Worker, eine Tray-Ereignisschleife. Module werden erst zu eigenen Crates, wenn eine echte unabhängige Schnittstelle oder Wiederverwendung existiert. Keine Plugin-DLLs, Microservices, WebView, Graphdatenbank, Async-Runtime oder eigene Regelsprache.
 
+Entwicklung und Prüfungen: [gemeinsamer Runner und Modulaufbau](ENTWICKLUNG.md),
+[Linux-Container für portable Kernprüfungen](DOCKER.md). Windows-Laufzeit und
+Sicherheitsabnahme bleiben nativ. Der Desktop trennt Lebenszyklus, Callback-Verdrahtung,
+Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
+
 | Entscheidung | Baseline und Grund |
 |---|---|
 | Rust + Slint | Native UI ohne Browserfrontend; Software-Renderer, Bilder eingebettet, Systemschriften |

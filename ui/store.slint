@@ -87,6 +87,7 @@ export global Store {
     in property <string> form-label-2;
     in property <string> form-hint-2;
     in property <string> form-submit;
+    in-out property <string> form-error;
     in-out property <string> form-value-1;
     in-out property <string> form-value-2;
 }
@@ -95,6 +96,8 @@ export global Actions {
     callback refresh();
     callback scan-all();
     callback search(string);
+    callback filter-projects();
+    callback filter-resources();
     callback open-project(int);
     callback open-resource(int);
     callback open-ai(int);

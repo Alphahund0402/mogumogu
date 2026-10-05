@@ -74,6 +74,18 @@ Sicherheitsmodell in Kürze: Wurzeln werden einmal geöffnet und mit ihrer freig
 
 ## Entwicklung
 
+Gemeinsamer Prüfeinstieg: `python scripts/check.py` (Windows: Kern und Desktop;
+Linux: portabler Kern). Reproduzierbar mit der festgelegten Rust-Toolchain im Container:
+
+```powershell
+docker compose run --build --rm checks
+```
+
+Docker dient der Entwicklung und den Kernprüfungen. Tray, Dashboard und die
+Windows-Sicherheitsgrenzen werden weiterhin nativ geprüft. Details und
+Cache-Nutzung: [Docker](docs/DOCKER.md); Änderungswege und UI-Modulaufbau:
+[Entwicklung](docs/ENTWICKLUNG.md).
+
 ```powershell
 python scripts/validate.py
 cargo fmt --all -- --check
