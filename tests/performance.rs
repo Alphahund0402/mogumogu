@@ -72,6 +72,17 @@ fn reference_inventory_stays_bounded() {
     assert!(snapshot.ai.len() <= UI_PAGE as usize, "UI page bound");
     assert!(snapshot.activity.len() <= 20);
 
+    // Same fixture, warmed database, multiple samples: a single snapshot is
+    // too sensitive to background activity to judge a small improvement.
+    let mut samples = Vec::with_capacity(30);
+    for _ in 0..30 {
+        let started = Instant::now();
+        std::hint::black_box(core.snapshot().unwrap());
+        samples.push(started.elapsed());
+    }
+    samples.sort_unstable();
+    println!("Snapshot warm (30 Samples): Median {:?} · p95 {:?}", samples[15], samples[28]);
+
     let database = std::fs::metadata(temp.path().join("data").join("inventory.sqlite3")).unwrap().len();
     println!(
         "Referenz: {PROJECTS} Projekte, {} Paketinstallationen · Erstes Erfassen {:?} · Neuerfassung {:?} · Snapshot {:?} · DB {} KiB",

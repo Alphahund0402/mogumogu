@@ -1,0 +1,11 @@
+import { Card, PageHeader } from "../components.slint";
+
+export component PageCard inherits Card {
+    in property <string> title;
+    in property <string> description;
+    VerticalLayout {
+        padding: 24px; spacing: 16px;
+        PageHeader { title: root.title; description: root.description; }
+        @children
+    }
+}

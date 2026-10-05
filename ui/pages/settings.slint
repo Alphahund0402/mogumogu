@@ -1,0 +1,77 @@
+import { ScrollView, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { UiButton, Panel, SettingToggle } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component SettingsPage inherits PageCard {
+    title: "Einstellungen";
+    description: "Alles bleibt lokal. Überwachung, Hinweise und Netzwerk sind ausdrückliche, abschaltbare Entscheidungen.";
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            spacing: 14px; alignment: start;
+            HorizontalLayout {
+                spacing: 14px;
+                Panel {
+                    title: "Datenort und Modus"; horizontal-stretch: 1;
+                    Text { text: Store.demo ? "Demodaten · eigene Datenbank, schreibgeschützt" : "Lokales Inventar · explizite Registrierung"; font-size: 11px; color: Theme.ink; }
+                    Text { text: Store.data-path; font-size: 10px; color: Theme.muted; wrap: word-wrap; }
+                    Text { text: "SQLite " + Store.sqlite-version + " · Tray-Betrieb: Fenster schließen beendet die App nicht."; font-size: 10px; color: Theme.muted; wrap: word-wrap; }
+                }
+                Panel {
+                    title: "Bereinigung"; horizontal-stretch: 1;
+                    Text { text: Store.cleanup-status; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 14px;
+                SettingToggle {
+                    horizontal-stretch: 1; title: "Überwachung";
+                    description: "Entprellte Dateiereignisse in freigegebenen Projektordnern lösen eine begrenzte Neuerfassung aus. Aus: nur manuelle Erfassung.";
+                    checked: Store.monitoring; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-monitoring(on); }
+                }
+                SettingToggle {
+                    horizontal-stretch: 1; title: "Tray-Hinweise";
+                    description: "Generische Hinweise im Tray-Tooltip (Anzahl Prüfhinweise) – ohne Pfade oder Paketnamen.";
+                    checked: Store.notifications; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-notifications(on); }
+                }
+            }
+            HorizontalLayout {
+                spacing: 14px;
+                SettingToggle {
+                    horizontal-stretch: 1; title: "Updatehinweise (Netzwerk)";
+                    description: "Aus = keine Netzwerkzugriffe. Ein = nur einzeln freigegebene öffentliche Quellen; private Quellen nie.";
+                    checked: Store.updates; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-updates(on); }
+                    for source in Store.sources : HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: source.host; font-size: 11px; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
+                        UiButton {
+                            label: source.enabled ? "Freigegeben" : "Freigeben";
+                            primary: source.enabled;
+                            available: Store.updates && !Store.demo && !Store.busy;
+                            activated => { Actions.set-source(source.host, !source.enabled); }
+                        }
+                    }
+                }
+                Panel {
+                    title: "Scratchpad-Wurzel"; horizontal-stretch: 1;
+                    Text { text: "Hier legt mogumogu verwaltete Scratchpads an (source, environment, temporary, results)."; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        root-field := LineEdit { text: Store.scratch-root; placeholder-text: "C:\\dev\\scratch"; enabled: !Store.demo && Store.modal == 0 && !Store.busy; accessible-label: "Scratchpad-Wurzel"; horizontal-stretch: 1; }
+                        UiButton { label: "Speichern"; available: !Store.demo && !Store.busy; activated => { Actions.save-scratch-root(root-field.text); } }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 12px; alignment: start;
+                UiButton { label: "In den Tray wechseln"; activated => { Actions.hide-dashboard(); } }
+                Text { text: "Tastatur: Strg+K Suche · Alt+1…8 Bereiche · Esc schließt Dialoge · Tab wechselt den Fokus"; font-size: 11px; color: Theme.muted; vertical-alignment: center; }
+            }
+        }
+    }
+}

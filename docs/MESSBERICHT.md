@@ -44,6 +44,46 @@ Nach dem ersten Fenster bleiben Renderer- und Fensterthreads sowie Glyph-Caches 
 
 Eine erste Fassung brauchte 959 ms für den Snapshot, weil Paketzahlen je Projekt über korrelierte Unterabfragen ermittelt wurden. Die gruppierte Abfrage (`src/storage/projects.rs`) senkt das auf 32 ms; Sicherheitsprüfungen wurden dafür nicht verändert.
 
-## Nicht gemessen
+## Wiederholung nach dem Modulumbau
+
+Am 5. Oktober 2026 auf derselben Windows-10-Hardware, Rust 1.98.0 und
+Slint 1.18.1. Release-Build, neue Demodatenbank, Schutzsoftware unverändert,
+Docker Desktop aktiv. Rohdaten: [100 Fensterzyklen](messungen/messung-20261005-184947.md).
+Während des frühen Leerlaufs lief die Kompilierung des Referenztests;
+die Messbedingungen sind daher kein kontrollierter Vorher-/Nachher-Vergleich.
+
+| Phase | Private Bytes | Handles | Threads |
+|---|---|---|---|
+| Tray vor dem ersten Fenster | 3,2 MiB | 176 | 6 |
+| Tray nach 60 s Leerlauf | 3,2 MiB | 177 | 5 |
+| Dashboard | 27,5 MiB | 268 | 12 |
+| Tray nach 10 / 50 / 100 Zyklen | 6,9 / 7,6 / 7,5 MiB | 266 / 266 / 265 | 12 / 12 / 12 |
+
+Leerlauf-CPU: 0 % eines Kerns über 60 s. Anzeige-Anfrage p95: 10,7 ms;
+das misst die IPC-Bestätigung, nicht das vollständige Zeichnen. Nach dem
+Aufwärmen blieb der Speicher stabil; ein zehnminütiger CPU-Nachweis fehlt weiter.
+
+Der Referenztest meldet jetzt zusätzlich 30 warme Snapshot-Samples:
+vor dem Umbau Median 33,8 ms, p95 34,7 ms; nach dem Umbau in drei Wiederholungen
+Median 38,2–44,7 ms, p95 48,2–59,4 ms. Diese Läufe überschnitten sich mit
+Fensterzyklen und weiterer Hintergrundlast. Daraus folgt **kein belastbarer
+Beschleunigungsnachweis**; die gespeicherte Übersicht bleibt in dieser Fixture
+deutlich unter dem 500-ms-Ziel. Für einen kontrollierten Vergleich alle Build-
+und Containerarbeit beenden und dieselbe Fixture wiederholen.
+
+Nachweisbar reduzierte Arbeit: Statuswechsel ersetzen keine Listenmodelle;
+die Projektsuche ersetzt nur Projektzeilen statt aller Modelle und des
+Speicherdiagramms. Review und Snapshot teilen geladene Ressourcen, Sessions,
+Besitzer und Einstellungen. Der statische Validator steigt nicht mehr in
+`target`, `dist` und `.git` ab (13 Verträge: zuvor 1,058 s, danach 0,043 s in
+diesen Läufen). Der headless Build-Script-Abgleich beobachtet nur `build.rs`;
+Dokumentationsänderungen lösen dort keinen Paket-Neuaufbau mehr aus.
+
+Die geänderten zentralen Farben liefern rechnerisch: Sekundärtext auf Canvas
+4,88:1 (zuvor 3,57:1), Weiß auf Primärblau 4,96:1 (zuvor 4,14:1), Fokusrahmen
+auf Weiß 4,43:1 (zuvor 2,16:1). Das ist kein Nachweis für die Barrierefreiheit
+aller Texte und Zustände; DPI und Screenreader bleiben manuell zu prüfen.
+
+## Weitere offene Messungen
 
 Windows 11, eine zweite Hardware, GPU-Speicher, I/O-Last großer realer Projektbäume, die Watcher-Last unter Dauerschreiblast sowie Zeiten bis zum vollständigen Zeichnen des Fensters. Diese Punkte gehören zur Abnahme G6.

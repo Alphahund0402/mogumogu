@@ -1,0 +1,23 @@
+name: Portable core (Docker)
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build and validate the portable core
+        run: docker build --target validated --progress plain .
+
+# Linux checks complement the Windows workflow. They cannot exercise Named
+# Pipes, handle-relative filesystem access, Job Objects or the native UI.

@@ -1,0 +1,50 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Icon, UiButton, Pill, Activatable } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component PackagesPage inherits PageCard {
+    title: "Paketmanager";
+    description: "Statische Adapter mit getrennten Fähigkeiten: Inventar, Updatehinweis und Bereinigung sind unabhängig. Kein Adapter startet Programme.";
+    if !Store.demo : HorizontalLayout {
+        spacing: 8px; alignment: start;
+        UiButton { label: "Scoop freigeben"; activated => { Actions.approve-system("scoop"); } }
+        UiButton { label: "Chocolatey freigeben"; activated => { Actions.approve-system("chocolatey"); } }
+        UiButton { label: "Windows-Softwareliste freigeben"; activated => { Actions.approve-system("winget"); } }
+        Rectangle { horizontal-stretch: 1; }
+        UiButton { label: "Updatehinweise prüfen"; has-icon: true; icon: Icons.refresh; available: Store.updates && !Store.busy; activated => { Actions.check-updates(); } }
+    }
+    ListView {
+        vertical-stretch: 1;
+        for adapter in Store.adapters : Rectangle {
+            height: 78px;
+            Activatable {
+                y: 3px; height: parent.height - 6px; border-radius: 9px; border-width: 1px; border-color: #e9eff4;
+                background: self.hovered ? Theme.row-hover : Theme.row;
+                label: adapter.name + ". Inventar " + adapter.inventory + ", Updates " + adapter.updates + ", Bereinigung " + adapter.cleanup;
+                activated => { Actions.open-adapter(adapter.id); }
+                HorizontalLayout {
+                    padding-left: 16px; padding-right: 16px; spacing: 14px;
+                    Icon { source: Icons.package; y: (parent.height - self.height) / 2; tone: #b67b27; }
+                    VerticalLayout {
+                        alignment: center; spacing: 4px; width: 190px;
+                        Text { text: adapter.name; font-size: 13px; font-weight: 600; color: Theme.ink; }
+                        Text { text: adapter.counts; font-size: 10px; color: Theme.muted; overflow: elide; }
+                    }
+                    VerticalLayout {
+                        alignment: center; spacing: 4px; horizontal-stretch: 1;
+                        Text { text: adapter.formats; font-size: 10px; color: Theme.ink; overflow: elide; }
+                        Text { text: adapter.limits; font-size: 9px; color: Theme.muted; overflow: elide; }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px; alignment: end;
+                        Pill { label: "Inventar: " + adapter.inventory; kind: adapter.inventory == "nicht unterstützt" ? "" : "running"; y: (parent.height - self.height) / 2; }
+                        Pill { label: "Updates: " + adapter.updates; kind: adapter.updates == "nicht unterstützt" ? "" : "running"; y: (parent.height - self.height) / 2; }
+                        Pill { label: "Bereinigung: " + adapter.cleanup; kind: "protected"; y: (parent.height - self.height) / 2; }
+                    }
+                }
+            }
+        }
+    }
+}

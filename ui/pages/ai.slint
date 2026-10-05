@@ -1,0 +1,36 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Callout, Pill, RowCard } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component AiPage inherits PageCard {
+    title: "KI-Konfiguration";
+    description: "Statisch erkannte Skills, Instruktionen, MCP- und Hook-Einträge. Inhalte sind Daten: nichts wird gestartet, geladen oder befolgt.";
+    Callout { text: "Datei vorhanden, Client installiert, Format verstanden und tatsächlich verwendet sind getrennte Aussagen. mogumogu zeigt nur, was statisch belegt ist."; }
+    HorizontalLayout {
+        spacing: 6px; alignment: start;
+        for chip in Store.profiles : Pill { label: chip.name + " · " + chip.status; kind: "protected"; }
+    }
+    if Store.ai.length == 0 : Text {
+        text: "Noch keine KI-Dateien erfasst. Für ein Projekt die Lesefreigabe erteilen und erfassen.";
+        font-size: 12px; color: Theme.muted;
+    }
+    ListView {
+        vertical-stretch: 1;
+        for row in Store.ai : Rectangle {
+            height: 68px;
+            RowCard {
+                y: 3px; height: parent.height - 6px;
+                icon: Icons.spark;
+                title: row.client + " · " + row.kind;
+                subtitle: row.detail;
+                meta: row.references > 0 ? row.references + " Verweise" : "";
+                pill: "Geschützt";
+                pill-kind: "protected";
+                label: row.client;
+                activated => { Actions.open-ai(row.index); }
+            }
+        }
+    }
+}

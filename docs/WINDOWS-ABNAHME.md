@@ -59,3 +59,21 @@ Legende: ☑ geprüft · ☐ offen. Spalte „W10“ = Windows 10 Pro 22H2 (Buil
 | Entfernen von `dist` verändert keine Projekt- oder Scratchpadinhalte | ☑ (Daten liegen getrennt) | ☐ |
 
 **Freigabe:** Die native Basis ist auf Windows 10 lauffähig (G0). Für G6 fehlen die offenen Punkte, insbesondere Windows 11, DPI und Screenreader. Produktive Bereinigung bleibt bis G5 gesperrt.
+
+## E. Zusatzprüfungen nach dem Modulumbau
+
+Die bisherigen Häkchen gelten für die Basisabnahme. Die folgenden UI-Änderungen
+vom 5. Oktober 2026 brauchen zusätzlich eine visuelle und tastaturbasierte Abnahme.
+Der native Release-Build und 100 Öffnen-/Schließen-Anfragen per IPC bestanden erneut.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Globale Suche führt zu den Projekten; Name, Pfad und Technologie werden gefunden | ☐ | ☐ |
+| Leere Suche bietet Zurücksetzen; leeres Inventar bietet Registrierung | ☐ | ☐ |
+| Ungültiges Formular erhält Eingaben und zeigt den Fehler; Korrektur ist möglich | ☐ | ☐ |
+| Formular beginnt im ersten Feld; Enter reicht nur einen Auftrag ein | ☐ | ☐ |
+| Paketmanager-, KI- und Speicherhinweisflächen per Tab/Enter/Leertaste bedienen | ☐ | ☐ |
+| Strg+K bleibt bei offenem Dialog im Dialog; Esc und Schließen funktionieren | ☐ | ☐ |
+| Große Lesefreigabenliste scrollt, Ereignisliste bleibt erreichbar | ☐ | ☐ |
+| Beschäftigt-Zustand sperrt Schreibaktionen; Navigation und Dialogschließen bleiben möglich | ☐ | ☐ |
+| Geänderte Farben, Formularhöhe und Fokusrahmen bei 100–200 % DPI prüfen | ☐ | ☐ |

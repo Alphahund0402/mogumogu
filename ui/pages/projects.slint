@@ -1,0 +1,18 @@
+import { Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { UiButton, FilterChip, ProjectTable } from "../components.slint";
+import { PageCard } from "page-card.slint";
+
+export component ProjectsPage inherits PageCard {
+    title: "Projekte";
+    description: "Registrierung ist keine Lese-, Scan- oder Löschfreigabe. Die Lesefreigabe wird pro Projekt bewusst erteilt.";
+    HorizontalLayout {
+        spacing: 5px; alignment: start;
+        FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.filter-projects(); } }
+        FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.filter-projects(); } }
+        FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.filter-projects(); } }
+        Rectangle { horizontal-stretch: 1; }
+        UiButton { label: "Projekt registrieren"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-project(); } }
+    }
+    ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
+}

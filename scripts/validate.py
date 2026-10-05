@@ -7,6 +7,7 @@ Usage: python scripts/validate.py
 from contextlib import contextmanager
 from pathlib import Path
 import json
+import os
 import re
 import sqlite3
 import tomllib
@@ -147,11 +148,15 @@ class Contracts(unittest.TestCase):
         self.assertEqual(json.loads(match.group(1)), FIXTURE)
 
     def test_no_fonts_binaries_or_databases_in_the_tree(self):
-        for f in ROOT.rglob('*'):
-            parts = f.relative_to(ROOT).parts
-            if not f.is_file() or any(x in {'target', 'dist', '.git'} for x in parts):
-                continue
-            self.assertNotIn(f.suffix.lower(), {'.ttf', '.otf', '.woff', '.woff2', '.exe', '.dll', '.sqlite3', '.db'}, str(f))
+        # Prune build output before descending: a warm Cargo cache can contain
+        # thousands of files, none of which belong to this source contract.
+        excluded = {'target', 'dist', '.git'}
+        forbidden = {'.ttf', '.otf', '.woff', '.woff2', '.exe', '.dll', '.sqlite3', '.db'}
+        for directory, subdirs, filenames in os.walk(ROOT):
+            subdirs[:] = [name for name in subdirs if name not in excluded]
+            for name in filenames:
+                path = Path(directory) / name
+                self.assertNotIn(path.suffix.lower(), forbidden, str(path))
 
     def test_plan_ids_and_documents(self):
         plan = (ROOT / 'docs/IMPLEMENTIERUNGSPLAN.md').read_text(encoding='utf-8')

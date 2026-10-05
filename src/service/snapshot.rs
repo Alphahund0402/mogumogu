@@ -6,6 +6,7 @@ use crate::clock::{display_relative, parse_iso};
 use crate::domain::*;
 use crate::limits::UI_PAGE;
 use crate::profiles;
+use crate::review::{self, ReviewInput};
 use crate::storage::PublishedItem;
 use std::collections::BTreeMap;
 
@@ -48,12 +49,10 @@ impl Core {
         let ai = if demo {
             self.repo.demo_ai()?
         } else {
-            {
-                // Only AI rows; the package inventory is not loaded for this view.
-                let mut items = self.repo.published_items_all(Some(ItemCategory::AiArtifact), UI_PAGE)?;
-                items.extend(self.repo.published_items_all(Some(ItemCategory::AiReference), UI_PAGE * 10)?);
-                ai_entries(&items, &scopes)
-            }
+            // Only AI rows; the package inventory is not loaded for this view.
+            let mut items = self.repo.published_items_all(Some(ItemCategory::AiArtifact), UI_PAGE)?;
+            items.extend(self.repo.published_items_all(Some(ItemCategory::AiReference), UI_PAGE * 10)?);
+            ai_entries(&items, &scopes)
         };
         let activity = self
             .repo
@@ -71,14 +70,27 @@ impl Core {
             plans.push(cleanup::summary(&mut self.repo, id)?);
         }
         let storage = storage_slices(&resources);
+        // Review and dashboard share the same bounded read model. Loading these
+        // rows again via Core::review would duplicate queries and allocations.
+        let sessions = self.repo.sessions()?;
+        let owners = self.repo.owners()?;
+        let settings = self.settings()?;
+        let hints = review::evaluate(&ReviewInput {
+            resources: &resources,
+            sessions: &sessions,
+            owners: &owners,
+            settings: &settings,
+            now,
+            demo,
+        });
         Ok(Snapshot {
             demo,
             sqlite_version: self.repo.sqlite_version().into(),
-            hints: self.review()?,
-            sessions: self.repo.sessions()?,
-            owners: self.repo.owners()?,
+            hints,
+            sessions,
+            owners,
             ecosystems: if demo { Vec::new() } else { self.repo.ecosystem_counts()? },
-            settings: Some(self.settings()?),
+            settings: Some(settings),
             projects,
             resources,
             ai,
@@ -94,11 +106,11 @@ fn storage_slices(resources: &[Resource]) -> Vec<StorageSlice> {
     STORAGE_GROUPS
         .iter()
         .map(|(label, kinds)| {
-            let members: Vec<&Resource> = resources.iter().filter(|r| kinds.contains(&r.kind)).collect();
-            let bytes = if members.is_empty() || members.iter().any(|r| r.bytes.is_none()) {
+            let mut members = resources.iter().filter(|r| kinds.contains(&r.kind)).peekable();
+            let bytes = if members.peek().is_none() {
                 None
             } else {
-                members.iter().try_fold(0_i64, |sum, r| sum.checked_add(r.bytes?))
+                members.try_fold(0_i64, |sum, resource| sum.checked_add(resource.bytes?))
             };
             StorageSlice { label: (*label).into(), bytes }
         })
@@ -115,12 +127,13 @@ fn ai_entries(items: &[PublishedItem], scopes: &[Scope]) -> Vec<AiEntry> {
             .push(format!("{} – {}", p.item.name, p.item.detail));
     }
     let catalog = profiles::catalog();
+    let roots: BTreeMap<_, _> = scopes.iter().map(|scope| (scope.id, scope.path.as_str())).collect();
     items
         .iter()
         .filter(|p| p.item.category == ItemCategory::AiArtifact)
         .take(UI_PAGE as usize)
         .map(|p| {
-            let root = scopes.iter().find(|s| s.id == p.scope_id).map_or("", |s| s.path.as_str());
+            let root = roots.get(&p.scope_id).copied().unwrap_or_default();
             let (kind, label) = p.item.name.split_once(": ").unwrap_or((p.item.name.as_str(), ""));
             AiEntry {
                 client: catalog.profile(&p.item.ecosystem).map_or_else(|| p.item.ecosystem.clone(), |c| c.name.clone()),

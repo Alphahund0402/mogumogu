@@ -1,4 +1,7 @@
 fn main() {
+    // The headless build has no generated inputs. Without an explicit rule,
+    // Cargo scans the whole package and even documentation edits rerun it.
+    println!("cargo:rerun-if-changed=build.rs");
     #[cfg(feature = "desktop")]
     {
         println!("cargo:rerun-if-changed=ui");

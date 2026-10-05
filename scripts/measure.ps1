@@ -23,7 +23,9 @@ if (-not $Out) { $Out = Join-Path $Root 'docs\messungen' }
 $Exe = Join-Path $Root 'dist\mogumogu\mogumogu.exe'
 $Cli = Join-Path $Root 'dist\mogumogu\mogumogu-cli.exe'
 if (-not (Test-Path -LiteralPath $Exe)) { throw 'Zuerst bauen: .\build.ps1 -NoRun' }
-$Data = Join-Path ([IO.Path]::GetTempPath()) ("mogumogu-measure-" + [Guid]::NewGuid().ToString('N'))
+$MeasurementRoot = [IO.Path]::GetFullPath((Join-Path $Root 'target\measurements'))
+New-Item -ItemType Directory -Force -Path $MeasurementRoot | Out-Null
+$Data = Join-Path $MeasurementRoot ("data-" + [Guid]::NewGuid().ToString('N'))
 $ModeArgs = @(); if ($Mode -eq 'Demo') { $ModeArgs = @('--demo') }
 
 function Sample([Diagnostics.Process]$Process, [string]$Label) {
@@ -42,7 +44,7 @@ function Invoke-Cli([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "CLI fehlgeschlagen: $Arguments" }
 }
 
-$Process = Start-Process -FilePath $Exe -ArgumentList (@('--tray', '--data-dir', $Data) + $ModeArgs) -PassThru
+$Process = Start-Process -FilePath $Exe -ArgumentList (@('--tray', '--data-dir', ('"' + $Data + '"')) + $ModeArgs) -WindowStyle Hidden -PassThru
 try {
     Start-Sleep -Seconds 5
     $Samples = @(Sample $Process 'tray_settled')
@@ -96,5 +98,19 @@ try {
     $Report | Format-List
 } finally {
     if (-not $Process.HasExited) { Stop-Process -Id $Process.Id -Force }
-    Remove-Item -LiteralPath $Data -Recurse -Force -ErrorAction SilentlyContinue
+    # Only this run's generated fixture may be removed, never a supplied path.
+    $ResolvedData = [IO.Path]::GetFullPath($Data)
+    $ExpectedPrefix = $MeasurementRoot.TrimEnd('\') + '\'
+    if (-not $ResolvedData.StartsWith($ExpectedPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        (Split-Path -Parent $ResolvedData) -ne $MeasurementRoot -or
+        (Split-Path -Leaf $ResolvedData) -notmatch '^data-[a-f0-9]{32}$') {
+        throw 'Messdatenpfad liegt außerhalb der erzeugten Testwurzel; wird nicht entfernt.'
+    }
+    if (Test-Path -LiteralPath $ResolvedData) {
+        $DataItem = Get-Item -LiteralPath $ResolvedData -Force
+        if (($DataItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Messdatenwurzel wurde durch einen Link ersetzt; wird nicht entfernt.'
+        }
+        Remove-Item -LiteralPath $ResolvedData -Recurse -Force
+    }
 }
