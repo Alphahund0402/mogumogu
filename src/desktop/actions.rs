@@ -41,6 +41,9 @@ impl Desktop {
         if let Some(paths) = id.strip_prefix("export-confirm:") {
             return self.export_to_folder(paths == "1");
         }
+        if let Some(kind) = id.strip_prefix("add-store:") {
+            return self.add_store(kind);
+        }
         let mut parts = id.split(':');
         let verb = parts.next().unwrap_or_default();
         let arg = parts.next().and_then(|v| v.parse::<i64>().ok()).unwrap_or_default();
@@ -119,7 +122,7 @@ impl Desktop {
         store.set_search_open(false);
         match hit.area {
             SearchArea::Project => {
-                store.set_page(1);
+                store.invoke_open(1, 0);
                 if let Ok(id) = hit.key.parse() {
                     later(move |d| d.open_project(id));
                 }
@@ -128,32 +131,33 @@ impl Desktop {
                 let id: i64 = hit.key.parse().unwrap_or(-1);
                 let scratch = self.snapshot.resources.iter().any(|r| r.id == id && r.kind == ResourceKind::Scratchpad);
                 if scratch {
-                    store.set_page(4);
+                    store.invoke_open(4, 0);
                     self.experiment = Some(id);
                     self.render_experiment();
                 } else {
-                    store.set_page(5);
+                    store.invoke_open(1, 1);
                     later(move |d| d.open_resource(id));
                 }
             }
             SearchArea::Package => {
-                store.set_page(2);
-                store.set_package_tab(0);
+                store.invoke_open(2, 0);
                 store.set_package_filter(0);
                 store.set_package_search(hit.key.clone().into());
                 self.package_key = None;
                 self.package_query();
             }
             SearchArea::Ai => {
-                store.set_page(3);
+                store.invoke_open(3, 0);
                 if let Some(entry) = hit.key.parse::<usize>().ok().and_then(|i| self.snapshot.ai.get(i).cloned()) {
                     later(move |d| d.dialog(dialogs::ai(&entry)));
                 }
             }
-            SearchArea::System => store.set_page(6),
+            // Personal AI folders live on the AI page, tools and stores on
+            // the package page.
+            SearchArea::System if hit.key.starts_with("ai:") => store.invoke_open(3, 1),
+            SearchArea::System => store.invoke_open(2, 1),
             SearchArea::Discovery => {
-                store.set_page(5);
-                store.set_resource_tab(2);
+                store.invoke_open(1, 2);
                 store.set_candidate_filter(0);
                 store.set_candidate_search("".into());
                 super::view::render_candidates(ui, &self.snapshot);
@@ -204,20 +208,6 @@ pub(super) fn wire(ui: &Dashboard) {
         })
     });
     actions.on_open_search_hit(|index| with(move |d| d.open_search_hit(index.max(0) as usize)));
-    actions.on_filter_projects(|| {
-        with(|d| {
-            if let Some(ui) = &d.dashboard {
-                super::view::render_projects(ui, &d.snapshot);
-            }
-        })
-    });
-    actions.on_filter_resources(|| {
-        with(|d| {
-            if let Some(ui) = &d.dashboard {
-                super::view::render_resources(ui, &d.snapshot);
-            }
-        })
-    });
     actions.on_open_project(|id| later(move |d| d.open_project(i64::from(id))));
     actions.on_open_resource(|id| later(move |d| d.open_resource(i64::from(id))));
     actions.on_open_ai(|index| {
@@ -247,10 +237,6 @@ pub(super) fn wire(ui: &Dashboard) {
                 d.dialog(dialogs::plan(&plan));
             }
         })
-    });
-    actions.on_open_adapter(|id| {
-        let id = id.to_string();
-        later(move |d| d.dialog(dialogs::adapter(&id)))
     });
     actions.on_open_package(|key| {
         let key = key.to_string();
@@ -328,13 +314,10 @@ pub(super) fn wire(ui: &Dashboard) {
             }
         })
     });
-    actions.on_approve_scope(|kind| {
-        let kind = kind.to_string();
-        later(move |d| d.approve_scope(&kind));
-    });
-    actions.on_new_project(|| later(|d| d.guide_open(1)));
+    actions.on_approve_search_folder(|| later(Desktop::approve_search_folder));
+    actions.on_add_store(|| later(Desktop::add_store_dialog));
     actions.on_new_scratch(|| later(|d| d.new_scratch(None)));
-    actions.on_show_cli(|| later(|d| d.dialog(dialogs::message("Hilfe und CLI-Befehle", dialogs::CLI_HELP))));
+    actions.on_show_help(|| later(|d| d.dialog(dialogs::message("Hilfe", dialogs::HELP))));
     actions.on_detail_action(|id| {
         let id = id.to_string();
         later(move |d| d.detail_action(&id))
@@ -351,7 +334,6 @@ pub(super) fn wire(ui: &Dashboard) {
         })
     });
     actions.on_release_session(|id| later(move |d| d.release_session(i64::from(id))));
-    actions.on_recheck_sessions(|| with(|d| d.submit(Request::Sessions)));
     actions.on_experiment_action(|verb, id| {
         let verb = verb.to_string();
         with(move |d| d.experiment_action(&verb, i64::from(id)))
@@ -369,7 +351,6 @@ pub(super) fn wire(ui: &Dashboard) {
     actions.on_guide_disable(|| later(Desktop::guide_disable));
     actions.on_guide_browse(|| later(Desktop::guide_browse));
     actions.on_guide_approve(|| later(Desktop::guide_approve));
-    actions.on_guide_sample(|| later(Desktop::guide_skip));
     actions.on_guide_finish(|| later(Desktop::guide_finish));
     // Settings
     actions.on_set_monitoring(|on| {
@@ -413,18 +394,9 @@ pub(super) fn wire(ui: &Dashboard) {
         with(move |d| d.change_settings(|s| s.scratch_root = (!path.is_empty()).then_some(path)))
     });
     actions.on_browse_scratch_root(|| later(Desktop::browse_scratch_root));
-    actions.on_approve_system(|kind| {
-        let kind = match kind.as_str() {
-            "scoop" => ScopeKind::Scoop,
-            "chocolatey" => ScopeKind::Chocolatey,
-            _ => ScopeKind::Winget,
-        };
-        with(move |d| d.submit(Request::ApproveSystem { kind, path: None }))
-    });
     actions.on_check_updates(|| with(|d| d.submit(Request::Updates)));
     actions.on_backup_now(|| later(Desktop::backup_now));
-    actions.on_export_now(|paths| later(move |d| d.export_preview(paths)));
-    actions.on_hide_dashboard(defer_hide);
+    actions.on_export_now(|| later(Desktop::export_preview));
     ui.window().on_close_requested(|| {
         // Defer dropping the component until its close callback returned.
         defer_hide();

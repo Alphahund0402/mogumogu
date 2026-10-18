@@ -44,6 +44,8 @@ mod audit {
         Rc::new(VecModel::from(rows)).into()
     }
 
+    /// Overview, projects, packages, AI, experiments, storage, settings.
+    const PAGES: i32 = 7;
     const LONG: &str = "Ein sehr langer synthetischer Projektname zur Prüfung von Umbruch und Abständen";
     const PATH: &str = r"C:\fixture\workspace\ein-sehr-langer-projektordner\packages\beispiel-mit-langem-namen";
 
@@ -58,22 +60,18 @@ mod audit {
         s.set_status(detail.into());
         s.set_monitoring_text("Beobachtung aktiv".into());
         s.set_mascot_line("Alles bleibt geschützt, bis du es geprüft hast.".into());
-        s.set_mascot_caption("Dein Inventarhelfer".into());
         s.set_project_count("24".into());
         s.set_package_count("12.450".into());
         s.set_ai_count("128".into());
         s.set_review_count(42);
-        s.set_count_all("14.271".into());
-        s.set_count_observed("12.450".into());
-        s.set_count_review("42".into());
-        s.set_count_unknown("1.779".into());
-        s.set_cleanup_status("Produktive Bereinigung ist gesperrt. Testpläne bleiben überprüfbar.".into());
+        s.set_storage_total("1.234,5 GB".into());
+        s.set_storage_caption(if stress { "Projektgröße · 12 ohne Messung" } else { "Projektgröße" }.into());
+        s.set_finding_count("8".into());
         s.set_package_coverage(detail.into());
         s.set_package_page_label("1–40 von 12.450 Paketen".into());
         s.set_package_counts(model(vec!["12.450".into(); 5]));
         s.set_package_next(true);
         s.set_package_previous(true);
-        s.set_coverage_caption(detail.into());
         s.set_scratch_root(PATH.into());
         s.set_data_path(r"C:\fixture\mogumogu".into());
         s.set_sqlite_version("3.51.0".into());
@@ -109,7 +107,6 @@ mod audit {
                 })
                 .collect(),
         ));
-        s.set_artifacts(s.get_resources());
         s.set_ai(model(
             (0..12)
                 .map(|index| ui::AiRow {
@@ -118,30 +115,10 @@ mod audit {
                     kind: "Projekteinstellungen".into(),
                     detail: detail.into(),
                     path: PATH.into(),
-                    letter: "C".into(),
                     references: 128,
                     scope: "Projekt".into(),
                 })
                 .collect(),
-        ));
-        s.set_profiles(model(
-            [
-                "Agent Skills",
-                "Codex",
-                "Claude Code",
-                "GitHub Copilot / VS Code",
-                "Cursor",
-                "Gemini CLI",
-                "Windsurf / Cascade",
-                "Cline",
-                "Roo Code",
-                "OpenCode",
-                "Continue",
-                "Aider",
-            ]
-            .into_iter()
-            .map(|name| ui::ProfileChip { name: name.into(), status: "Experimentell".into() })
-            .collect(),
         ));
         s.set_events(model(
             (0..12)
@@ -177,20 +154,6 @@ mod audit {
                 })
                 .collect(),
         ));
-        s.set_adapters(model(
-            (0..9)
-                .map(|id| ui::AdapterRow {
-                    id: id.to_string().into(),
-                    name: "Paketmanager".into(),
-                    inventory: "Statisch".into(),
-                    updates: "Opt-in".into(),
-                    cleanup: "Gesperrt".into(),
-                    counts: "12.450 Pakete".into(),
-                    formats: "package.json · package-lock.json".into(),
-                    limits: detail.into(),
-                })
-                .collect(),
-        ));
         s.set_hints(model(
             (0..12)
                 .map(|id| ui::HintRow {
@@ -210,6 +173,7 @@ mod audit {
             (0..8)
                 .map(|id| ui::ScopeRow {
                     id,
+                    name: title.into(),
                     kind: "Projekt".into(),
                     path: PATH.into(),
                     status: "Freigegeben".into(),
@@ -291,22 +255,13 @@ mod audit {
                 count: "42".into(),
                 title: title.into(),
                 detail: detail.into(),
-                action: "Prüfliste öffnen".into(),
-                page: 7
-            };
-            3
-        ]));
-        s.set_coverage_rows(model(vec![
-            ui::LegendRow {
-                label: "Beobachtet".into(),
-                value: "12.450".into(),
-                color: slint::Color::from_rgb_u8(127, 176, 221),
-                share: 0.8
+                action: "Öffnen".into(),
+                page: 4,
+                tab: 0
             };
             3
         ]));
         s.set_disk_checked("Laufwerksstand: synthetische Beispieldaten".into());
-        s.set_disk_note("Projektgrößen sind logische Dateigrößen. Gemeinsame Dateien und Hardlinks können mehrfach vorkommen; keine zugesagte Ersparnis.".into());
         s.set_drives(model(
             [
                 ("C:\\", "System", "512 GB", "350 GB", "162 GB", 0.68),
@@ -343,7 +298,6 @@ mod audit {
                 .collect(),
         ));
         s.set_tree_scopes(model(vec![ui::TreeScopeRow { id: 1, label: title.into(), path: PATH.into() }]));
-        s.set_tree_scope_id(1);
         s.set_tree_path(PATH.into());
         s.set_tree_note("Momentaufnahme · 4 Einträge · keine Links verfolgt".into());
         s.set_tree_rows(model(
@@ -368,13 +322,11 @@ mod audit {
         s.set_content_text("---\nname: beispiel-skill\ndescription: Ein lokaler Beispiel-Skill\n---\n\n# Hinweise\n\n1. Prüfe die Anforderungen.\n2. Lies die zugehörigen Dateien.\n3. Halte deine Ergebnisse fest.\n\n```rust\nfn beispiel() {\n    println!(\"Nur Text, wird nicht ausgeführt\");\n}\n```\n".repeat(if stress {12} else {1}).into());
         s.set_content_note("Schreibgeschützt · Text markieren und kopieren möglich".into());
         s.set_sources(model(vec![ui::SourceToggle { host: "registry.npmjs.org".into(), enabled: true }; 5]));
-        s.set_legend(s.get_coverage_rows());
-        s.set_donut_value("1,23 GiB".into());
-        s.set_storage_subtitle(detail.into());
         s.set_candidates(model(
             (0..8)
                 .map(|index| ui::CandidateRow {
                     index,
+                    artifact: index % 3 == 2,
                     path: PATH.into(),
                     evidence: detail.into(),
                     status: "Unbekannt".into(),
@@ -604,8 +556,8 @@ mod audit {
                     (scale * 100.0) as u32,
                     if stress { "long" } else { "normal" }
                 );
-                for page in 0..11 {
-                    if quick && page != 0 && page != 2 && page != 3 && page != 6 && page != 9 && page != 10 {
+                for page in 0..PAGES {
+                    if quick && page != 0 && page != 2 && page != 3 && page != 5 && page != 6 {
                         continue;
                     }
                     s.set_page(page);
@@ -613,40 +565,33 @@ mod audit {
                 }
                 if !quick {
                     s.set_page(1);
-                    s.set_show_candidates(true);
-                    records.push(frame(&app, &window, output, &format!("{prefix}-candidates"), size)?);
-                    s.set_show_candidates(false);
-                    s.set_page(5);
-                    s.set_resource_tab(3);
-                    records.push(frame(&app, &window, output, &format!("{prefix}-artifacts"), size)?);
-                    s.set_resource_tab(0);
+                    for tab in [1, 2] {
+                        s.set_project_tab(tab);
+                        records.push(frame(&app, &window, output, &format!("{prefix}-project-tab-{tab}"), size)?);
+                    }
+                    s.set_project_tab(0);
                     s.set_page(3);
-                    click_control(&app, &window, "profile-toggle");
-                    records.push(frame(&app, &window, output, &format!("{prefix}-ai-profiles"), size)?);
-                    click_control(&app, &window, "profile-toggle");
-                    s.set_page(6);
+                    click_control(&app, &window, "personal-tab");
+                    records.push(frame(&app, &window, output, &format!("{prefix}-ai-personal"), size)?);
+                    s.set_ai_tab(0);
+                    s.set_page(2);
+                    click_control(&app, &window, "system-tab");
                     click_control(&app, &window, "tool-details-toggle");
                     records.push(frame(&app, &window, output, &format!("{prefix}-tool-details"), size)?);
                     scroll_to_bottom(&app, &window);
-                    click_control(&app, &window, "place-details-toggle");
-                    records.push(frame(&app, &window, output, &format!("{prefix}-place-details"), size)?);
-                    s.set_page(8);
-                    click_control(&app, &window, "events-toggle");
-                    records.push(frame(&app, &window, output, &format!("{prefix}-activity-events"), size)?);
-                    s.set_page(10);
-                    click_control(&app, &window, "drive-details-toggle");
-                    records.push(frame(&app, &window, output, &format!("{prefix}-drive-details"), size)?);
-                    click_control(&app, &window, "drive-details-toggle");
-                    click_control(&app, &window, "measurement-toggle");
-                    records.push(frame(&app, &window, output, &format!("{prefix}-measurement-details"), size)?);
-                    click_control(&app, &window, "measurement-toggle");
+                    records.push(frame(&app, &window, output, &format!("{prefix}-system-bottom"), size)?);
+                    s.set_package_tab(0);
+                    s.set_page(0);
+                    click_control(&app, &window, "changes-tab");
+                    records.push(frame(&app, &window, output, &format!("{prefix}-overview-changes"), size)?);
+                    s.set_overview_tab(0);
                 }
                 s.set_page(2);
                 s.set_package_panel(true);
                 records.push(frame(&app, &window, output, &format!("{prefix}-package-panel"), size)?);
                 s.set_package_panel(false);
                 {
-                    s.set_page(10);
+                    s.set_page(5);
                     s.set_storage_tab(1);
                     records.push(frame(&app, &window, output, &format!("{prefix}-folder-tree"), size)?);
                     s.set_storage_tab(0);
@@ -671,7 +616,7 @@ mod audit {
                 }
                 s.set_page(2);
                 s.set_package_tab(1);
-                records.push(frame(&app, &window, output, &format!("{prefix}-adapters"), size)?);
+                records.push(frame(&app, &window, output, &format!("{prefix}-system"), size)?);
                 s.set_package_tab(0);
                 for modal in 1..4 {
                     s.set_modal(modal);
@@ -711,7 +656,7 @@ mod audit {
                 window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.0 });
                 let size = PhysicalSize::new(width, 680);
                 window.set_size(size);
-                for page in [0, 1, 2, 4, 6, 9] {
+                for page in [0, 1, 2, 4, 5, 6] {
                     app.global::<ui::Store>().set_page(page);
                     records.push(frame(
                         &app,
@@ -728,7 +673,7 @@ mod audit {
                 populate(&app, true);
                 let s = app.global::<ui::Store>();
                 let prefix = format!("{width}x{height}-100pct-long-bottom");
-                for page in 0..11 {
+                for page in 0..PAGES {
                     s.set_page(page);
                     scroll_to_bottom(&app, &window);
                     records.push(frame(&app, &window, output, &format!("{prefix}-page-{page}"), size)?);
@@ -758,29 +703,22 @@ mod audit {
             empty.show()?;
             let size = PhysicalSize::new(900, 560);
             window.set_size(size);
-            for page in 0..11 {
+            for page in 0..PAGES {
                 empty.global::<ui::Store>().set_page(page);
                 records.push(frame(&empty, &window, output, &format!("900x560-100pct-empty-page-{page}"), size)?);
             }
             let s = empty.global::<ui::Store>();
             s.set_page(1);
-            s.set_show_candidates(true);
-            records.push(frame(&empty, &window, output, "900x560-100pct-empty-candidates", size)?);
-            s.set_page(5);
-            s.set_resource_tab(3);
-            records.push(frame(&empty, &window, output, "900x560-100pct-empty-artifacts", size)?);
             for tab in [1, 2] {
-                s.set_resource_tab(tab);
-                records.push(frame(
-                    &empty,
-                    &window,
-                    output,
-                    &format!("900x560-100pct-empty-resource-tab-{tab}"),
-                    size,
-                )?);
+                s.set_project_tab(tab);
+                records.push(frame(&empty, &window, output, &format!("900x560-100pct-empty-project-tab-{tab}"), size)?);
             }
-            s.set_resource_tab(0);
-            s.set_page(10);
+            s.set_project_tab(0);
+            s.set_page(3);
+            s.set_ai_tab(1);
+            records.push(frame(&empty, &window, output, "900x560-100pct-empty-ai-personal", size)?);
+            s.set_ai_tab(0);
+            s.set_page(5);
             s.set_storage_tab(1);
             records.push(frame(&empty, &window, output, "900x560-100pct-empty-tree", size)?);
             s.set_storage_tab(0);
@@ -788,14 +726,15 @@ mod audit {
             s.set_package_search("kein Treffer".into());
             s.set_package_filter(1);
             records.push(frame(&empty, &window, output, "900x560-100pct-filtered-packages", size)?);
-            s.set_page(5);
-            s.set_resource_tab(2);
+            s.set_page(1);
+            s.set_project_tab(2);
             s.set_candidate_search("kein Treffer".into());
             s.set_candidate_filter(2);
             records.push(frame(&empty, &window, output, "900x560-100pct-filtered-findings", size)?);
-            s.set_page(8);
-            click_control(&empty, &window, "events-toggle");
-            records.push(frame(&empty, &window, output, "900x560-100pct-empty-events", size)?);
+            s.set_page(0);
+            click_control(&empty, &window, "changes-tab");
+            records.push(frame(&empty, &window, output, "900x560-100pct-empty-changes", size)?);
+            s.set_overview_tab(0);
             s.set_page(0);
             s.set_search_open(true);
             s.set_query("nicht gefunden".into());

@@ -1,6 +1,6 @@
 import { Switch, ListView } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
-import { Store, Actions, ProjectRow, LegendRow } from "store.slint";
+import { Store, Actions, ProjectRow } from "store.slint";
 
 // A white cloud on the sky canvas.
 export component Card inherits Rectangle {
@@ -375,35 +375,6 @@ export component PageHeader inherits VerticalLayout {
     if root.description != "" : Text { text: root.description; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
 }
 
-// Shares as touching segments; unknown parts are never drawn as zero.
-export component SegmentBar inherits Rectangle {
-    in property <[LegendRow]> rows;
-    height: 10px;
-    border-radius: 5px;
-    clip: true;
-    background: Theme.fog;
-    accessible-role: none;
-    HorizontalLayout {
-        spacing: 3px;
-        for row in root.rows : Rectangle {
-            horizontal-stretch: row.share;
-            min-width: row.share > 0 ? 4px : 0px;
-            background: row.color;
-        }
-    }
-}
-
-export component Legend inherits VerticalLayout {
-    in property <[LegendRow]> rows;
-    spacing: 5px;
-    for row in root.rows : HorizontalLayout {
-        spacing: 7px;
-        Rectangle { width: 8px; height: 8px; y: (parent.height - self.height) / 2; border-radius: 4px; background: row.color; }
-        Text { text: row.label; font-size: 11.5px; color: Theme.text; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
-        Text { text: row.value; font-size: 11.5px; font-weight: 700; color: Theme.ink; vertical-alignment: center; horizontal-alignment: right; }
-    }
-}
-
 // Settings card; its height follows its content.
 export component Panel inherits Rectangle {
     in property <string> title;
@@ -490,7 +461,6 @@ export component PillField inherits Rectangle {
 component ProjectLine inherits Activatable {
     in property <ProjectRow> data;
     in property <bool> show-technology;
-    in property <bool> show-coverage: true;
     in property <bool> stacked-path;
     height: root.stacked-path ? Theme.detail-row-height : Theme.row-height;
     border-radius: 10px;
@@ -515,7 +485,7 @@ component ProjectLine inherits Activatable {
         if !root.stacked-path : Text { text: root.data.path; horizontal-stretch: 1; min-width: 50px; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
         Text { text: root.data.size; width: 94px; font-size: 11.5px; color: Theme.text; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
         HorizontalLayout { width: 112px; alignment: start; StatusChip { label: root.data.state; kind: root.data.state-kind; constrained: true; max-width: 112px; y: (parent.height - self.height) / 2; } }
-        if root.show-coverage : Text {
+        Text {
             text: root.data.coverage;
             width: 118px;
             font-size: 11.5px;
@@ -538,13 +508,10 @@ export component ProjectTable inherits Rectangle {
     preferred-width: 0px;
     horizontal-stretch: 1;
     in property <[ProjectRow]> rows;
-    in property <bool> compact: false;
     // Width comes from the window, not the table's intrinsic layout (which
-    // would form a layout-info cycle). Overview stacks below 1012px; above
-    // that its 244px summary column also needs room. Details retain all data.
-    property <bool> show-coverage: !root.compact || Store.window-width < 1012px || Store.window-width >= 1100px;
-    property <bool> show-technology: !root.compact && Store.window-width >= 1200px;
-    property <bool> stacked-path: root.compact || Store.window-width < 1200px;
+    // would form a layout-info cycle). Details retain all data.
+    property <bool> show-technology: Store.window-width >= 1200px;
+    property <bool> stacked-path: Store.window-width < 1200px;
     callback selected(int);
     VerticalLayout {
         spacing: 0px;
@@ -555,32 +522,29 @@ export component ProjectTable inherits Rectangle {
                 if !root.stacked-path : Text { text: "Pfad"; horizontal-stretch: 1; min-width: 50px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
                 Text { text: "Größe"; width: 94px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; horizontal-alignment: right; }
                 Text { text: "Nutzung"; width: 112px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-                if root.show-coverage : Text { text: "Erfassung"; width: 118px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                Text { text: "Erfassung"; width: 118px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
                 if root.show-technology : Text { text: "Technologie"; width: 110px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
             }
         }
         if root.rows.length == 0 : VerticalLayout {
             padding: 16px; spacing: 10px; alignment: center;
             Text {
-                text: Store.project-count == "0" ? "Noch keine Projekte registriert. Beginne mit einem Projektordner." : "Keine Projekte passen zur Suche und zum Filter.";
+                text: "Noch keine Projekte. Beginne mit einem Projektordner.";
                 font-size: 12px; color: Theme.muted; wrap: word-wrap; horizontal-alignment: center;
                 accessible-role: text;
             }
             HorizontalLayout {
                 alignment: center;
-                if Store.project-count == "0" : UiButton {
+                UiButton {
                     label: "Projekt hinzufügen"; primary: true;
+                    available: !Store.demo && !Store.busy;
                     activated => { Actions.guide-start(); }
-                }
-                if Store.project-count != "0" : UiButton {
-                    label: "Filter zurücksetzen";
-                    activated => { Store.filter = 0; Actions.filter-projects(); }
                 }
             }
         }
         ListView {
             vertical-stretch: 1;
-            for row in root.rows : ProjectLine { data: row; stacked-path: root.stacked-path; show-technology: root.show-technology; show-coverage: root.show-coverage; activated => { root.selected(row.id); } }
+            for row in root.rows : ProjectLine { data: row; stacked-path: root.stacked-path; show-technology: root.show-technology; activated => { root.selected(row.id); } }
         }
     }
 }

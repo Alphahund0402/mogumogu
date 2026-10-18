@@ -44,7 +44,6 @@ pub(super) fn render(ui: &Dashboard, report: &StorageOverview) {
             .map_or_else(|| "Beispieldaten".into(), |at| format!("Laufwerksstand: {}", display_local(at)))
             .into(),
     );
-    store.set_disk_note(report.note.clone().into());
     store.set_drives(model(
         report
             .drives
@@ -105,7 +104,6 @@ pub(super) fn render(ui: &Dashboard, report: &StorageOverview) {
 
 pub(super) fn render_tree(ui: &Dashboard, tree: &FolderTree, root: &str) {
     let store = ui.global::<Store>();
-    store.set_tree_scope_id(tree.scope_id as i32);
     store.set_tree_path(
         if tree.rel_path.is_empty() {
             root.to_string()
@@ -135,7 +133,6 @@ pub(super) fn render_tree(ui: &Dashboard, tree: &FolderTree, root: &str) {
 pub(super) fn clear_tree(ui: &Dashboard, note: &str) {
     let store = ui.global::<Store>();
     store.set_tree_rows(model(Vec::new()));
-    store.set_tree_scope_id(-1);
     store.set_tree_path("".into());
     store.set_tree_up(false);
     store.set_tree_note(note.into());

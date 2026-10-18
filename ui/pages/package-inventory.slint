@@ -21,7 +21,7 @@ export component PackageInventory inherits VerticalLayout {
     if Store.packages.length == 0 : VerticalLayout {
         alignment: center; vertical-stretch: 1; spacing: 8px; padding: 16px;
         Text { text: Store.demo ? "Die Demo enthält keine geprüften Paketversionen." : Store.package-search != "" || Store.package-filter != 0 ? "Keine Pakete passen zu Suche und Filter." : "Noch keine Paketversionen erfasst."; color: Theme.ink; font-size: 13px; font-weight: 700; horizontal-alignment: center; wrap: word-wrap; }
-        Text { text: Store.package-search != "" || Store.package-filter != 0 ? "Passe die Suche an oder setze den Filter auf „Alle“." : "Projektordner oder globalen Bestand freigeben und erfassen. Abkündigungen brauchen eine freigegebene Quellenabfrage."; color: Theme.muted; font-size: 12px; wrap: word-wrap; horizontal-alignment: center; }
+        Text { text: Store.package-search != "" || Store.package-filter != 0 ? "Passe die Suche an oder setze den Filter auf „Alle“." : "Pakete erscheinen nach der Erfassung eines Projekts oder globalen Bestands."; color: Theme.muted; font-size: 12px; wrap: word-wrap; horizontal-alignment: center; }
         if Store.package-search != "" || Store.package-filter != 0 : HorizontalLayout {
             alignment: center;
             UiButton { small: true; label: "Filter zurücksetzen"; available: !Store.busy; activated => { Store.package-search = ""; Store.package-filter = 0; Actions.package-query(); } }
@@ -110,10 +110,9 @@ export component PackagePanel inherits Rectangle {
             Text { text: Store.panel-note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
             FlexboxLayout {
                 spacing: 8px; alignment: start;
-                UiButton { small: true; label: "Alle Belege"; activated => { Actions.detail-action("package-dialog:" + Store.panel-key); } }
+                UiButton { small: true; label: "Alle Angaben"; activated => { Actions.detail-action("package-dialog:" + Store.panel-key); } }
                 UiButton { small: true; primary: !Store.panel-kept; label: Store.panel-kept ? "Behalten lösen" : "Behalten vormerken"; available: !Store.demo && !Store.busy; activated => { Actions.keep-package(Store.panel-key, !Store.panel-kept); } }
             }
-            Text { text: "mogumogu ändert keine Manifeste oder Lockdateien."; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
         }
     }
 }

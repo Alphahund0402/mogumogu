@@ -1,7 +1,6 @@
 //! Content of the generic detail dialog. Each builder explains *why*
 //! something is shown and offers only the actions that the core allows;
 //! the core still re-checks every action.
-use mogumogu::adapters;
 use mogumogu::clock::display_local;
 use mogumogu::domain::*;
 
@@ -71,13 +70,12 @@ pub fn package(pkg: &PackageFinding) -> Dialog {
             .row(
                 "Update",
                 format!(
-                    "{} · letzte gemeldete Version {}",
+                    "{}{}",
                     pkg.update.map_or("Nicht geprüft", UpdateStatus::label),
-                    pkg.latest_version.as_deref().unwrap_or("?")
+                    pkg.latest_version.as_deref().map_or(String::new(), |v| format!(" · zuletzt gemeldet {v}"))
                 ),
             )
             .row("Abdeckung", &pkg.coverage)
-            .row("Größe", "Ohne Messung unbekannt; keine zugesagte Ersparnis")
             .row(
                 "Projektbelege",
                 if pkg.references.is_empty() {
@@ -106,7 +104,7 @@ pub fn package(pkg: &PackageFinding) -> Dialog {
     }
     dialog.row("Nächster Schritt", &pkg.next_action)
         .action(format!("keep-package:{}:{}",if pkg.retained {"0"} else {"1"},pkg.key),if pkg.retained {"Behalten-Vormerkung lösen"} else {"Behalten"},true)
-        .body("Statische Belege erfassen nicht jede Nutzung. Alter und fehlende Verweise belegen keine Entbehrlichkeit. Diese Ansicht entfernt keine Pakete oder Dateien.")
+        .body("Belege stammen aus Manifesten und Lockdateien; dynamische Nutzung sieht mogumogu nicht. Pakete werden hier nie geändert.")
 }
 
 pub fn artifact(snapshot: &Snapshot, index: usize) -> Dialog {
@@ -117,13 +115,12 @@ pub fn artifact(snapshot: &Snapshot, index: usize) -> Dialog {
     Dialog::new(&item.name).path(format!("{root}\\{}",item.rel_path.replace('/',"\\")))
         .row("Bezug",&item.project).row("Beleg",&item.detail)
         .row("Abdeckung",if item.current {"Aktueller vollständiger Stand"} else {"Älterer vollständiger Stand"})
-        .row("Größe","Unbekannt; keine zugesagte Ersparnis")
-        .body("Statische Manager-Metadaten: Dateien, Änderungen und weitere Verbraucher sind nicht vollständig geprüft. Die Inhalte bleiben geschützt; hier ist keine Entfernung möglich.")
+        .body("Aus den Metadaten der Erfassung erkannt. Größe und weitere Nutzer sind nicht geprüft; entfernt wird hier nichts.")
 }
 
 pub fn candidate(snapshot: &Snapshot, index: usize) -> Dialog {
     let Some(candidate) = snapshot.discoveries.get(index) else {
-        return message("Kandidat nicht gefunden", "Suchwurzel erneut erfassen.");
+        return message("Fund nicht gefunden", "Suchordner erneut erfassen.");
     };
     let root = snapshot.scopes.iter().find(|s| s.id == candidate.scope_id).map_or("?", |s| s.path.as_str());
     let mut dialog=Dialog::new(format!("{} · {}", candidate.kind.label(), candidate.name)).path(format!("{root}\\{}",candidate.rel_path.replace('/',"\\")))
@@ -131,8 +128,7 @@ pub fn candidate(snapshot: &Snapshot, index: usize) -> Dialog {
         .row("Projektbezug", super::view::candidate_owner(candidate))
         .row("Größe", format_bytes(candidate.bytes))
         .row("Änderungsdatum", candidate.modified_at.map_or("Nicht erfasst".into(), display_local))
-        .row("Nutzung", "Nicht nachgewiesen; Änderungsdatum und fehlende Zuordnung belegen keine Entbehrlichkeit")
-        .body("Aus Namen und Metadaten erkannt. Bestätige Besitzer und Zweck für die nächste Prüfung. Registrierung erteilt keine zusätzlichen Leserechte; der Fund bleibt geschützt.");
+        .body("Nur am Namen erkannt, Inhalte wurden nicht gelesen. Ordne den Fund einem Projekt zu, damit er bei der nächsten Prüfung bekannt ist.");
     if candidate.current && !candidate.registered && candidate.is_dir && candidate.kind.is_project() {
         dialog = dialog.action(
             format!("register-candidate:{}:{}", candidate.scope_id, candidate.rel_path),
@@ -153,7 +149,6 @@ pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
     let scope = snapshot.scopes.iter().find(|s| s.project_id == Some(project.id));
     let mut dialog = Dialog::new(&project.name)
         .path(&project.path)
-        .row("Herkunft", if project.origin == Origin::Demo { "Beispieldaten" } else { "Explizit registriert" })
         .row("Technologie", &project.ecosystem)
         .row("Beobachtung", format!("{} – {}", project.state.label(), project.evidence))
         .row("Pakete", project.packages.map_or("Unbekannt (keine vollständige Erfassung)".into(), |n| n.to_string()))
@@ -162,8 +157,7 @@ pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
             "Lesefreigabe",
             if project.read_approved { "Erteilt, an Ordneridentität gebunden" } else { "Nicht erteilt" },
         )
-        .row("Abdeckung", &project.coverage)
-        .row("Schutz", "Aktiv – Registrierung, Alter oder fehlende Nutzung belegen keine Entbehrlichkeit.");
+        .row("Abdeckung", &project.coverage);
     if snapshot.demo {
         return dialog.body("Dies sind Beispieldaten. Der Demomodus ist schreibgeschützt.");
     }
@@ -174,9 +168,7 @@ pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
             .action(format!("measure-scope:{}", scope.id), "Größe messen", false)
             .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false),
     };
-    dialog
-        .action(format!("new-scratch:{}", project.id), "Scratchpad anlegen", false)
-        .body("Die Erfassung liest freigegebene Dateien statisch. Es werden keine Programme, Skripte, Hooks oder MCP-Server gestartet.")
+    dialog.action(format!("new-scratch:{}", project.id), "Scratchpad anlegen", false)
 }
 
 pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
@@ -258,7 +250,7 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
     if resource.acquisition == Acquisition::Managed {
         dialog = dialog.action(format!("measure:{}", resource.id), "Größe messen", false);
     }
-    dialog.body("Registrierung, Alter und fehlende Nutzung erlauben keine Bereinigung.")
+    dialog
 }
 
 pub fn ai(entry: &AiEntry) -> Dialog {
@@ -267,18 +259,14 @@ pub fn ai(entry: &AiEntry) -> Dialog {
         .path(&entry.path)
         .row("Zusammenfassung", &entry.label)
         .row("Geltungsbereich", &entry.scope)
-        .row("Verweise", references)
-        .row("Schutz", "Konfigurationsquellen bleiben geschützt");
+        .row("Verweise", references);
     if entry.viewable {
         let action = entry
             .scope_id
             .map_or_else(|| "ai-content:demo".into(), |scope| format!("ai-content:{scope}:{}", entry.rel_path));
         dialog = dialog.action(action, "Inhalt ansehen", true);
     }
-    dialog.body(
-        "Instruktionen, Skills, Hooks und MCP-Einträge sind Daten. Es werden keine Programme gestartet, \
-             Pakete geladen oder Server kontaktiert. npx-/uvx-Verweise belegen keine Installation.",
-    )
+    dialog.body("Nur als Text gelesen: Es wird nichts gestartet, geladen oder kontaktiert. Ein npx- oder uvx-Verweis heißt nicht, dass das Paket installiert ist.")
 }
 
 pub fn hint(hint: &ReviewHint) -> Dialog {
@@ -296,7 +284,7 @@ pub fn hint(hint: &ReviewHint) -> Dialog {
     if hint.plannable {
         dialog = dialog.action(format!("plan:{}", hint.resource_id), "Plan-Vorschau", true);
     }
-    dialog.body("Ein Prüfhinweis ist kein Urteil. Bereinigung erfordert einen konkreten, bestätigten Plan.")
+    dialog.body("Ein Hinweis ist kein Urteil. Entfernt wird nur über einen Plan, den du bestätigst.")
 }
 
 pub fn plan(plan: &PlanSummary) -> Dialog {
@@ -367,35 +355,22 @@ pub fn scope(scope: &Scope) -> Dialog {
     }
     dialog
         .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false)
-        .body("Ein Limit oder Lesefehler macht die Erfassung teilweise; der letzte vollständige Stand bleibt sichtbar und es entstehen keine Entfernungsmeldungen.")
+        .body("Bei einem Limit oder Lesefehler bleibt der letzte vollständige Stand sichtbar.")
 }
 
-pub fn adapter(id: &str) -> Dialog {
-    let Some(adapter) = adapters::by_id(id) else { return message("Unbekannter Adapter", id) };
-    let d = adapter.descriptor();
-    Dialog::new(d.name)
-        .row("Inventar", d.inventory.label())
-        .row("Updatehinweise", d.updates.label())
-        .row("Bereinigung", d.cleanup.label())
-        .row(
-            "Bereich",
-            if d.scope == adapters::AdapterScope::Project {
-                "Freigegebene Projektordner"
-            } else {
-                "Separat freigegebene Systemquelle"
-            },
-        )
-        .row("Formate", d.formats.join("\n"))
-        .row("Marker", if d.markers.is_empty() { "–".into() } else { d.markers.join(", ") })
-        .row("Grenzen", d.limits)
-        .body("„Unterstützt“ gilt nur innerhalb dieser Formate. Fehlende Quellen bleiben unbekannt, niemals „aktuell“.")
-}
-
-pub const CLI_HELP: &str = "Lokalen Bestand anzeigen:\nmogumogu-cli list\n\n\
-Projekt registrieren und lesen lassen:\nmogumogu-cli project register --name api --path C:\\dev\\api\n\
-mogumogu-cli project approve --project 1\nmogumogu-cli scan\n\n\
-Verwalteter Lauf in einem Scratchpad:\nmogumogu-cli scratch create --project 1 --name parser-spike\n\
-mogumogu-cli run --scratch 2 -- cargo test\n\n\
-Prüfliste und Pläne:\nmogumogu-cli review\nmogumogu-cli cleanup plan --resource 5\n\n\
-Die CLI spricht über eine lokale, benutzergebundene Pipe mit diesem Prozess. Pfade werden bei der \
-Registrierung weder gelesen noch verändert.";
+pub const HELP: &str = "Tastenkürzel\n\
+Strg+K  Inventar durchsuchen\n\
+Strg+N  Projekt hinzufügen\n\
+F5  Ansicht neu laden\n\
+Alt+1 … Alt+7  Bereiche in der Reihenfolge der Seitenleiste\n\
+Esc  Dialog, Suche oder Einstieg schließen\n\n\
+Das Fenster zu schließen beendet mogumogu nicht; es läuft im Tray weiter.\n\n\
+Kommandozeile (mogumogu-cli)\n\
+Bestand anzeigen: mogumogu-cli list\n\
+Projekt aufnehmen: mogumogu-cli project register --name api --path C:\\dev\\api\n\
+Lesen erlauben: mogumogu-cli project approve --project 1\n\
+Erfassen: mogumogu-cli scan\n\
+Scratchpad anlegen: mogumogu-cli scratch create --project 1 --name parser-spike\n\
+Verwalteter Lauf: mogumogu-cli run --scratch 2 -- cargo test\n\
+Prüfhinweise: mogumogu-cli review\n\n\
+Die CLI spricht über eine lokale, benutzergebundene Pipe mit diesem Prozess.";

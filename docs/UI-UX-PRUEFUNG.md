@@ -70,6 +70,59 @@ und die [Text-Eigenschaften](https://docs.slint.dev/latest/docs/slint/reference/
 mit dem lokal gepinnten 1.18.1-Quellstand abgeglichen; Context7 war wegen seines
 Monatslimits nicht verfügbar.
 
+## Zusammenführung auf sieben Ansichten · 18. Oktober 2026
+
+Anlass war die Rückmeldung, dass nicht jede Schaltfläche erkennbar etwas tut und
+die Informationsmenge schwer verständlich ist. Geprüft wurden alle Seiten,
+Dialoge und ihre Rust-Callbacks; geändert wurde nur die Darstellung
+(`ui/`, `src/desktop/`). Kern, CLI, Lese- und Löschgrenzen sind unverändert.
+
+**Doppelte Inhalte.** Die Fundliste stand unter Projekte *und* Ressourcen,
+Scratchpads unter Ressourcen *und* Experimente, die Projekttabelle mit denselben
+Filtern auf Übersicht *und* Projekte, Prüfhinweise als Übersichtskarten *und* in
+der Prüfliste. Persönliche KI-Ordner lagen auf „System“ und waren aus der
+KI-Seite nur über einen Verweisknopf erreichbar; Scoop, Chocolatey und die
+Windows-Softwareliste hatten Freigabeknöpfe auf Pakete *und* System.
+„Umgebungen & Ausgaben“ war zugleich Ressourcen-Reiter und Fundlisten-Filter.
+
+**Schaltflächen ohne sichtbare Wirkung.** „Aktualisieren“ in der Werkzeugleiste
+und „Sessions prüfen“ lösten nur einen Lesevorgang aus. „Quellen prüfen“,
+„Erneut prüfen“, Sicherung und Export meldeten ihr Ergebnis allein in der
+Statuszeile. „In den Tray wechseln“ entsprach dem Schließen des Fensters,
+„Speichern“ war auch ohne Änderung aktiv, „Plan entwerfen“ stand dauerhaft
+deaktiviert da, und „Suchwurzel freigeben“ verlangte interne Bezeichner wie
+`npm-global` in einem Freitextfeld. Der Tray-Callback `refresh-inventory` war
+an keinen Menüpunkt gebunden.
+
+**Text.** Fast jede Seitenbeschreibung, viele Dialogzeilen und Mochis
+seitenabhängige Sprechblasen wiederholten dieselben Schutzsätze („keine
+Entbehrlichkeit“, „kein Löschplan“, „G5“). Fachbegriffe wie Suchwurzel oder
+Wegwerf-Testwurzel standen ohne Erklärung.
+
+| Vorher (11 Ansichten) | Jetzt (7 Ansichten) |
+|---|---|
+| Übersicht, Prüfliste, Aktivität › Ereignisse | **Übersicht**: Kennzahlen mit Sprung zur Seite, Entscheidungen auf anderen Seiten, darunter Prüfhinweise, letzte Änderungen und Pläne |
+| Projekte, Ressourcen (alle Reiter) | **Projekte** mit Reitern Projekte, Ressourcen, Funde (Namenssuche und erfasste Umgebungen/Builds in einer Liste) |
+| Pakete, Paketmanager-Reiter, System › Werkzeuge und Bestände | **Pakete** mit Reiter Werkzeuge & globale Bestände; Formatangaben bleiben in `mogumogu-cli adapters` und der Unterstützungsmatrix |
+| KI-Konfiguration, Erkennungsprofile, System › KI-Benutzerordner | **KI-Konfiguration** mit Reiter Persönliche Ordner |
+| Experimente | **Experimente** ohne „Sessions prüfen“; Aufräumplan nur, wenn etwas planbar ist |
+| Speicher | **Speicher** ohne Aufklappknöpfe; Laufwerksart direkt in der Karte |
+| Einstellungen, Aktivität › Lesefreigaben, Bereinigung-Panel | **Einstellungen** mit Reitern Allgemein und Lesefreigaben; Datenort und Sicherung in einem Panel; ein Exportdialog statt zweier Knöpfe |
+
+Jede verbliebene Schaltfläche ändert sichtbar etwas: Hintergrundergebnisse
+erscheinen zehn Sekunden in der Ergebnisleiste (`Desktop::notify`).
+Suchordner werden über die native Ordnerauswahl hinzugefügt; Python-Umgebungen
+und Bestände an abweichenden Orten über **Pakete → Werkzeuge & globale Bestände
+→ Ort hinzufügen …** mit Auswahl in Klartext. Mochi spricht nur noch bei einem
+Zustand (Erfassung, Pause, hängendes Experiment, teilweise Erfassung, leeres
+Inventar). Dialoge verloren konstante Zeilen wie „Schutz: Aktiv …“ und passen
+ihre Höhe dem Inhalt an. Die Hilfe (F1) nennt Tastenkürzel und CLI-Befehle.
+
+Nebenbei behoben: Die Speicherseite reservierte durch `FlexboxLayout` in der
+ScrollView leere Zeilen; Laufwerkskarten liegen jetzt in einem eigenen Raster.
+`design/screens/render.rs` kompilierte nach früheren Domainänderungen nicht mehr
+und rendert wieder alle Ansichten und Reiter.
+
 ## Verbleibende Prüfung
 
 Die geometrischen Checks finden mögliche Kollisionen und unzugängliche Grenzen,

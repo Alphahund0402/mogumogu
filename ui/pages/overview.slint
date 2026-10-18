@@ -1,139 +1,147 @@
-import { ScrollView } from "std-widgets.slint";
+import { ListView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions, AttentionCard } from "../store.slint";
-import { Card, CardTitle, Icon, UiButton, FilterChip, Legend, SegmentBar, StatusChip, ProjectTable, PageHeader } from "../components.slint";
+import { Icon, UiButton, FilterChip, StatusChip, PageHeader, RowCard, Activatable, Card } from "../components.slint";
 
-// One trigger with its count and the next step; never a verdict.
-component AttentionTile inherits Card {
-    in property <AttentionCard> data;
-    min-width: 240px;
-    preferred-width: 260px;
+// One key figure; opens the page that lists it.
+component FigureTile inherits Activatable {
+    in property <string> value;
+    in property <string> caption;
+    in property <image> icon;
+    in property <int> target;
+    label: root.caption + ": " + root.value;
+    min-width: 0px;
     horizontal-stretch: 1;
-    VerticalLayout {
-        padding: 12px; padding-left: 14px; padding-right: 14px; spacing: 4px;
-        HorizontalLayout {
-            spacing: 8px;
-            Text { text: root.data.title; font-size: 12.5px; font-weight: 700; color: Theme.ink; wrap: word-wrap; horizontal-stretch: 1; }
-            Text { text: root.data.count; font-size: 20px; font-weight: 700; color: Theme.ink; vertical-alignment: center; }
-        }
-        Text { text: root.data.detail; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
-        FlexboxLayout {
-            alignment: start; padding-top: 3px; spacing: 6px;
-            StatusChip { label: root.data.label; kind: root.data.kind; }
-            UiButton { small: true; label: root.data.action; available: true; activated => { Store.page = root.data.page; } }
-        }
-    }
-}
-
-component CalmTile inherits Card {
-    horizontal-stretch: 1;
+    height: 60px;
+    border-radius: Theme.radius-small;
+    resting-background: Theme.surface;
+    resting-border: Theme.edge;
+    available: true;
+    activated => { Store.open(root.target, 0); }
     HorizontalLayout {
-        padding: 14px; spacing: 12px;
-        Icon { source: Icons.check; width: 20px; height: 20px; y: (parent.height - self.height) / 2; tone: Theme.ok-ink; }
+        padding-left: 14px; padding-right: 12px; spacing: 10px;
+        Icon { source: root.icon; width: 18px; height: 18px; y: (parent.height - self.height) / 2; tone: Theme.protected-ink; }
         VerticalLayout {
-            alignment: center; spacing: 2px; horizontal-stretch: 1;
-            Text { text: Store.project-count == "0" ? "Noch nichts zu prüfen." : "Gerade braucht nichts deine Aufmerksamkeit."; font-size: 13px; font-weight: 700; color: Theme.ink; wrap: word-wrap; }
-            Text { text: "Keine offenen Prüfhinweise oder hängenden Sessions. Ungeklärte Nutzung bleibt unbekannt."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+            alignment: center; spacing: 0px; horizontal-stretch: 1; min-width: 0px;
+            Text { text: root.value; font-size: 18px; font-weight: 700; color: Theme.ink; overflow: elide; }
+            Text { text: root.caption; font-size: 11px; color: Theme.muted; overflow: elide; }
         }
+        Icon { source: Icons.chevron; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: Theme.muted; }
     }
 }
 
-component ProjectsPane inherits Card {
-    VerticalLayout {
-        spacing: 2px;
-        FlexboxLayout {
-            padding-left: 14px; padding-right: 10px; padding-top: 8px; padding-bottom: 4px; spacing: 4px;
-            alignment: start;
-            Text { text: "Projekte"; font-size: 13.5px; font-weight: 700; color: Theme.ink; vertical-alignment: center; }
-            FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.filter-projects(); } }
-            FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.filter-projects(); } }
-            FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.filter-projects(); } }
-            FilterChip { label: "Unbekannt"; count: Store.count-unknown; selected: Store.filter == 3; activated => { Store.filter = 3; Actions.filter-projects(); } }
+// A decision that lives on another page, with one step to get there.
+component AttentionLine inherits Rectangle {
+    in property <AttentionCard> data;
+    height: 44px;
+    border-radius: Theme.radius-small;
+    background: root.data.kind == "alert" ? Theme.blush-soft : root.data.kind == "review" ? Theme.amber-soft : Theme.sky-soft;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.data.label + ": " + root.data.count + ", " + root.data.title + ". " + root.data.detail;
+    HorizontalLayout {
+        padding-left: 12px; padding-right: 8px; spacing: 10px;
+        HorizontalLayout { width: 150px; alignment: start; StatusChip { width: 150px; constrained: true; label: root.data.label; kind: root.data.kind; y: (parent.height - self.height) / 2; } }
+        VerticalLayout {
+            alignment: center; spacing: 1px; horizontal-stretch: 1; min-width: 0px;
+            Text { text: root.data.count + " · " + root.data.title; font-size: 12px; font-weight: 700; color: Theme.ink; overflow: elide; }
+            Text { text: root.data.detail; font-size: 11px; color: Theme.muted; overflow: elide; }
         }
-        ProjectTable { rows: Store.projects; compact: true; vertical-stretch: 1; selected(id) => { Actions.open-project(id); } }
+        UiButton { y: (parent.height - self.height) / 2; small: true; label: root.data.action; available: true; activated => { Store.open(root.data.page, root.data.tab); } }
     }
 }
 
-export component OverviewPage inherits ScrollView {
+component EmptyState inherits VerticalLayout {
+    in property <string> title;
+    in property <string> text;
+    vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+    Text { text: root.title; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+    if root.text != "" : Text { text: root.text; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    @children
+}
+
+export component OverviewPage inherits VerticalLayout {
     min-width: 0px;
     preferred-width: 0px;
-    content-width: self.visible-width;
-    property <bool> compact: Store.window-width < 1012px;
-    property <bool> two-tiles: Store.window-width < 1200px;
-    property <length> content-size: Store.window-width - 232px;
-    VerticalLayout {
-    padding-right: 16px; padding-bottom: 12px;
     spacing: Theme.gap;
-    header := HorizontalLayout {
+    HorizontalLayout {
         spacing: 12px;
-        PageHeader {
-            horizontal-stretch: 1;
-            title: "Übersicht";
-            description: "Offene Hinweise, Projekte und Speicher. Hinweise sind keine Löschfreigabe.";
-        }
-        Text { text: Store.last-scan; max-width: 180px; font-size: 11px; color: Theme.muted; vertical-alignment: bottom; wrap: word-wrap; }
+        PageHeader { horizontal-stretch: 1; title: "Übersicht"; }
+        Text { text: Store.last-scan; max-width: 220px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
     }
-    attention := GridLayout {
-        spacing: Theme.gap;
-        if Store.attention.length == 0 : CalmTile { row: 0; col: 0; }
-        // The service exposes at most three priority cards. Explicit grid
-        // rows make wrapped text contribute its full height to the page.
-        if Store.attention.length > 0 : AttentionTile {
-            row: 0; col: 0; data: Store.attention[0];
-            width: root.two-tiles ? (root.content-size - Theme.gap) / 2 : (root.content-size - 2 * Theme.gap) / 3;
-        }
-        if Store.attention.length > 1 : AttentionTile {
-            row: 0; col: 1; data: Store.attention[1];
-            width: root.two-tiles ? (root.content-size - Theme.gap) / 2 : (root.content-size - 2 * Theme.gap) / 3;
-        }
-        if Store.attention.length > 2 : AttentionTile {
-            row: root.two-tiles ? 1 : 0; col: root.two-tiles ? 0 : 2;
-            colspan: root.two-tiles ? 2 : 1; data: Store.attention[2];
-            width: root.two-tiles ? root.content-size : (root.content-size - 2 * Theme.gap) / 3;
-        }
+    HorizontalLayout {
+        spacing: 10px;
+        FigureTile { value: Store.project-count; caption: "Projekte"; icon: Icons.folder; target: 1; }
+        FigureTile { value: Store.package-count; caption: "Paketversionen"; icon: Icons.package; target: 2; }
+        FigureTile { value: Store.ai-count; caption: "KI-Dateien"; icon: Icons.spark; target: 3; }
+        FigureTile { value: Store.storage-total; caption: Store.storage-caption; icon: Icons.drive; target: 5; }
     }
-    GridLayout {
-        spacing: Theme.gap;
-        ProjectsPane {
-            row: 0; col: 0;
-            horizontal-stretch: 1; min-width: 0px;
-            min-height: 260px;
-            preferred-height: 320px;
-        }
-        GridLayout {
-            row: root.compact ? 1 : 0; col: root.compact ? 0 : 1;
-            width: root.compact ? Store.window-width - 232px : 244px;
-            spacing: Theme.gap;
-            Card {
-                row: 0; col: 0;
-                width: root.compact ? (root.content-size - Theme.gap) / 2 : 244px;
-                VerticalLayout {
-                    CardTitle { title: "Abdeckung"; eyebrow: Store.coverage-caption; }
-                    VerticalLayout {
-                        padding-left: 14px; padding-right: 14px; padding-bottom: 12px; spacing: 8px;
-                        SegmentBar { rows: Store.coverage-rows; }
-                        Legend { rows: Store.coverage-rows; }
-                    }
+    if Store.attention.length > 0 : VerticalLayout {
+        spacing: 6px;
+        for card in Store.attention : AttentionLine { data: card; }
+    }
+    Card {
+        vertical-stretch: 1;
+        min-height: 100px;
+        VerticalLayout {
+            padding: 8px; spacing: 4px;
+            HorizontalLayout {
+                spacing: 6px; padding-left: 4px; alignment: start;
+                FilterChip { label: "Prüfhinweise"; count: Store.review-count; selected: Store.overview-tab == 0; activated => { Store.overview-tab = 0; } }
+                changes-tab := FilterChip { label: "Letzte Änderungen"; count: Store.events.length; selected: Store.overview-tab == 1; activated => { Store.overview-tab = 1; } }
+                if Store.plans.length > 0 : FilterChip { label: "Bereinigungspläne"; count: Store.plans.length; selected: Store.overview-tab == 2; activated => { Store.overview-tab = 2; } }
+            }
+            if Store.overview-tab == 0 && Store.hints.length == 0 && Store.project-count == "0" : EmptyState {
+                title: "Noch keine Projekte.";
+                text: "Füge einen Projektordner hinzu. Danach erscheint hier, was eine Prüfung verdient.";
+                HorizontalLayout { alignment: center; UiButton { primary: true; label: "Projekt hinzufügen"; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } } }
+            }
+            if Store.overview-tab == 0 && Store.hints.length == 0 && Store.project-count != "0" : EmptyState {
+                title: "Gerade braucht nichts deine Aufmerksamkeit.";
+                text: "Neue Prüfhinweise erscheinen hier nach der nächsten Erfassung.";
+            }
+            if Store.overview-tab == 0 && Store.hints.length > 0 : ListView {
+                vertical-stretch: 1;
+                for hint in Store.hints : RowCard {
+                    selection-kind: "hint";
+                    selection-key: "" + hint.id + "|" + hint.kind;
+                    icon: hint.stalled ? Icons.warning : hint.kind == "Prüftermin erreicht" ? Icons.clock : hint.kind == "Möglicherweise verwaist" ? Icons.folder : Icons.package;
+                    title: hint.name + " · " + hint.kind;
+                    subtitle: hint.trigger != "" ? hint.trigger : hint.evidence;
+                    meta: hint.size;
+                    pill: hint.stalled ? "Hängt" : hint.plannable ? "Planbar" : hint.protected ? "Geschützt" : "Prüfen";
+                    pill-kind: hint.stalled ? "alert" : hint.plannable ? "review" : hint.protected ? "protected" : "review";
+                    label: hint.name + ", " + hint.kind;
+                    activated => { if hint.stalled { Store.open(4, 0); Actions.select-experiment(hint.id); } else { Actions.open-hint(hint.id); } }
                 }
             }
-            Card {
-                row: root.compact ? 0 : 1; col: root.compact ? 1 : 0;
-                width: root.compact ? (root.content-size - Theme.gap) / 2 : 244px;
-                VerticalLayout {
-                    CardTitle { title: "Speicher"; eyebrow: Store.donut-value; }
-                    VerticalLayout {
-                        padding-left: 14px; padding-right: 14px; padding-bottom: 12px; spacing: 8px; alignment: start;
-                        SegmentBar { rows: Store.legend; }
-                        Legend { rows: Store.legend; }
-                        Text { text: Store.storage-subtitle; wrap: word-wrap; font-size: 11px; color: Theme.muted; }
-                        HorizontalLayout {
-                            alignment: start;
-                            UiButton { small: true; quiet: true; label: "Laufwerke öffnen"; activated => { Store.page = 10; } }
-                        }
-                    }
+            if Store.overview-tab == 1 && Store.events.length == 0 : EmptyState {
+                title: "Noch keine Änderungen.";
+                text: "Erfassungen und Freigaben erscheinen hier.";
+            }
+            if Store.overview-tab == 1 && Store.events.length > 0 : ListView {
+                vertical-stretch: 1;
+                for event in Store.events : RowCard {
+                    interactive: false; accessible-role: text;
+                    icon: Icons.history;
+                    title: event.title;
+                    subtitle: event.detail;
+                    meta: event.time;
+                }
+            }
+            if Store.overview-tab == 2 : ListView {
+                vertical-stretch: 1;
+                for plan in Store.plans : RowCard {
+                    selection-kind: "plan";
+                    selection-key: "" + plan.id;
+                    icon: Icons.check;
+                    title: "Plan " + plan.id + " · " + plan.summary;
+                    subtitle: plan.created;
+                    pill: plan.state;
+                    pill-kind: "protected";
+                    label: "Plan " + plan.id;
+                    activated => { Actions.open-plan(plan.id); }
                 }
             }
         }
-    }
     }
 }

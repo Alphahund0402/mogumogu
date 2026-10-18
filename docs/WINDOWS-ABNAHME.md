@@ -26,7 +26,7 @@ Legende: ☑ geprüft · ☐ offen. Spalte „W10“ = Windows 10 Pro 22H2 (Buil
 | Moduswechsel Demo/Lokal nach Beenden | ☑ | ☐ |
 | Explorer-Neustart, Schlafmodus, Mehrmonitor | ☐ | ☐ |
 | DPI 125/150/200 % | ☐ | ☐ |
-| Tastatur: Strg+F/Strg+K, Strg+N, F1/F5, Alt+1…8, Tab, Enter/Leertaste, Esc im Dialog | ☐ nach Layoutänderung erneut prüfen (früher: Alt+1…8, Esc, Fokusrahmen) | ☐ |
+| Tastatur: Strg+F/Strg+K, Strg+N, F1/F5, Alt+1…7, Tab, Enter/Leertaste, Esc im Dialog | ☐ nach Zusammenführung auf sieben Bereiche erneut prüfen (früher: Alt+1…8, Esc, Fokusrahmen) | ☐ |
 | Screenreader (Narrator) liest Navigation, Kennzahlen, Dialoge | ☐ | ☐ |
 | Native Screenshots statt HTML-Vorschau | ☑ | ☐ |
 
@@ -85,10 +85,10 @@ Prüfpunkte. Sie ersetzen keine Bedienung des echten Windows-Fensters.
 
 | Prüfpunkt | W10 | W11 |
 |---|---|---|
-| Alle acht Bereiche bei 1080 × 680 und 900 × 560 ohne Überlagerung bedienen | ☐ | ☐ |
+| Alle sieben Bereiche und ihre Reiter bei 1080 × 680 und 900 × 560 ohne Überlagerung bedienen | ☐ | ☐ |
 | Befehlsleiste und Statusleiste bleiben bei Verkleinerung erreichbar | ☐ | ☐ |
-| KI-Profile horizontal, Einstellungen und lange Planlisten vertikal scrollen | ☐ | ☐ |
-| Strg+F aus einem Eingabefeld, F5 und Alt+1…8; Dialoge sperren Hintergrundkürzel | ☐ | ☐ |
+| Einstellungen, Lesefreigaben und lange Planlisten vertikal scrollen | ☐ | ☐ |
+| Strg+F aus einem Eingabefeld, F5 und Alt+1…7; Dialoge sperren Hintergrundkürzel | ☐ | ☐ |
 | Nach Esc, Schließen-Schaltfläche und erfolgreichem Formular funktionieren Kürzel wieder | ☐ | ☐ |
 | Strg+N nur lokal; ungültige Formulare behalten Werte und sichtbaren Fehler | ☐ | ☐ |
 
@@ -99,12 +99,12 @@ echten Windows-Fensters bleiben separat abzunehmen.
 
 | Prüfpunkt | W10 | W11 |
 |---|---|---|
-| Paketbestand, Adapter, Seitennavigation und lange Paketdetails bei beiden Fenstergrößen bedienen | ☐ | ☐ |
-| Suchwurzel freigeben, Kandidaten ansehen und registrieren; Inhaltsfreigabe bleibt eigener Schritt | ☐ | ☐ |
-| Globale Bereiche mit explizitem Pfad und Standardpfad freigeben; falsche Art/Pfade behalten sichtbare Fehler | ☐ | ☐ |
+| Paketbestand, Seitennavigation und lange Paketdetails bei beiden Fenstergrößen bedienen | ☐ | ☐ |
+| Suchordner hinzufügen, Funde ansehen und registrieren; Inhaltsfreigabe bleibt eigener Schritt | ☐ | ☐ |
+| Globale Bestände am Standardort („Lesen erlauben“) und an abweichendem Ort („Ort hinzufügen …“) freigeben; ungeeignete Ordner zeigen einen sichtbaren Fehler | ☐ | ☐ |
 | Quellen offline/nicht freigegeben, veraltete Warnungen und gleiche Namen verschiedener Versionen prüfen | ☐ | ☐ |
 | Behalten und Vormerkung lösen; Upstream-Warnung bleibt sichtbar | ☐ | ☐ |
-| Ressourcen → Erkannt: Fundstelle, Projektbezug, unbekannte Größe; keine Entfernungsaktion | ☐ | ☐ |
+| Projekte → Funde, Umgebung oder Build-Ausgabe: Fundstelle, Projektbezug; keine Entfernungsaktion | ☐ | ☐ |
 
 ## H. Mochi und japanische Schrift (18. Oktober 2026)
 
@@ -117,7 +117,7 @@ die tatsächliche Windows-Eingabe und Darstellung bei anderem DPI bleiben hier.
 | Japanische Projekt-/Paketnamen in Listen und Dialogen lesen; beide Schriftgewichte ohne Ersatzkästchen | ☐ | ☐ |
 | Japanische IME-Eingabe, Auswahl, Cursor und Kopieren in Suche/Formularen prüfen | ☐ | ☐ |
 | Wortmarke mit Narrator als mogumogu erkannt; dekoratives Maskottchen erzeugt kein zusätzliches Fokusziel | ☐ | ☐ |
-| Maus, Alt+1…8 und Projektsuche wechseln zum passenden Mochi-Ausdruck; der Bildbereich über Einstellungen bleibt stabil | ☐ | ☐ |
+| Erfassung, Pause und hängendes Experiment wechseln zum passenden Mochi-Ausdruck; der Bildbereich über Einstellungen bleibt stabil | ☐ | ☐ |
 | Vereinheitlichter v2-Zeichensatz: alle vier Posen bei 100–200 % DPI mit vergleichbarer Strichstärke und Größe; Ordner, Laptop und Ausdruckszeichen vollständig sichtbar | ☐ | ☐ |
 
 ## I. Systembefund, Einstieg, Experimente und Tray (18. Oktober 2026)
@@ -142,3 +142,27 @@ Bedienung des echten Fensters steht aus.
 | Suche (Strg+K): Treffer aus allen Bereichen, Enter öffnet den ersten, Esc schließt | ☐ | ☐ |
 | Sicherung und Export aus den Einstellungen: Vorschau, Ordnerwahl, vorhandene Datei wird nicht überschrieben | ☐ | ☐ |
 | Stimmungsposen (Mampft, Schläft, Besorgt) bei 100–200 % DPI neben den v2-Posen vergleichen; in Fortschrittsleiste, Pausenkarte und Hinweis zum hängenden Experiment ohne sichtbare Papierkante | ☐ | ☐ |
+
+## J. Zusammengeführte Oberfläche im echten Fenster (18. Oktober 2026)
+
+Windows 10 Pro 22H2, 200 % DPI, Debug-Build mit eigenem Datenverzeichnis
+(`--data-dir`) und synthetischen Testordnern; kein echter Benutzerordner wurde
+freigegeben. Bedient über UI Automation (Invoke, Toggle, Value) und an das
+Fenster gesendete Nachrichten, Bilder per `PrintWindow`. Das ersetzt keine
+Bedienung mit Maus und Narrator durch eine Person.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Einstieg: Ordnerdialog, Lesefreigabe, Erfassung, Ergebnis „Vergleichsbasis erstellt“ | ☑ | ☐ |
+| Ordnerdialog gehört dem Dashboard, auch wenn mogumogu nicht im Vordergrund ist; nur das Dashboard ist währenddessen gesperrt | ☑ | ☐ |
+| Anzeigename folgt einer erneuten Ordnerwahl | ☑ | ☐ |
+| Ein selbst eingegebener Anzeigename bleibt bei erneuter Ordnerwahl | ☐ | ☐ |
+| Projekte › Funde › „Suchordner hinzufügen …“: Erfassung, Ergebnisleiste, Projektwurzel benannt, kein Ordner doppelt | ☑ | ☐ |
+| Pakete › Werkzeuge & globale Bestände › „Ort hinzufügen …“ › Python-Umgebung: Erfassung, Paketzahl steigt | ☑ | ☐ |
+| Einstellungen › Daten: redigierter Export (Inhalt ohne Pfade und Projektnamen) und Sicherung, jeweils mit Ergebnisleiste | ☑ | ☐ |
+| Einstellungen › Lesefreigaben: Ordnername als Titel, Detaildialog, Freigabe widerrufen | ☑ | ☐ |
+| Tray-Menü › „Einstellungen …“ öffnet die Seite Einstellungen | ☑ | ☐ |
+| Fenster schließen: Prozess bleibt im Tray; Tray-Klick öffnet ein neues Fenster mit Barrierefreiheitsbaum | ☑ | ☐ |
+| Navigation über UI Automation 10 von 10 wirksam; Knöpfe, Felder und Dialoge tragen lesbare Namen | ☑ | ☐ |
+| Narrator liest Navigation, Kennzahlen, Reiter und Dialoge | ☐ | ☐ |
+| Tray-Menüeinträge mit Bildschirmleser | ☐ | ☐ |

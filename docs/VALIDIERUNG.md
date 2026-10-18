@@ -2,6 +2,37 @@
 
 Stand: 5. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 18. Oktober: Zusammenführung auf sieben Ansichten
+
+Die Oberfläche wurde von elf auf sieben Ansichten zusammengeführt; Inventar und
+Begründung stehen im [Oberflächeninventar](UI-UX-PRUEFUNG.md#zusammenführung-auf-sieben-ansichten--18-oktober-2026).
+Geändert wurde nur die Darstellung in `ui/` und `src/desktop/`.
+
+Der native Audit in `target/layout-audit-consolidation` umfasst **445 Zustände**
+(sieben Seiten, alle Reiter, Leer- und Filterzustände, Dialoge, Einstieg,
+Erfassung, Suche, 100/150/200 %, Breitenwechsel und Scroll-Enden) mit 162.942
+Komponenteninstanzen und 27.934 sichtbaren Textblöcken.
+`scripts/analyze_layout.py --strict` bestand mit **null Kandidaten**. Ein erster
+Lauf fand 72 Kandidaten: Bei 900 × 560 schoben „Werkzeuge & globale Bestände“
+und die Übersicht mit Ergebnisleiste die Statusleiste aus dem Fenster; die
+Mindesthöhen wurden reduziert. Der Tastaturcheck des Audits bestand.
+
+`cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`,
+alle 15 statischen Verträge und 162 Funktionstests mit
+`--no-default-features --features network` bestanden.
+`design/screens/render.ps1` rendert wieder alle Ansichten und Reiter.
+
+Nachtrag: Die Bedienung im echten Fenster (W10, 200 % DPI, eigenes
+Datenverzeichnis, synthetische Ordner) ist inzwischen über UI Automation und an
+das Fenster gesendete Nachrichten durchgeführt; Ergebnisse in Abschnitt J von
+[WINDOWS-ABNAHME.md](WINDOWS-ABNAHME.md). Dabei behoben: Der Ordnerdialog nahm
+`GetForegroundWindow()` als Besitzer und hing sich damit an ein fremdes Fenster,
+wenn mogumogu nicht vorne war (jetzt das eigene Dashboard); ein automatisch
+gesetzter Anzeigename folgte keiner neuen Ordnerwahl; in den Funden stand die
+Projektwurzel als „Projekt · .“ und ein per Name gefundener Ordner zusätzlich
+als erfasste Umgebung; Lesefreigaben schnitten den Ordnernamen am Pfadende ab;
+der Exportdialog sagte „1 Projekte“. Narrator und Windows 11 bleiben offen.
+
 ## Ergänzung vom 18. Oktober: UI/UX und Informationsdarstellung
 
 Alle elf nativen Seiten sowie Tabs, Details, Formulare, Einstieg und Statusanzeigen

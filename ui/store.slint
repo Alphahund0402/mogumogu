@@ -3,30 +3,27 @@
 
 export struct ProjectRow { id: int, name: string, path: string, ecosystem: string, state: string, state-kind: string, size: string, detail: string, approved: bool, coverage: string, coverage-kind: string }
 export struct ResourceRow { id: int, name: string, kind: string, owner: string, size: string, state: string, state-kind: string, detail: string }
-export struct AiRow { index: int, client: string, kind: string, detail: string, path: string, letter: string, references: int, scope: string }
+export struct AiRow { index: int, client: string, kind: string, detail: string, path: string, references: int, scope: string }
 export struct EventRow { title: string, detail: string, time: string, kind: string }
-export struct AdapterRow { id: string, name: string, inventory: string, updates: string, cleanup: string, counts: string, formats: string, limits: string }
 export struct HintRow { id: int, name: string, kind: string, trigger: string, evidence: string, size: string, protected: bool, plannable: bool, stalled: bool }
-export struct ScopeRow { id: int, kind: string, path: string, status: string, coverage: string, last: string, watched: bool, healthy: bool }
+export struct ScopeRow { id: int, name: string, kind: string, path: string, status: string, coverage: string, last: string, watched: bool, healthy: bool }
 export struct SessionRow { id: int, scratch: string, scratch-id: int, purpose: string, state: string, state-kind: string, started: string, stall: string, releasable: bool, note: string }
 export struct PlanRow { id: int, state: string, created: string, summary: string, fingerprint: string }
-export struct DonutSegment { commands: string, color: color }
-export struct LegendRow { label: string, value: string, color: color, share: float }
-export struct ProfileChip { name: string, status: string }
 export struct DetailRow { label: string, value: string }
 export struct DetailAction { id: string, label: string, primary: bool }
 export struct SourceToggle { host: string, enabled: bool }
 export struct PackageRow { key: string, name: string, version: string, source: string, upstream: string, upstream-kind: string, references: string, update: string, review: bool, kept: bool }
-export struct CandidateRow { index: int, path: string, evidence: string, status: string }
-// Attention cards of the overview: one trigger, its count and the next step.
-export struct AttentionCard { kind: string, label: string, count: string, title: string, detail: string, action: string, page: int }
+// One finding: a name-based discovery or a scanned environment/build output.
+export struct CandidateRow { index: int, artifact: bool, path: string, evidence: string, status: string }
+// Something that needs a decision outside the hint list, with where to act.
+export struct AttentionCard { kind: string, label: string, count: string, title: string, detail: string, action: string, page: int, tab: int }
 // One metadata-only system finding; `approvable` offers a read approval.
 export struct SystemRow { id: string, name: string, location: string, evidence: string, evidence-kind: string, note: string, approvable: bool, approved: bool, coverage: string, scope-id: int }
 // One hit of the global search.
 export struct SearchRow { area: string, area-label: string, key: string, title: string, detail: string }
 // A scratchpad as an experiment, with the state of its sessions.
 export struct ExperimentRow { id: int, name: string, project: string, purpose: string, state: string, state-kind: string }
-// What finishing an experiment would do to one managed folder.
+// One managed folder of an experiment.
 export struct FolderRow { name: string, size: string, fate: string, fate-kind: string }
 export struct ChainStep { label: string, detail: string, warn: bool }
 export struct DriveRow { root: string, label: string, kind: string, total: string, used: string, free: string, projects: string, usage: float, project-share: float, note: string }
@@ -47,43 +44,39 @@ export global Store {
     in property <string> last-scan;
     in property <string> monitoring-text;
 
-    // Mochi: pose 0 neutral, 1 happy, 2 folder, 3 laptop, 4 munching, 5 sleeping, 6 worried
+    // Mochi: pose 0 neutral, 1 happy, 2 folder, 3 laptop, 4 munching, 5 sleeping, 6 worried.
+    // The line is empty unless the state needs a word.
     in property <int> mascot-pose: 1;
     in property <string> mascot-line;
-    in property <string> mascot-caption;
 
-    // Overview
+    // Overview: key figures, items needing a decision, hints and changes
     in property <string> project-count: "0";
-    in property <string> package-count: "—";
-    in property <string> footprint: "—";
+    in property <string> package-count: "0";
     in property <string> ai-count: "0";
+    in property <string> storage-total: "—";
+    in property <string> storage-caption: "Projektgröße";
     in property <int> review-count: 0;
-    in property <string> count-all: "0";
-    in property <string> count-observed: "0";
-    in property <string> count-review: "0";
-    in property <string> count-unknown: "0";
     in property <[AttentionCard]> attention;
-    in property <[LegendRow]> coverage-rows;
-    in property <string> coverage-caption;
+    in-out property <int> overview-tab: 0;
 
     // Models (bounded by Rust to one UI page each)
     in property <[ProjectRow]> projects;
     in property <[ResourceRow]> resources;
     in property <[AiRow]> ai;
     in property <[EventRow]> events;
-    in property <[AdapterRow]> adapters;
     in property <[HintRow]> hints;
     in property <[ScopeRow]> scopes;
-    in property <[SessionRow]> sessions;
     in property <[PlanRow]> plans;
-    in property <[ProfileChip]> profiles;
     in property <[PackageRow]> packages;
     in property <[CandidateRow]> candidates;
-    in property <[ResourceRow]> artifacts;
-    in property <string> ai-user-count: "0";
-    in property <string> ai-project-count: "0";
+    in property <string> finding-count: "0";
 
-    // Packages: page, filter, selection panel
+    // Projects: 0 projects, 1 registered resources, 2 findings
+    in-out property <int> project-tab: 0;
+    in-out property <int> candidate-filter: 0;
+    in-out property <string> candidate-search;
+
+    // Packages: 0 package inventory, 1 tools and global stores
     in property <string> package-coverage;
     in property <string> package-page-label;
     in property <int> package-offset;
@@ -104,7 +97,11 @@ export global Store {
     in property <string> panel-note;
     in property <bool> panel-kept;
     in property <string> panel-key;
-    in-out property <bool> show-candidates: false;
+
+    // AI configuration: 0 found entries, 1 personal folders
+    in-out property <int> ai-tab: 0;
+    in property <string> ai-user-count: "0";
+    in property <string> ai-project-count: "0";
 
     // Experiments
     in property <[ExperimentRow]> experiments;
@@ -119,34 +116,24 @@ export global Store {
     in property <bool> experiment-plannable;
     in property <int> stalled-count: 0;
 
-    // System
+    // System findings (packages tab 1 and AI tab 1)
     in property <[SystemRow]> system-tools;
     in property <[SystemRow]> system-stores;
     in property <[SystemRow]> system-ai;
     in property <string> system-checked;
-    in property <int> system-suggestions: 0;
 
-    // Storage overview
-    in property <[DonutSegment]> donut;
-    in property <[LegendRow]> legend;
-    in property <string> donut-value: "—";
-    in property <string> donut-caption: "Unbekannt";
-    in property <string> storage-subtitle;
+    // Storage
     in property <[DriveRow]> drives;
     in property <[DiskProjectRow]> disk-projects;
     in property <[TreeScopeRow]> tree-scopes;
-    in property <string> disk-note;
     in property <string> disk-checked;
     in-out property <string> selected-drive;
-    in property <int> tree-scope-id: -1;
     in property <string> tree-path;
     in property <string> tree-note: "Wähle einen freigegebenen Ordner, um seine Struktur zu öffnen.";
     in property <bool> tree-up: false;
     in property <bool> tree-loading: false;
     in property <[TreeRow]> tree-rows;
     in-out property <int> storage-tab: 0;
-    in-out property <int> candidate-filter: 0;
-    in-out property <string> candidate-search;
 
     // Settings
     in property <bool> monitoring: false;
@@ -164,14 +151,15 @@ export global Store {
     in property <string> pause-text;
     in property <[SourceToggle]> sources;
     in property <string> scratch-root;
-    in property <string> cleanup-status;
+    // 0 general, 1 read approvals
+    in-out property <int> settings-tab: 0;
 
-    // Scan progress and cancel
+    // Progress of a pass and the result of the last action the user started.
     in property <bool> scan-running: false;
     in property <bool> scan-cancelling: false;
     in property <float> scan-progress: 0;
     in property <string> scan-text;
-    // Result of the last pass the user started; empty once closed or timed out.
+    // Empty once closed or timed out.
     in-out property <string> scan-notice;
     in property <string> scan-notice-kind;
 
@@ -189,15 +177,14 @@ export global Store {
     in property <[SearchRow]> search-results;
     in-out property <bool> search-open: false;
 
-    // Navigation and filters
+    // Navigation: 0 overview, 1 projects, 2 packages, 3 AI, 4 experiments,
+    // 5 storage, 6 settings.
     in-out property <int> page: 0;
-    in-out property <int> filter: 0;
-    in-out property <int> resource-tab: 0;
     // Stable keys keep the last opened row visible across view/model rebuilds.
     in-out property <string> selection-kind;
     in-out property <string> selection-key;
 
-    // Modal layer: 0 none, 1 detail, 2 form
+    // Modal layer: 0 none, 1 detail, 2 form, 3 read-only content
     in-out property <int> modal: 0;
     in property <string> detail-title;
     in property <string> detail-path;
@@ -219,6 +206,15 @@ export global Store {
     in property <bool> form-project-picker: false;
     in property <[string]> form-project-names;
     in-out property <int> form-project-index: 0;
+
+    // Opens a page on one of its tabs (pages without tabs ignore `tab`).
+    public function open(target: int, tab: int) {
+        self.page = target;
+        if target == 1 { self.project-tab = tab; }
+        if target == 2 { self.package-tab = tab; }
+        if target == 3 { self.ai-tab = tab; }
+        if target == 6 { self.settings-tab = tab; }
+    }
 }
 
 export global Actions {
@@ -227,15 +223,12 @@ export global Actions {
     callback cancel-scan();
     callback search(string);
     callback open-search-hit(int);
-    callback filter-projects();
-    callback filter-resources();
     callback open-project(int);
     callback open-resource(int);
     callback open-ai(int);
     callback open-hint(int);
     callback open-scope(int);
     callback open-plan(int);
-    callback open-adapter(string);
     callback open-package(string);
     callback close-package();
     callback package-page(int);
@@ -244,21 +237,20 @@ export global Actions {
     callback open-candidate(int);
     callback open-artifact(int);
     callback filter-candidates();
+    callback approve-search-folder();
+    callback add-store();
     callback storage-refresh();
     callback storage-drive(string);
     callback tree-open(int, string);
     callback tree-enter(int);
     callback tree-parent();
-    callback approve-scope(string);
-    callback new-project();
     callback new-scratch();
-    callback show-cli();
+    callback show-help();
     callback detail-action(string);
     callback submit-form(string, string);
     // Experiments
     callback select-experiment(int);
     callback release-session(int);
-    callback recheck-sessions();
     callback experiment-action(string, int);
     // System
     callback system-refresh();
@@ -270,7 +262,6 @@ export global Actions {
     callback guide-disable();
     callback guide-browse();
     callback guide-approve();
-    callback guide-sample();
     callback guide-finish();
     // Settings
     callback set-monitoring(bool);
@@ -285,9 +276,7 @@ export global Actions {
     callback set-autostart(bool);
     callback save-scratch-root(string);
     callback browse-scratch-root();
-    callback approve-system(string);
     callback check-updates();
     callback backup-now();
-    callback export-now(bool);
-    callback hide-dashboard();
+    callback export-now();
 }

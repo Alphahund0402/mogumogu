@@ -1,16 +1,13 @@
 //! Maps the core snapshot to Slint models. Pure presentation: no SQL, no
 //! filesystem access, no decisions about safety.
 use super::ui::*;
-use mogumogu::adapters;
 use mogumogu::clock::{Clock, DAY, SystemClock, display_relative, display_time};
 use mogumogu::domain::*;
 use mogumogu::limits::PACKAGE_PAGE;
 use mogumogu::service::ScanProgress;
 use serde_json::Value;
-use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::rc::Rc;
-
-const SLICE_COLORS: [u32; 5] = [0x7fb0dd, 0xa9cdee, 0xf2c66b, 0x9ccba6, 0xe7a9b1];
 
 /// Desktop state the snapshot alone does not carry.
 #[derive(Debug)]
@@ -26,10 +23,6 @@ pub(super) fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
 
 fn s(text: impl Into<SharedString>) -> SharedString {
     text.into()
-}
-
-fn rgb(value: u32) -> Color {
-    Color::from_rgb_u8((value >> 16) as u8, (value >> 8) as u8, value as u8)
 }
 
 pub fn observation_kind(state: Observation) -> &'static str {
@@ -67,15 +60,6 @@ fn coverage_cell(snapshot: &Snapshot, project: &Project) -> (String, &'static st
     }
 }
 
-fn matches(project: &Project, filter: i32) -> bool {
-    match filter {
-        1 => project.state == Observation::Observed,
-        2 => project.state == Observation::Review,
-        3 => project.state == Observation::Unknown,
-        _ => true,
-    }
-}
-
 /// Scratchpads whose sessions got stuck, with the most pressing stall.
 fn stalled(snapshot: &Snapshot, now: i64) -> Vec<(i64, &Session, Stall)> {
     snapshot
@@ -107,56 +91,106 @@ pub fn candidate_owner(candidate: &ProjectCandidate) -> String {
     }
 }
 
+/// Name-based discoveries and scanned environments/build outputs share one
+/// list; `artifact` tells the row which detail it opens.
 pub fn render_candidates(ui: &Dashboard, snapshot: &Snapshot) {
     let store = ui.global::<Store>();
     let filter = store.get_candidate_filter();
     let query = store.get_candidate_search().to_string().to_lowercase();
-    store.set_candidates(model(
-        snapshot
-            .discoveries
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| {
-                let kind_matches = match filter {
-                    1 => !c.registered,
-                    2 => matches!(c.kind, DiscoveryKind::Scratchpad | DiscoveryKind::Notebook | DiscoveryKind::Script),
-                    3 => matches!(
-                        c.kind,
-                        DiscoveryKind::Environment
-                            | DiscoveryKind::Dependencies
-                            | DiscoveryKind::BuildOutput
-                            | DiscoveryKind::TestOutput
-                            | DiscoveryKind::Cache
-                    ),
-                    4 => matches!(c.kind, DiscoveryKind::TestData | DiscoveryKind::Database),
-                    _ => true,
-                };
-                kind_matches
-                    && (query.is_empty()
-                        || format!("{} {} {} {}", c.name, c.rel_path, c.evidence, c.project)
-                            .to_lowercase()
-                            .contains(&query))
-            })
-            .map(|(index, c)| CandidateRow {
-                index: index as i32,
-                path: s(format!(
-                    "{} · {}",
-                    c.kind.label(),
-                    if c.name.is_empty() { c.rel_path.as_str() } else { &c.name }
-                )),
-                evidence: s(format!("{} · {} · {}", c.rel_path, candidate_owner(c), c.evidence)),
-                status: s(if c.resource_id.is_some() {
-                    "Zugeordnet"
-                } else if c.registered {
-                    "Registriert"
-                } else if c.current {
-                    "Prüfen"
-                } else {
-                    "Älterer Stand"
+    let found = |text: String| query.is_empty() || text.to_lowercase().contains(&query);
+    let mut rows: Vec<CandidateRow> = snapshot
+        .discoveries
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| {
+            let kind_matches = match filter {
+                1 => !c.registered,
+                2 => matches!(c.kind, DiscoveryKind::Scratchpad | DiscoveryKind::Notebook | DiscoveryKind::Script),
+                3 => matches!(
+                    c.kind,
+                    DiscoveryKind::Environment
+                        | DiscoveryKind::Dependencies
+                        | DiscoveryKind::BuildOutput
+                        | DiscoveryKind::TestOutput
+                        | DiscoveryKind::Cache
+                ),
+                4 => matches!(c.kind, DiscoveryKind::TestData | DiscoveryKind::Database),
+                _ => true,
+            };
+            kind_matches && found(format!("{} {} {} {}", c.name, c.rel_path, c.evidence, c.project))
+        })
+        .map(|(index, c)| CandidateRow {
+            index: index as i32,
+            artifact: false,
+            path: s(format!("{} · {}", c.kind.label(), candidate_name(snapshot, c))),
+            evidence: s(format!(
+                "{} · {}",
+                if c.rel_path.is_empty() { "Ordnerwurzel" } else { &c.rel_path },
+                candidate_owner(c)
+            )),
+            status: s(if c.resource_id.is_some() {
+                "Zugeordnet"
+            } else if c.registered {
+                "Registriert"
+            } else if c.current {
+                "Prüfen"
+            } else {
+                "Älterer Stand"
+            }),
+        })
+        .collect();
+    // The same folder found by name is listed once, as the finding.
+    let unique = |a: &&ArtifactFinding| {
+        !snapshot.discoveries.iter().any(|c| c.scope_id == a.scope_id && c.rel_path == a.rel_path)
+    };
+    if matches!(filter, 0 | 3) {
+        rows.extend(
+            snapshot
+                .artifacts
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| unique(a))
+                .filter(|(_, a)| found(format!("{} {} {} {}", a.name, a.rel_path, a.project, a.detail)))
+                .map(|(index, a)| CandidateRow {
+                    index: index as i32,
+                    artifact: true,
+                    path: s(format!("{} · {}", artifact_label(a.category), a.name)),
+                    evidence: s(format!("{} · {}", a.rel_path, a.project)),
+                    status: s(if a.current { "Erfasst" } else { "Älterer Stand" }),
                 }),
-            })
-            .collect(),
-    ));
+        );
+    }
+    store.set_candidates(model(rows));
+    let total = snapshot.discoveries.len() + snapshot.artifacts.iter().filter(|a| unique(a)).count();
+    store.set_finding_count(s(total.to_string()));
+}
+
+/// A finding without its own name is the root of its scope.
+fn candidate_name(snapshot: &Snapshot, c: &ProjectCandidate) -> String {
+    if !c.name.is_empty() && c.name != "." {
+        return c.name.clone();
+    }
+    if !c.rel_path.is_empty() {
+        return c.rel_path.clone();
+    }
+    if !c.project.is_empty() {
+        return c.project.clone();
+    }
+    snapshot.scopes.iter().find(|s| s.id == c.scope_id).map_or_else(|| "Ordnerwurzel".into(), |s| folder_label(&s.path))
+}
+
+/// Last component of a Windows path, for titles that must not lose it.
+pub fn folder_label(path: &str) -> String {
+    path.trim_end_matches('\\').rsplit('\\').next().filter(|n| !n.is_empty()).unwrap_or(path).to_string()
+}
+
+pub fn artifact_label(category: ItemCategory) -> &'static str {
+    match category {
+        ItemCategory::Environment => "Umgebung",
+        ItemCategory::Output => "Build-Ausgabe",
+        ItemCategory::Cache => "Cache",
+        _ => "Fund",
+    }
 }
 
 pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, state: &ViewState<'_>) {
@@ -181,26 +215,33 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
         None => "Überwachung aus".to_string(),
     }));
 
-    // Counts
-    let count = |filter| snapshot.projects.iter().filter(|p| matches(p, filter)).count().to_string();
+    // Key figures of the overview
     store.set_project_count(s(snapshot.projects.len().to_string()));
-    store.set_count_all(s(count(0)));
-    store.set_count_observed(s(count(1)));
-    store.set_count_review(s(count(2)));
-    store.set_count_unknown(s(count(3)));
-    store.set_package_count(s(snapshot.package_count().map_or("—".into(), |n| n.to_string())));
-    store.set_footprint(s(snapshot.total_bytes().map_or("—".into(), |b| format_bytes(Some(b)))));
+    // A searched package page counts only its matches; keep the total.
+    let query = &snapshot.packages.query;
+    if query.text.trim().is_empty() && query.ecosystem.is_empty() {
+        store.set_package_count(s(snapshot.packages.counts.all.to_string()));
+    }
     store.set_ai_count(s(snapshot.ai.len().to_string()));
+    let measured: Vec<i64> = snapshot.projects.iter().filter_map(|p| p.bytes).collect();
+    let unmeasured = snapshot.projects.len() - measured.len();
+    store.set_storage_total(s(if measured.is_empty() {
+        "—".to_string()
+    } else {
+        format_bytes(Some(measured.iter().sum()))
+    }));
+    store.set_storage_caption(s(match unmeasured {
+        0 => "Projektgröße".to_string(),
+        n => format!("Projektgröße · {n} ohne Messung"),
+    }));
     store.set_review_count(snapshot.review_count() as i32);
     let stalls = stalled(snapshot, now);
     let stalled_ids: Vec<i64> =
         stalls.iter().filter(|(.., st)| *st != Stall::LongRunning).map(|(id, ..)| *id).collect();
     store.set_stalled_count(stalls.iter().filter(|(.., st)| *st != Stall::LongRunning).count() as i32);
-    store.set_system_suggestions(snapshot.system.suggestions() as i32);
 
     render_mascot(&store, snapshot, &settings, state, stalled_ids.len(), now);
     render_attention(&store, snapshot, &stalls);
-    render_coverage(&store, snapshot);
     render_projects(ui, snapshot);
     render_resources(ui, snapshot);
     render_packages(ui, &snapshot.packages, state.package_key);
@@ -208,27 +249,6 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
     render_system(&store, snapshot, now);
     super::disk::render(ui, &snapshot.disks);
 
-    store.set_artifacts(model(
-        snapshot
-            .artifacts
-            .iter()
-            .enumerate()
-            .map(|(index, a)| ResourceRow {
-                id: index as i32,
-                name: s(&a.name),
-                kind: s(a.category.as_str()),
-                owner: s(&a.project),
-                size: s("Unbekannt"),
-                state: s("Geschützt"),
-                state_kind: s("protected"),
-                detail: s(format!(
-                    "{} · {}",
-                    a.rel_path,
-                    if a.current { "Statisch erkannt" } else { "Älterer vollständiger Stand" }
-                )),
-            })
-            .collect(),
-    ));
     render_candidates(ui, snapshot);
 
     store.set_ai(model(
@@ -242,7 +262,6 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
                 kind: s(&a.kind),
                 detail: s(&a.label),
                 path: s(&a.path),
-                letter: s(a.client.chars().next().unwrap_or('?').to_string()),
                 references: a.references.len() as i32,
                 scope: s(if a.scope.is_empty() { "Projekt" } else { &a.scope }),
             })
@@ -257,40 +276,6 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
             .activity
             .iter()
             .map(|e| EventRow { title: s(&e.title), detail: s(&e.detail), time: s(&e.created_at), kind: s(&e.kind) })
-            .collect(),
-    ));
-
-    store.set_adapters(model(
-        adapters::descriptors()
-            .into_iter()
-            .map(|d| {
-                let counts = snapshot.ecosystems.iter().find(|e| e.ecosystem == d.id);
-                let counts = match (snapshot.demo, counts) {
-                    (true, _) => "Beispieldaten · keine Erfassung".to_string(),
-                    (false, Some(c)) => format!(
-                        "{} deklariert · {} aufgelöst · {} installiert{}",
-                        c.declared,
-                        c.resolved,
-                        c.installed,
-                        if c.updates_available > 0 {
-                            format!(" · {} Updatehinweise", c.updates_available)
-                        } else {
-                            String::new()
-                        }
-                    ),
-                    (false, None) => "Noch nicht erfasst".to_string(),
-                };
-                AdapterRow {
-                    id: s(d.id),
-                    name: s(d.name),
-                    inventory: s(d.inventory.label()),
-                    updates: s(d.updates.label()),
-                    cleanup: s(d.cleanup.label()),
-                    counts: s(counts),
-                    formats: s(d.formats.join(" · ")),
-                    limits: s(d.limits),
-                }
-            })
             .collect(),
     ));
 
@@ -318,6 +303,7 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
             .iter()
             .map(|scope| ScopeRow {
                 id: scope.id as i32,
+                name: s(folder_label(&scope.path)),
                 kind: s(scope.kind.label()),
                 path: s(&scope.path),
                 status: s(scope.status.label()),
@@ -352,19 +338,11 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
             .collect(),
     ));
 
-    store.set_profiles(model(
-        mogumogu::profiles::catalog()
-            .profiles
-            .iter()
-            .map(|p| ProfileChip { name: s(&p.name), status: s(p.status.label()) })
-            .collect(),
-    ));
-
-    render_storage(&store, snapshot);
     render_settings(&store, snapshot, &settings, now);
 }
 
-/// Mochi shows the state first, then the page. Always also stated as text.
+/// Mochi shows the state; it only speaks when the state needs a word.
+/// The state is always also given as text elsewhere.
 fn render_mascot(
     store: &Store<'_>,
     snapshot: &Snapshot,
@@ -373,48 +351,27 @@ fn render_mascot(
     stalled: usize,
     now: i64,
 ) {
-    let hints = snapshot.review_count();
-    let page = store.get_page();
-    let worried = !snapshot.demo
-        && (stalled > 0
-            || snapshot.scopes.iter().any(|s| s.status != ScopeStatus::Approved || !s.current() && s.latest.is_some()));
-    let (pose, line, caption) = if state.scanning {
-        (4, "Ich erfasse gerade. Du kannst weiterarbeiten.".to_string(), "Kaut gerade")
+    let partial = !snapshot.demo
+        && snapshot.scopes.iter().any(|s| s.status != ScopeStatus::Approved || !s.current() && s.latest.is_some());
+    let (pose, line) = if state.scanning {
+        (4, "Ich erfasse gerade. Du kannst weiterarbeiten.".to_string())
     } else if let Some(until) = settings.pause_pending(now).filter(|_| !snapshot.demo) {
-        (5, format!("Überwachung pausiert bis {}. Erfassen geht trotzdem.", display_time(until)), "Schläft")
+        (5, format!("Überwachung pausiert bis {}.", display_time(until)))
     } else if stalled > 0 && !snapshot.demo {
-        (
-            6,
-            format!(
-                "{stalled} Experiment{} hängt. Ich warte auf deine Entscheidung.",
-                if stalled == 1 { "" } else { "e" }
-            ),
-            "Besorgt",
-        )
-    } else if worried {
-        (6, "Ein Bereich ist nur teilweise erfasst. Älteres bleibt sichtbar.".to_string(), "Besorgt")
+        (6, format!("{stalled} Experiment{} wartet auf deine Entscheidung.", if stalled == 1 { "" } else { "e" }))
+    } else if partial {
+        (6, "Ein Ordner ist nur teilweise erfasst.".to_string())
     } else if !snapshot.demo && snapshot.projects.is_empty() {
-        (1, "Hallo! Füge deinen ersten Projektordner hinzu.".to_string(), "Freut sich")
+        (1, "Hallo! Füge deinen ersten Projektordner hinzu.".to_string())
     } else {
-        match page {
-            0 if hints > 0 => {
-                (3, format!("{hints} Hinweise warten auf dich. Ohne deinen Plan wird nichts entfernt."), "Prüft")
-            }
-            0 => (1, "Alles erfasst. Gerade wartet nichts auf dich.".to_string(), "Alles erfasst"),
-            1 | 4 | 5 | 6 => {
-                (2, "Ich halte deine Ordner fest\u{a0}– gelesen wird nur, was du freigibst.".to_string(), "Hält Ordner")
-            }
-            2 => (3, "Ich frage nur Quellen, die du freigegeben hast. Installiert wird nichts.".to_string(), "Prüft"),
-            3 => (3, "Skills, Regeln und MCP sind Daten. Ich starte nichts davon.".to_string(), "Prüft"),
-            7 => (3, "Ein Hinweis ist kein Urteil. Schutz gewinnt immer.".to_string(), "Prüft"),
-            _ => (0, String::new(), "Ruhig"),
-        }
+        (1, String::new())
     };
     store.set_mascot_pose(pose);
     store.set_mascot_line(s(line));
-    store.set_mascot_caption(s(caption));
 }
 
+/// Decisions that live on other pages. Review hints are listed on the
+/// overview itself and therefore not repeated here.
 fn render_attention(store: &Store<'_>, snapshot: &Snapshot, stalls: &[(i64, &Session, Stall)]) {
     let name_of = |id: i64| snapshot.resources.iter().find(|r| r.id == id).map_or("?".to_string(), |r| r.name.clone());
     let names = |ids: Vec<String>| {
@@ -423,57 +380,57 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot, stalls: &[(i64, &Ses
         let shown = ids.iter().take(2).cloned().collect::<Vec<_>>().join(" · ");
         if ids.len() > 2 { format!("{shown} · +{}", ids.len() - 2) } else { shown }
     };
+    #[allow(clippy::too_many_arguments)]
+    fn card(
+        kind: &str,
+        label: &str,
+        count: usize,
+        title: String,
+        detail: String,
+        action: &str,
+        page: i32,
+        tab: i32,
+    ) -> AttentionCard {
+        AttentionCard {
+            kind: s(kind),
+            label: s(label),
+            count: s(count.to_string()),
+            title: s(title),
+            detail: s(detail),
+            action: s(action),
+            page,
+            tab,
+        }
+    }
     let mut cards = Vec::new();
-    let stuck: Vec<_> = stalls.iter().filter(|(.., st)| *st != Stall::LongRunning).collect();
-    if !stuck.is_empty() {
-        cards.push(AttentionCard {
-            kind: s("alert"),
-            label: s("Experiment hängt"),
-            count: s(stuck.len().to_string()),
-            title: s(names(stuck.iter().map(|(id, ..)| name_of(*id)).collect())),
-            detail: s(format!("{} · Sperre bleibt bis zu deiner Entscheidung", stuck[0].2.label())),
-            action: s("Experiment öffnen"),
-            page: 4,
-        });
-    }
-    let due: Vec<&ReviewHint> = snapshot.hints.iter().filter(|h| h.kind == HintKind::ReviewDue).collect();
-    if !due.is_empty() {
-        cards.push(AttentionCard {
-            kind: s("review"),
-            label: s("Prüftermin erreicht"),
-            count: s(due.len().to_string()),
-            title: s(names(due.iter().map(|h| h.resource_name.clone()).collect())),
-            detail: s(due[0].trigger.clone().replace("Beispiel: ", "")),
-            action: s("Prüfliste öffnen"),
-            page: 7,
-        });
-    }
-    let other: Vec<&ReviewHint> = snapshot
-        .hints
+    // A stuck scratchpad with a hint is already in the hint list.
+    let stuck: Vec<_> = stalls
         .iter()
-        .filter(|h| h.kind != HintKind::ReviewDue && !stalls.iter().any(|(id, ..)| *id == h.resource_id))
+        .filter(|(id, _, st)| *st != Stall::LongRunning && !snapshot.hints.iter().any(|h| h.resource_id == *id))
         .collect();
-    if !other.is_empty() {
-        cards.push(AttentionCard {
-            kind: s("review"),
-            label: s(other[0].kind.label()),
-            count: s(other.len().to_string()),
-            title: s(names(other.iter().map(|h| h.resource_name.clone()).collect())),
-            detail: s(if other[0].trigger.is_empty() { other[0].evidence.clone() } else { other[0].trigger.clone() }),
-            action: s("Prüfliste öffnen"),
-            page: 7,
-        });
+    if !stuck.is_empty() {
+        cards.push(card(
+            "alert",
+            "Experiment hängt",
+            stuck.len(),
+            names(stuck.iter().map(|(id, ..)| name_of(*id)).collect()),
+            format!("{} · prüfe die Ergebnisse und gib die Session frei", stuck[0].2.label()),
+            "Öffnen",
+            4,
+            0,
+        ));
     }
     if snapshot.packages.counts.deprecated > 0 {
-        cards.push(AttentionCard {
-            kind: s("alert"),
-            label: s("Upstream-Hinweis"),
-            count: s(snapshot.packages.counts.deprecated.to_string()),
-            title: s("Abgekündigt oder gezogen"),
-            detail: s("Projektbelege und Abhängigkeitskette prüfen"),
-            action: s("Pakete prüfen"),
-            page: 2,
-        });
+        cards.push(card(
+            "alert",
+            "Abgekündigt",
+            snapshot.packages.counts.deprecated,
+            "Paketversionen vom Anbieter abgekündigt oder zurückgezogen".into(),
+            "Welche Projekte sie nutzen, steht in den Paketdetails".into(),
+            "Pakete ansehen",
+            2,
+            0,
+        ));
     }
     let partial: Vec<&Scope> = snapshot
         .scopes
@@ -481,94 +438,55 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot, stalls: &[(i64, &Ses
         .filter(|s| s.status != ScopeStatus::Approved || !s.current() && s.latest.is_some())
         .collect();
     if !partial.is_empty() {
-        cards.push(AttentionCard {
-            kind: s("review"),
-            label: s("Teilweise erfasst"),
-            count: s(partial.len().to_string()),
-            title: s(names(partial.iter().map(|s| s.kind.label().to_string()).collect())),
-            detail: s("Älterer vollständiger Stand bleibt sichtbar"),
-            action: s("Abdeckung ansehen"),
-            page: 8,
-        });
+        cards.push(card(
+            "review",
+            "Teilweise erfasst",
+            partial.len(),
+            names(partial.iter().map(|s| s.path.rsplit('\\').next().unwrap_or(&s.path).to_string()).collect()),
+            "Limit oder Lesefehler; der letzte vollständige Stand bleibt sichtbar".into(),
+            "Freigaben ansehen",
+            6,
+            1,
+        ));
     }
-    let unknown: Vec<&Project> = snapshot
-        .projects
-        .iter()
-        .filter(|p| p.state == Observation::Unknown && p.origin == Origin::Registered)
-        .collect();
-    if !unknown.is_empty() && cards.len() < 3 {
-        cards.push(AttentionCard {
-            kind: s("neutral"),
-            label: s("Nutzung unbekannt"),
-            count: s(unknown.len().to_string()),
-            title: s(names(unknown.iter().map(|p| p.name.clone()).collect())),
-            detail: s("Unbekannt bleibt unbekannt – kein Entbehrlichkeitsnachweis"),
-            action: s("Projekte ansehen"),
-            page: 1,
-        });
+    let open =
+        |group: FindingGroup| snapshot.system.of(group).filter(|f| f.scope.is_some() && f.scope_id.is_none()).count();
+    let stores = open(FindingGroup::Store);
+    if stores > 0 && cards.len() < 3 {
+        cards.push(card(
+            "info",
+            "Neu gefunden",
+            stores,
+            "Globale Paketbestände auf diesem Rechner".into(),
+            "Erlaube das Lesen, um ihre Pakete zu erfassen".into(),
+            "Ansehen",
+            2,
+            1,
+        ));
     }
-    let suggestions = snapshot.system.suggestions();
-    if suggestions > 0 && cards.len() < 3 {
-        cards.push(AttentionCard {
-            kind: s("info"),
-            label: s("Systemfunde"),
-            count: s(suggestions.to_string()),
-            title: s("Globale Bestände und Benutzerordner"),
-            detail: s("Lesefreigabe möglich; nichts wurde gelesen"),
-            action: s("System ansehen"),
-            page: 6,
-        });
+    let personal = open(FindingGroup::AiConfig);
+    if personal > 0 && cards.len() < 3 {
+        cards.push(card(
+            "info",
+            "Neu gefunden",
+            personal,
+            "Persönliche KI-Ordner, zum Beispiel .claude".into(),
+            "Erlaube das Lesen, um Skills und MCP-Server zu erfassen".into(),
+            "Ansehen",
+            3,
+            1,
+        ));
     }
     cards.truncate(3);
     store.set_attention(model(cards));
 }
 
-fn render_coverage(store: &Store<'_>, snapshot: &Snapshot) {
-    let row = |label: &str, value: usize, color: u32, total: usize| LegendRow {
-        label: s(label),
-        value: s(value.to_string()),
-        color: rgb(color),
-        share: if total == 0 { 0.0 } else { value as f32 / total as f32 },
-    };
-    if snapshot.demo {
-        let n = snapshot.projects.len();
-        store.set_coverage_rows(model(vec![row("Beispieldaten, keine Erfassung", n, 0xc9d2dc, n)]));
-        store.set_coverage_caption(s(format!("{n} Projekte")));
-        return;
-    }
-    let complete = snapshot.scopes.iter().filter(|s| s.current()).count();
-    let partial = snapshot
-        .scopes
-        .iter()
-        .filter(|s| !s.current() && (s.status != ScopeStatus::Approved || s.latest.is_some()))
-        .count();
-    let unscanned = snapshot.scopes.iter().filter(|s| s.status == ScopeStatus::Approved && s.latest.is_none()).count();
-    let unapproved =
-        snapshot.projects.iter().filter(|p| !snapshot.scopes.iter().any(|s| s.project_id == Some(p.id))).count();
-    let none = unscanned + unapproved;
-    let total = complete + partial + none;
-    store.set_coverage_rows(model(
-        [
-            row("Vollständig", complete, 0x9ccba6, total),
-            row("Teilweise oder blockiert", partial, 0xf2c66b, total),
-            row("Ohne Freigabe oder Erfassung", none, 0xc9d2dc, total),
-        ]
-        .into_iter()
-        .filter(|r| r.share > 0.0)
-        .collect(),
-    ));
-    store.set_coverage_caption(s(format!("{total} Bereiche")));
-}
-
-/// Project filters rebuild only the project rows.
 pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
     let store = ui.global::<Store>();
-    let filter = store.get_filter();
     store.set_projects(model(
         snapshot
             .projects
             .iter()
-            .filter(|p| matches(p, filter))
             .map(|p| {
                 let (coverage, coverage_kind) = coverage_cell(snapshot, p);
                 ProjectRow {
@@ -589,15 +507,13 @@ pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
     ));
 }
 
-/// Resource tabs do not affect project search or other pages.
+/// Registered resources: scratchpads, their folders and adopted findings.
 pub fn render_resources(ui: &Dashboard, snapshot: &Snapshot) {
     let store = ui.global::<Store>();
-    let tab = store.get_resource_tab();
     store.set_resources(model(
         snapshot
             .resources
             .iter()
-            .filter(|r| tab != 1 || r.kind == ResourceKind::Scratchpad || r.parent_id.is_some())
             .map(|r| {
                 let (state, kind) = if r.expendable {
                     ("Entbehrlich markiert".to_string(), "review")
@@ -639,15 +555,34 @@ fn upstream(pkg: &PackageFinding) -> (String, &'static str) {
     (format!("{label}{stale}"), kind)
 }
 
+/// Where the package list comes from, in plain words.
+fn package_coverage(c: &PackageCoverage) -> String {
+    let mut parts = vec![format!(
+        "Aus {} vollständig erfassten Projekt{}",
+        c.complete_projects,
+        if c.complete_projects == 1 { "" } else { "en" }
+    )];
+    if c.incomplete_projects > 0 {
+        parts.push(format!("{} noch nicht vollständig erfasst", c.incomplete_projects));
+    }
+    if c.incomplete_roots > 0 {
+        parts.push(format!("{} Suchordner unvollständig", c.incomplete_roots));
+    }
+    if c.truncated {
+        parts.push("Auswertung begrenzt".into());
+    }
+    parts.join(" · ")
+}
+
 pub fn render_packages(ui: &Dashboard, report: &PackageReport, selected: Option<&str>) {
     let store = ui.global::<Store>();
     store.set_package_page_size(PACKAGE_PAGE as i32);
-    store.set_package_coverage(s(format!("{} · Nutzung außerhalb der Freigaben unbekannt", report.coverage.label())));
+    store.set_package_coverage(s(package_coverage(&report.coverage)));
     store.set_package_offset(report.offset as i32);
     store.set_package_previous(report.offset > 0);
     store.set_package_next(report.offset + report.packages.len() < report.total);
     store.set_package_page_label(s(format!(
-        "{}–{} von {} Versionen · Größe ohne Messung unbekannt",
+        "{}–{} von {} Versionen",
         if report.packages.is_empty() { 0 } else { report.offset + 1 },
         report.offset + report.packages.len(),
         report.total
@@ -954,7 +889,10 @@ pub fn scan_notice(value: &Value, snapshot: &Snapshot) -> (String, &'static str)
     let partial: Vec<String> = reports.iter().filter(|r| r["state"] == "partial").map(name).collect();
     if !partial.is_empty() {
         return (
-            format!("Teilweise erfasst: {} (Limit oder Lesefehler). Details unter Aktivität.", partial.join(", ")),
+            format!(
+                "Teilweise erfasst: {} (Limit oder Lesefehler). Details unter Einstellungen › Lesefreigaben.",
+                partial.join(", ")
+            ),
             "warn",
         );
     }
@@ -987,36 +925,6 @@ pub fn render_status(ui: &Dashboard, busy: bool, status: &str) {
     store.set_status(s(status));
 }
 
-fn render_storage(store: &Store<'_>, snapshot: &Snapshot) {
-    let known: i64 = snapshot.storage.iter().filter_map(|slice| slice.bytes).sum();
-    store.set_legend(model(
-        snapshot
-            .storage
-            .iter()
-            .zip(SLICE_COLORS)
-            .map(|(slice, color)| LegendRow {
-                label: s(&slice.label),
-                value: s(slice.bytes.map_or("—".into(), |b| format_bytes(Some(b)).replace(",0 GB", " GB"))),
-                color: rgb(color),
-                share: match slice.bytes {
-                    Some(b) if known > 0 => b as f32 / known as f32,
-                    _ => 0.0,
-                },
-            })
-            .collect(),
-    ));
-    store.set_donut_value(s(if known > 0 {
-        format!("{} erfasst", format_bytes(Some(known)).replace(",0 GB", " GB"))
-    } else {
-        "Unbekannt".into()
-    }));
-    store.set_storage_subtitle(s(if snapshot.demo {
-        "Beispielbestand · keine Messung"
-    } else {
-        "Nur gemessene, von mogumogu verwaltete Ordner. Unbekanntes bleibt offen."
-    }));
-}
-
 fn render_settings(store: &Store<'_>, snapshot: &Snapshot, settings: &Settings, now: i64) {
     store.set_monitoring(settings.monitoring_enabled);
     store.set_notifications(settings.notifications_enabled);
@@ -1047,9 +955,4 @@ fn render_settings(store: &Store<'_>, snapshot: &Snapshot, settings: &Settings, 
             .collect(),
     ));
     store.set_scratch_root(s(settings.scratch_root.clone().unwrap_or_default()));
-    store.set_cleanup_status(s(format!(
-        "Produktive Bereinigung ist bis zum unabhängigen Review (G5) gesperrt. Der Testexecutor entfernt nur \
-         verwaltete Temp-Ausgabe in registrierten Wegwerf-Testwurzeln, nach bestätigtem Plan. {} Pläne gespeichert.",
-        snapshot.plans.len()
-    )));
 }

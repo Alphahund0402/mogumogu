@@ -26,10 +26,11 @@ gelöst werden und unterdrückt keine Upstream-Warnung. Sie startet keine Deinst
 
 ## Globale Bestände und Projektkandidaten
 
-Im Dashboard: **Pakete → Globalen Bestand freigeben**, oder
-**Projekte → Suchwurzel freigeben**. Art und optionalen Ordner angeben. Die
-Freigabe ist an die Ordneridentität gebunden; anschließend startet eine Erfassung.
-Abweichende Datenorte ausdrücklich als Pfad angeben.
+Im Dashboard: **Pakete → Werkzeuge & globale Bestände → Lesen erlauben** für
+gefundene Bestände, **Ort hinzufügen …** für Python-Umgebungen und abweichende
+Orte, sowie **Projekte → Funde → Suchordner hinzufügen …** für die
+Dateinamensuche. Die Freigabe ist an die Ordneridentität gebunden; anschließend
+startet eine Erfassung.
 
 | Art | Wurzel / erfasste Metadaten | Grenze |
 |---|---|---|
@@ -43,7 +44,7 @@ Abweichende Datenorte ausdrücklich als Pfad angeben.
 Die Defaults sind Vorschläge, kein Nachweis der wirksamen Managerkonfiguration.
 Globale KI-/IDE-Konfiguration, andere Benutzerprofile, WSL und weitere Laufwerke
 werden dadurch nicht freigegeben. Die Erfassung startet keine Programme und fragt
-keine Registry ab. **Ressourcen → Erkannt** zeigt bis zu 200 geschützte Fundstellen
+keine Registry ab. **Projekte → Funde** zeigt bis zu 200 geschützte Fundstellen
 von Umgebungen, Ausgaben und Caches; einzelne Inhalte und Änderungen bleiben ungeprüft.
 
 ```powershell

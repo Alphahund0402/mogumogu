@@ -61,19 +61,15 @@ Navigation, Filter, Schaltflächen und Listenzeilen teilen zentrale Zustandsfarb
 
 | Bereich | Verhalten |
 |---|---|
-| Übersicht | „Was braucht Aufmerksamkeit?“: Hinweiskarten mit Auslöser und nächstem Schritt, Projekte, Abdeckung, Speicher; immer Demo-/Lokalstatus zeigen |
-| Projekte | Tabelle, Suche, Zustandsfilter und Detailansicht mit Herkunft, Schutz, Lesefreigabe und Abdeckung |
-| Pakete | Versionen und Quellen mit Projektbelegen, Abdeckung, Quellenstatus und Behalten-Vormerkung; Suche und Filterchips vor dem Blättern; Belegkette im Erklärpanel; Adapterfähigkeiten im zweiten Reiter |
-| KI-Konfiguration | Quellen, Scope, Client und Referenzen; Skill-/Instruktionstexte auf Anfrage schreibgeschützt, flüchtig und redigiert anzeigen |
+| Übersicht | Kennzahlen mit Sprung zur Seite; Entscheidungen auf anderen Seiten (hängendes Experiment ohne Hinweis, Abkündigungen, teilweise Erfassung, neu gefundene Orte); Prüfhinweise mit Auslöser und Beleg, letzte Änderungen und Bereinigungspläne mit Plan-Vorschau und Bestätigung per Fingerabdruck; kein „Alles löschen“; immer Demo-/Lokalstatus zeigen |
+| Projekte | Tabelle und Detailansicht mit Lesefreigabe und Abdeckung; Reiter Ressourcen (Besitzer, Typ, bekannte oder unbekannte Größe) und Funde (Namenssuche und erfasste Umgebungen/Ausgaben mit Filtern und expliziter Projektzuordnung) |
+| Pakete | Versionen und Quellen mit Projektbelegen, Abdeckung, Quellenstatus und Behalten-Vormerkung; Suche und Filterchips vor dem Blättern; Belegkette im Erklärpanel; Reiter Werkzeuge im Suchpfad und globale Bestände mit Nachweis und Freigabe je Ort |
+| KI-Konfiguration | Quellen, Scope, Client und Referenzen; Skill-/Instruktionstexte auf Anfrage schreibgeschützt, flüchtig und redigiert anzeigen; Reiter persönliche Ordner mit Freigabe je Ort |
 | Speicher | Laufwerkskapazitäten, gemessene logische Projektanteile und begrenzte navigierbare Ordnerstruktur innerhalb freigegebener Bereiche |
-| Experimente | Scratchpads mit Sessions, hängende Sessions mit Auslöser und begründeter Freigabe, Planvorschau beim Beenden |
-| Ressourcen | Besitzer, Typ, bekannte oder unbekannte Größe; Fundliste mit Filtern und expliziter Projektzuordnung; Scratchpads und Sessions |
-| System | Werkzeuge im Suchpfad, globale Bestände und persönliche KI-Konfiguration mit Nachweis; Freigabe je Ort |
-| Prüfliste | Kandidaten begründen, Plan-Vorschau und Bestätigung per Fingerabdruck; kein „Alles löschen“ |
-| Aktivität | Erfassungsabdeckung je Lesefreigabe, Ereignisse und gruppierte Änderungen |
-| Einstellungen | Überwachung mit Pause, Tray-Hinweise mit Ruhezeiten und Tageszusammenfassung, Autostart, geführter Einstieg, Netzwerkquellen, Scratchpad-Wurzel, Sicherung und Export, Datenort |
+| Experimente | Scratchpads mit Sessions und Ordnern, hängende Sessions mit Auslöser und begründeter Freigabe; Aufräumplan nur, wenn verwaltete Temp-Ausgabe als entbehrlich markiert ist |
+| Einstellungen | Überwachung mit Pause, Tray-Hinweise mit Ruhezeiten und Tageszusammenfassung, Autostart, geführter Einstieg, Netzwerkquellen, Scratchpad-Wurzel, Sicherung und Export, Datenort; Reiter Lesefreigaben mit Erfassungsabdeckung je Freigabe |
 
-Im Demomodus ist die Speicherverteilung ein festes, korrekt summiertes Beispieldiagramm. Im echten Inventar bleibt sie ohne Messung unbekannt; gemessen werden nur von mogumogu verwaltete Ordner und freigegebene Bereiche. Eine Prüfung heißt nie „sicher bereinigbar“.
+Die Projektgröße der Übersicht summiert nur gemessene Projekte und nennt die Zahl der ungemessenen; gemessen werden nur von mogumogu verwaltete Ordner und freigegebene Bereiche. Eine Prüfung heißt nie „sicher bereinigbar“.
 
 Die HTML-Vorschau erlaubt schnelle Abstimmung. Slint ist die Produktionsoberfläche. Beide verwenden dieselbe JSON-Fixture, aber kein gemeinsames Web-Laufzeitsystem.
 

@@ -1,31 +1,24 @@
 import { ListView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { Callout, StatusChip, FilterChip, RowCard, UiButton } from "../components.slint";
+import { FilterChip, RowCard } from "../components.slint";
 import { PageCard } from "page-card.slint";
+import { PlaceLine } from "system.slint";
 
 export component AiPage inherits PageCard {
-    in-out property <bool> show-profiles: false;
     title: "KI-Konfiguration";
-    description: "Skills, Instruktionen, MCP und Hooks. Inhalte werden statisch erfasst, nie gestartet oder als Anweisung befolgt.";
-    FlexboxLayout {
+    description: "Skills, Instruktionen, MCP-Server und Hooks. mogumogu liest sie als Text und führt nichts davon aus.";
+    HorizontalLayout {
         spacing: 6px; alignment: start;
-        StatusChip { label: "Projekt " + Store.ai-project-count; kind: "protected"; }
-        StatusChip { label: "Benutzer " + Store.ai-user-count; kind: "next"; }
-        profile-toggle := FilterChip { label: "Erkennungsprofile"; count: "" + Store.profiles.length; selected: root.show-profiles; activated => { root.show-profiles = !root.show-profiles; } }
-        UiButton { small: true; label: "Benutzerordner freigeben"; has-icon: true; icon: Icons.system; available: !Store.demo; activated => { Store.page = 6; } }
+        FilterChip { label: "Gefunden"; count: Store.ai-count; selected: Store.ai-tab == 0; activated => { Store.ai-tab = 0; } }
+        personal-tab := FilterChip { label: "Persönliche Ordner"; count: Store.system-ai.length; selected: Store.ai-tab == 1; activated => { Store.ai-tab = 1; } }
     }
-    Callout { text: "Erkannt ≠ verstanden, installiert oder verwendet. „Benutzer“ kann für mehrere Projekte gelten, sofern der Client die Datei liest. Skills und Instruktionen: Eintrag öffnen → Inhalt ansehen; erkennbare Geheimnisse werden ausgeblendet."; }
-    if root.show-profiles : FlexboxLayout {
-        spacing: 6px; alignment: start;
-        for chip in Store.profiles : StatusChip { label: chip.name + " · " + chip.status; kind: "neutral"; }
-    }
-    if Store.ai.length == 0 : VerticalLayout {
+    if Store.ai-tab == 0 && Store.ai.length == 0 : VerticalLayout {
         vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
         Text { text: "Noch keine KI-Dateien erfasst."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
-        Text { text: "Projekt oder Benutzerordner freigeben und erfassen. Die Erkennungsprofile zeigen unterstützte Formate."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Sie erscheinen nach der Erfassung eines Projekts oder eines persönlichen Ordners wie .claude."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
     }
-    if Store.ai.length > 0 : ListView {
+    if Store.ai-tab == 0 && Store.ai.length > 0 : ListView {
         vertical-stretch: 1;
         for row in Store.ai : RowCard {
             selection-kind: "ai";
@@ -36,8 +29,20 @@ export component AiPage inherits PageCard {
             meta: row.references > 0 ? row.references + " Verweise" : "";
             pill: row.scope;
             pill-kind: row.scope == "Benutzer" ? "next" : "protected";
-            label: row.client + ", " + row.kind + ", Scope " + row.scope;
+            label: row.client + ", " + row.kind + ", " + row.scope;
             activated => { Actions.open-ai(row.index); }
         }
+    }
+    if Store.ai-tab == 1 : Text {
+        text: "Persönliche Konfiguration gilt oft für alle Projekte. Zugangsdaten, Sitzungen und Chatverläufe werden nie gelesen.";
+        font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+    }
+    if Store.ai-tab == 1 && Store.system-ai.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; padding: 16px;
+        Text { text: Store.demo ? "Im Demomodus wird das System nicht geprüft." : "Keine bekannten persönlichen KI-Ordner gefunden."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.ai-tab == 1 && Store.system-ai.length > 0 : ListView {
+        vertical-stretch: 1;
+        for row in Store.system-ai : PlaceLine { data: row; }
     }
 }

@@ -2,19 +2,18 @@ import { ListView } from "std-widgets.slint";
 import "../assets/fonts/zen-maru-gothic/ZenMaruGothic-Regular.ttf";
 import "../assets/fonts/zen-maru-gothic/ZenMaruGothic-Bold.ttf";
 import { Theme, Icons } from "theme.slint";
-import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, AdapterRow, HintRow, ScopeRow, SessionRow, PlanRow,
-         DonutSegment, LegendRow, ProfileChip, DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow,
-         AttentionCard, SystemRow, SearchRow, ExperimentRow, FolderRow, ChainStep } from "store.slint";
+import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, SessionRow, PlanRow,
+         DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
+         ExperimentRow, FolderRow, ChainStep } from "store.slint";
 import { Icon, NavItem, UiButton, Mascot, MascotPlate, SpeechBubble, PillField, Card, StatusChip, Activatable } from "components.slint";
 import { OverviewPage } from "pages/overview.slint";
 import { StoragePage } from "pages/storage.slint";
-import { ProjectsPage, PackagesPage, AiPage, ExperimentsPage, ResourcesPage, SystemPage, ReviewPage, ActivityPage,
-         SettingsPage, GuideOverlay } from "pages/pages.slint";
+import { ProjectsPage, PackagesPage, AiPage, ExperimentsPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
 import { DialogLayer } from "dialogs.slint";
 
-export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, AdapterRow, HintRow, ScopeRow, SessionRow, PlanRow,
-         DonutSegment, LegendRow, ProfileChip, DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow,
-         AttentionCard, SystemRow, SearchRow, ExperimentRow, FolderRow, ChainStep }
+export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, SessionRow, PlanRow,
+         DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
+         ExperimentRow, FolderRow, ChainStep }
 
 component Sidebar inherits Rectangle {
     width: 188px;
@@ -27,16 +26,12 @@ component Sidebar inherits Rectangle {
             Image { source: Icons.logo; width: 28px; height: 28px; y: (parent.height - self.height) / 2; image-fit: contain; accessible-role: none; }
             Image { source: Icons.wordmark; width: 112px; height: 25px; y: (parent.height - self.height) / 2; image-fit: contain; accessible-role: image; accessible-label: "mogumogu"; }
         }
-        NavItem { label: "Übersicht"; icon: Icons.overview; selected: Store.page == 0; activated => { Store.page = 0; } }
-        NavItem { label: "Speicher"; icon: Icons.drive; selected: Store.page == 10; activated => { Store.page = 10; } }
+        NavItem { label: "Übersicht"; icon: Icons.overview; badge: Store.review-count > 0 ? Store.review-count : ""; selected: Store.page == 0; activated => { Store.page = 0; } }
         NavItem { label: "Projekte"; icon: Icons.folder; selected: Store.page == 1; activated => { Store.page = 1; } }
         NavItem { label: "Pakete"; icon: Icons.package; selected: Store.page == 2; activated => { Store.page = 2; } }
         NavItem { label: "KI-Konfiguration"; icon: Icons.spark; selected: Store.page == 3; activated => { Store.page = 3; } }
         NavItem { label: "Experimente"; icon: Icons.flask; badge: Store.stalled-count > 0 ? Store.stalled-count : ""; selected: Store.page == 4; activated => { Store.page = 4; } }
-        NavItem { label: "Ressourcen"; icon: Icons.drive; selected: Store.page == 5; activated => { Store.page = 5; } }
-        NavItem { label: "System"; icon: Icons.system; badge: Store.system-suggestions > 0 ? Store.system-suggestions : ""; badge-new: true; selected: Store.page == 6; activated => { Store.page = 6; } }
-        NavItem { label: "Prüfliste"; icon: Icons.checklist; badge: Store.review-count > 0 ? Store.review-count : ""; selected: Store.page == 7; activated => { Store.page = 7; } }
-        NavItem { label: "Aktivität"; icon: Icons.history; selected: Store.page == 8; activated => { Store.page = 8; } }
+        NavItem { label: "Speicher"; icon: Icons.drive; selected: Store.page == 5; activated => { Store.page = 5; } }
         // Mochi takes the space that is left. Fixed layout constants keep the
         // area's size independent of its absolutely placed contents.
         mochi-area := Rectangle {
@@ -53,22 +48,17 @@ component Sidebar inherits Rectangle {
                 text: Store.mascot-line;
             }
             Mascot { x: 4px; y: parent.height - parent.figure; width: parent.figure; height: parent.figure; pose: Store.mascot-pose; }
-            Text {
-                x: parent.figure + 12px; width: max(0px, parent.width - parent.figure - 12px);
-                y: parent.height - 30px; height: 26px;
-                text: Store.mascot-caption; font-size: 10.5px; color: Theme.muted; vertical-alignment: bottom; overflow: elide;
-            }
         }
         Rectangle { height: 1.5px; background: Theme.edge; }
-        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 9; activated => { Store.page = 9; } }
+        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 6; activated => { Store.page = 6; } }
         HorizontalLayout {
             height: 24px; padding-left: 10px; padding-right: 4px;
             Text { text: "v" + Store.version; font-size: 10.5px; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; }
             help := Activatable {
-                width: 92px; height: 24px; border-radius: 8px;
-                label: "Hilfe und CLI-Befehle, F1";
-                activated => { Actions.show-cli(); }
-                Text { text: "F1 Hilfe & CLI"; font-size: 10.5px; color: Theme.muted; horizontal-alignment: right; vertical-alignment: center; }
+                width: 72px; height: 24px; border-radius: 8px;
+                label: "Hilfe, Tastenkürzel und CLI, F1";
+                activated => { Actions.show-help(); }
+                Text { text: "F1 Hilfe"; font-size: 10.5px; color: Theme.muted; horizontal-alignment: right; vertical-alignment: center; }
             }
         }
     }
@@ -80,7 +70,6 @@ component Toolbar inherits Rectangle {
         padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 8px;
         UiButton { y: (parent.height - self.height) / 2; primary: true; label: "Projekt hinzufügen"; has-icon: true; icon: Icons.plus; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } }
         UiButton { y: (parent.height - self.height) / 2; label: "Jetzt erfassen"; has-icon: true; icon: Icons.scan; available: !Store.demo && !Store.busy; activated => { Actions.scan-all(); } }
-        UiButton { y: (parent.height - self.height) / 2; quiet: true; label: ""; has-icon: true; icon: Icons.refresh; available: !Store.busy; accessible-label: "Ansicht aktualisieren (F5)"; activated => { Actions.refresh(); } }
         Rectangle { horizontal-stretch: 1; }
         search := PillField {
             min-width: 160px; preferred-width: 286px; max-width: 360px; horizontal-stretch: 0;
@@ -124,7 +113,7 @@ component SearchPopup inherits Card {
         padding: 8px; spacing: 4px;
         HorizontalLayout {
             padding-left: 6px; height: Store.search-results.length == 0 ? 48px : 26px; spacing: 8px;
-            Text { text: Store.search-results.length == 0 ? "Keine Treffer. Ab zwei Zeichen wird im erfassten Inventar gesucht. Versuche einen kürzeren Begriff." : "Treffer · Enter öffnet den ersten"; font-size: 11px; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
+            Text { text: Store.search-results.length == 0 ? "Keine Treffer. Gesucht wird ab zwei Zeichen im erfassten Inventar." : "Treffer · Enter öffnet den ersten"; font-size: 11px; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
             UiButton { quiet: true; small: true; has-icon: true; icon: Icons.close; label: ""; available: true; accessible-label: "Suche schließen"; activated => { Store.search-open = false; } }
         }
         if Store.search-results.length > 0 : ListView {
@@ -135,7 +124,8 @@ component SearchPopup inherits Card {
 }
 
 // Visible while a pass runs outside the guide: progress and a safe stop.
-// Afterwards it says what the pass found until closed or timed out.
+// Afterwards it states the result of the last action the user started
+// (pass, source check, system check, storage, backup, export).
 component ScanStrip inherits Rectangle {
     property <bool> done: !Store.scan-running;
     property <bool> warn: Store.scan-notice-kind == "warn";
@@ -166,9 +156,9 @@ component StatusBar inherits Rectangle {
     HorizontalLayout {
         padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 12px;
         Rectangle { width: 8px; height: 8px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Store.busy ? Theme.chart-amber : Store.monitoring && Store.pause-text == "" ? #3e8e5e : Theme.chart-fog; }
-        Text { text: Store.monitoring-text; max-width: 160px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+        Text { text: Store.monitoring-text; max-width: 200px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
         Text { text: Store.status; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; accessible-role: text; }
-        Text { text: Store.demo ? "Demo · schreibgeschützt" : Store.updates ? "Lokal · Updatehinweise aktiviert" : "Lokal · Netzwerk aus"; max-width: 240px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+        Text { text: Store.demo ? "Demo · schreibgeschützt" : Store.updates ? "Lokal · Updatehinweise an" : "Lokal · Netzwerk aus"; max-width: 200px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
     }
 }
 
@@ -202,7 +192,7 @@ export component Dashboard inherits Window {
             if Store.modal == 0 {
                 if event.modifiers.control && (event.text == "f" || event.text == "F" || event.text == "k" || event.text == "K") { root.focus-search(); return accept; }
                 if event.text == Key.F5 { if !Store.busy { Actions.refresh(); } return accept; }
-                if event.text == Key.F1 { Actions.show-cli(); return accept; }
+                if event.text == Key.F1 { Actions.show-help(); return accept; }
                 if event.modifiers.control && (event.text == "n" || event.text == "N") && !Store.demo && !Store.busy { Actions.guide-start(); return accept; }
                 if event.modifiers.alt {
                     if event.text == "1" { Store.page = 0; return accept; }
@@ -212,9 +202,6 @@ export component Dashboard inherits Window {
                     if event.text == "5" { Store.page = 4; return accept; }
                     if event.text == "6" { Store.page = 5; return accept; }
                     if event.text == "7" { Store.page = 6; return accept; }
-                    if event.text == "8" { Store.page = 7; return accept; }
-                    if event.text == "9" { Store.page = 8; return accept; }
-                    if event.text == "0" { Store.page = 9; return accept; }
                 }
             }
             return reject;
@@ -233,12 +220,8 @@ export component Dashboard inherits Window {
                         if Store.page == 2 : PackagesPage { }
                         if Store.page == 3 : AiPage { }
                         if Store.page == 4 : ExperimentsPage { }
-                        if Store.page == 5 : ResourcesPage { }
-                        if Store.page == 6 : SystemPage { }
-                        if Store.page == 7 : ReviewPage { }
-                        if Store.page == 8 : ActivityPage { }
-                        if Store.page == 9 : SettingsPage { }
-                        if Store.page == 10 : StoragePage { }
+                        if Store.page == 5 : StoragePage { }
+                        if Store.page == 6 : SettingsPage { }
                     }
                     if Store.guide-open : GuideOverlay { width: parent.width; height: parent.height; }
                 }
@@ -273,7 +256,6 @@ export component MoguTray inherits SystemTrayIcon {
     tooltip: root.hint;
     callback show-dashboard();
     callback show-page(int);
-    callback refresh-inventory();
     callback scan-all();
     callback pause(int);
     callback resume();
@@ -285,7 +267,7 @@ export component MoguTray inherits SystemTrayIcon {
         MenuItem {
             title: root.hint-count > 0 ? root.hint-count + " Prüfhinweise ansehen" : "Keine offenen Prüfhinweise";
             enabled: root.hint-count > 0;
-            activated => { root.show-page(7); }
+            activated => { root.show-page(0); }
         }
         MenuSeparator { }
         MenuItem { title: "Dashboard öffnen"; activated => { root.show-dashboard(); } }
@@ -299,7 +281,7 @@ export component MoguTray inherits SystemTrayIcon {
             MenuSeparator { }
             MenuItem { title: root.monitoring ? "Ausschalten" : "Einschalten"; activated => { root.set-monitoring(!root.monitoring); } }
         }
-        MenuItem { title: "Einstellungen …"; activated => { root.show-page(9); } }
+        MenuItem { title: "Einstellungen …"; activated => { root.show-page(6); } }
         MenuSeparator { }
         MenuItem { title: "mogumogu beenden"; activated => { root.exit-app(); } }
     }

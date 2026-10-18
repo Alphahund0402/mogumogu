@@ -74,7 +74,13 @@ Schreibaktionen zeigen sofort den Beschäftigt-Zustand; Navigation und das
 Schließen von Dialogen bleiben möglich.
 
 `ui/pages/pages.slint` ist nur der Seitenindex. Jede Seite besitzt ihre eigene
-Datei; `page-card.slint` teilt den Rahmen. Klickbare Flächen verwenden
+Datei; `page-card.slint` teilt den Rahmen. Die sieben Seiten (Übersicht,
+Projekte, Pakete, KI-Konfiguration, Experimente, Speicher, Einstellungen) tragen
+Unterbereiche als Reiter; `Store.open(seite, reiter)` öffnet beide zusammen.
+`system.slint` liefert die Systemfunde für die Reiter in Pakete und
+KI-Konfiguration, `discoveries.slint` die Funde in Projekte. Jede Schaltfläche
+muss eine sichtbare Wirkung haben: Ergebnisse von Hintergrundaktionen erscheinen
+über `Desktop::notify` in der Ergebnisleiste, nicht nur in der Statuszeile. Klickbare Flächen verwenden
 `Activatable` für Enter, Leertaste, Fokusrahmen und Accessibility-Aktionen.
 Lange Listen verwenden `ListView`, damit nur sichtbare Zeilen aufgebaut werden.
 Neue UI-Texte müssen die tatsächliche Evidenz und Freigabestufe beschreiben.
@@ -88,8 +94,9 @@ eingeschlossen), Fluent-Steuerelemente und den Systemfensterrahmen. Daten und
 Entscheidungen bleiben lokal. Die Fonts werden über `ui/app.slint` eingebettet;
 Familie und Oberflächenwerte stehen in `ui/theme.slint`. Mochi-Assets, unverändertes
 Original und Exportweg beschreibt die [Gestaltung](../design/brand/README.md).
-`render_mascot` in `src/desktop/view.rs` wählt Pose, Sprechblase und
-Bildunterschrift aus Zustand und Ansicht; `Mascot` in `ui/components.slint`
+`render_mascot` in `src/desktop/view.rs` wählt Pose und Sprechblase aus dem
+Zustand (Erfassung, Pause, hängendes Experiment, teilweise Erfassung, leeres
+Inventar); ohne besonderen Zustand bleibt Mochi still. `Mascot` in `ui/components.slint`
 zeigt Pose 0–3 aus `assets/brand/mascots-v2.png` und 4–6 aus
 `assets/brand/mascots-v3-moods.png` mit demselben Innenrand und Maßstab. Die
 ursprünglichen Einzelzeichnungen bleiben im Archiv.
@@ -110,7 +117,7 @@ eine Layoutschleife.
 | Fenster und Platz | Start 1080 × 680, Minimum 900 × 560 logische Pixel; 188 px Navigation, 52 px Befehlsleiste, 28 px Statusleiste |
 | Arbeitsfläche | Kennzahlen nur in der Übersicht; Projekte als Hauptliste, Speicher und letzte Aktivität daneben; andere Bereiche nutzen die gesamte Inhaltshöhe |
 | Dichte und Lesbarkeit | Projektzeilen 32 px, zweizeilige Einträge 48 px, Schaltflächen 28 px; gemeinsame Maße in `ui/theme.slint`, lesbare Schrift statt kleiner skalierter Gesamtansicht |
-| Eingabe und Fokus | Strg+K/Strg+F Suche über alle Bereiche, Strg+N geführter Einstieg, F5 Ansicht, F1 Hilfe, Alt+1…9 und Alt+0 Navigation; Esc schließt Dialog, Suche oder Einstieg; Dialogschluss stellt das Tastaturziel wieder her |
+| Eingabe und Fokus | Strg+K/Strg+F Suche über alle Bereiche, Strg+N geführter Einstieg, F5 Ansicht, F1 Hilfe, Alt+1…7 Navigation; Esc schließt Dialog, Suche oder Einstieg; Dialogschluss stellt das Tastaturziel wieder her |
 | Große Bestände | Listen bleiben virtualisiert; KI-Profile scrollen horizontal, Pläne in einer eigenen begrenzten Liste, Einstellungen vertikal |
 | Verbindung und Schutz | Keine zusätzliche Netzaktivität; Modus, Unbekannt-Zustände, Lesefreigaben und Planbestätigungen bleiben sichtbar |
 

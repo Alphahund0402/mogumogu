@@ -50,7 +50,6 @@ fn later(f: impl FnOnce(&mut Desktop) + 'static) {
 enum Form {
     None,
     Scratch,
-    Scope,
     Release(i64),
     Candidate,
 }
@@ -149,12 +148,13 @@ pub fn run(config: Config, show: bool) -> Result<(), Box<dyn std::error::Error>>
         with(move |d| {
             d.show_or_report();
             if let Some(ui) = &d.dashboard {
-                ui.global::<Store>().set_page(page);
+                let store = ui.global::<Store>();
+                store.invoke_open(page, 0);
+                store.set_overview_tab(0);
             }
             d.acknowledge_hints();
         })
     });
-    tray.on_refresh_inventory(|| with(|d| d.owner.refresh()));
     tray.on_scan_all(|| with(|d| d.submit(Request::Scan { scope_id: None })));
     tray.on_pause(|minutes| with(move |d| d.pause_monitoring(minutes)));
     tray.on_resume(|| with(|d| d.pause_monitoring(0)));
@@ -377,12 +377,11 @@ impl Desktop {
         if s.demo {
             return "Demodaten · eigene Datenbank · kein Dateisystemscan · keine Netzwerkabfragen".into();
         }
-        let settings = s.settings.clone().unwrap_or_default();
-        format!(
-            "{} Lesefreigaben · Updatehinweise {} · Bereinigung nur in Wegwerf-Testwurzeln",
-            s.scopes.len(),
-            if settings.network_updates_enabled { "an" } else { "aus" }
-        )
+        match s.scopes.len() {
+            0 => "Bereit · noch keine Lesefreigabe".into(),
+            1 => "Bereit · 1 Lesefreigabe".into(),
+            n => format!("Bereit · {n} Lesefreigaben"),
+        }
     }
 
     fn set_busy(&mut self, busy: bool) {
@@ -455,8 +454,9 @@ impl Desktop {
         }
     }
 
-    /// The result stays in the strip for a while, then the strip closes.
-    fn scan_finished(&mut self, text: &str, kind: &str) {
+    /// The result of an action the user started stays in the strip for a
+    /// while, then the strip closes.
+    fn notify(&mut self, text: &str, kind: &str) {
         if let Some(ui) = &self.dashboard {
             view::render_scan_notice(ui, text, kind);
             self.notice_timer.start(TimerMode::SingleShot, Duration::from_secs(10), || {
@@ -556,13 +556,13 @@ impl Desktop {
             Request::ApproveProject { .. } | Request::ApproveSystem { .. } => {
                 self.close_modal();
                 if let Some(scope_id) = value["scope_id"].as_i64() {
-                    self.status = "Lesefreigabe erteilt – erste Erfassung startet.".into();
+                    self.status = "Lesen erlaubt – erste Erfassung startet.".into();
                     self.submit(Request::Scan { scope_id: Some(scope_id) });
                 }
             }
             Request::Scan { .. } => {
                 let (text, kind) = view::scan_notice(&value, &self.snapshot);
-                self.scan_finished(&text, kind);
+                self.notify(&text, kind);
                 self.status = text;
             }
             Request::MeasureResource { .. } | Request::MeasureScope { .. } => {
@@ -583,6 +583,8 @@ impl Desktop {
                     }
                 }
                 self.status = "Speicherübersicht aktualisiert.".into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
                 if self.dashboard.as_ref().is_some_and(|ui| ui.global::<Store>().get_storage_tab() == 1)
                     && let Some(tree) = self.folder_tree.clone()
                 {
@@ -664,15 +666,27 @@ impl Desktop {
                 }
             }
             Request::Updates => {
-                self.status = format!(
-                    "Quellenhinweise: {} geprüft, {} neuer, {} privat übersprungen, {} nicht freigegeben, {} fehlgeschlagen{}",
-                    value["checked"],
-                    value["available"],
-                    value["skipped_private"],
-                    value["not_approved"],
-                    value["failed"],
-                    if value["partial"] == true { " · begrenzter Lauf; erneut prüfen" } else { "" }
+                let count = |key: &str| value[key].as_u64().unwrap_or(0);
+                let mut text = format!(
+                    "Quellen geprüft: {} Versionen, {} mit neuerer Version",
+                    count("checked"),
+                    count("available")
                 );
+                for (key, label) in [
+                    ("not_approved", "Quelle nicht erlaubt"),
+                    ("skipped_private", "privat übersprungen"),
+                    ("failed", "fehlgeschlagen"),
+                ] {
+                    if count(key) > 0 {
+                        text.push_str(&format!(", {} {label}", count(key)));
+                    }
+                }
+                if value["partial"] == true {
+                    text.push_str(" · nicht alle geprüft, bitte erneut prüfen");
+                }
+                let kind = if count("failed") > 0 || value["partial"] == true { "warn" } else { "ok" };
+                self.notify(&text, kind);
+                self.status = text;
             }
             Request::Packages { .. } => {
                 if let Ok(report) = serde_json::from_value::<mogumogu::domain::PackageReport>(value) {
@@ -690,8 +704,11 @@ impl Desktop {
                 }
                 return;
             }
-            Request::SystemFindings { .. } => self.status = "Suchpfad und bekannte Orte erneut geprüft.".into(),
-            Request::Sessions => self.status = "Sessions erneut geprüft; Sperren bleiben, bis du entscheidest.".into(),
+            Request::SystemFindings { .. } => {
+                self.status = "Suchpfad und bekannte Orte erneut geprüft.".into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+            }
             Request::RetainPackage { retained, .. } => {
                 self.close_modal();
                 self.status = if retained {
@@ -712,9 +729,13 @@ impl Desktop {
             }
             Request::Backup { .. } => {
                 self.status = format!("Sicherung erstellt: {}", value["backup"].as_str().unwrap_or("?"));
+                let text = self.status.clone();
+                self.notify(&text, "ok");
             }
             Request::ExportTo { .. } => {
-                self.status = format!("Export geschrieben: {}", value["export"].as_str().unwrap_or("?"));
+                self.status = format!("Export gespeichert: {}", value["export"].as_str().unwrap_or("?"));
+                let text = self.status.clone();
+                self.notify(&text, "ok");
             }
             Request::SetAutostart { enabled } => {
                 self.status = if enabled {

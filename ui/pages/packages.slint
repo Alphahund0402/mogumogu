@@ -1,63 +1,8 @@
-import { ListView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { Card, Icon, UiButton, Activatable, FilterChip, PageHeader, PillField, TableHead } from "../components.slint";
+import { Card, UiButton, FilterChip, PageHeader, PillField } from "../components.slint";
 import { PackageInventory, PackagePanel } from "package-inventory.slint";
-
-component AdapterList inherits VerticalLayout {
-    property <length> manager-width: Store.window-width < 1080px ? 142px : 158px;
-    property <length> state-width: Store.window-width < 1080px ? 80px : 90px;
-    spacing: 6px;
-    if !Store.demo : FlexboxLayout {
-        spacing: 8px; alignment: start; padding-left: 4px;
-        UiButton { small: true; label: "Scoop freigeben"; activated => { Actions.approve-system("scoop"); } }
-        UiButton { small: true; label: "Chocolatey freigeben"; activated => { Actions.approve-system("chocolatey"); } }
-        UiButton { small: true; label: "Windows-Softwareliste freigeben"; activated => { Actions.approve-system("winget"); } }
-    }
-    TableHead {
-        HorizontalLayout {
-            padding-left: 12px; padding-right: 12px; spacing: 10px;
-            Text { text: "Paketmanager"; width: root.manager-width; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-            Text { text: "Formate"; horizontal-stretch: 1; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-            Text { text: "Inventar"; width: root.state-width; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-            Text { text: "Updates"; width: root.state-width; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-            Text { text: "Bereinigung"; width: 96px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-        }
-    }
-    ListView {
-        vertical-stretch: 1;
-        for adapter in Store.adapters : entry := Activatable {
-            height: Theme.detail-row-height;
-            border-radius: 10px;
-            border-color: transparent;
-            selection-kind: "adapter";
-            selection-key: adapter.id;
-            label: adapter.name + ". " + adapter.counts + ". " + adapter.formats + ". " + adapter.limits + ". Inventar " + adapter.inventory + ", Updates " + adapter.updates + ", Bereinigung " + adapter.cleanup;
-            activated => { Actions.open-adapter(adapter.id); }
-            HorizontalLayout {
-                padding-left: 12px; padding-right: 12px; spacing: 10px;
-                HorizontalLayout {
-                    width: root.manager-width; spacing: 8px;
-                    Icon { source: Icons.package; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: Theme.protected-ink; }
-                    VerticalLayout {
-                        alignment: center; spacing: 2px; horizontal-stretch: 1;
-                        Text { text: adapter.name; font-size: 12.5px; font-weight: 700; color: Theme.ink; overflow: elide; }
-                        Text { text: adapter.counts; font-size: 11px; color: Theme.muted; overflow: elide; }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center; spacing: 2px; horizontal-stretch: 1;
-                    Text { text: adapter.formats; font-size: 11.5px; color: Theme.text; overflow: elide; }
-                    Text { text: adapter.limits; font-size: 11px; color: Theme.muted; overflow: elide; }
-                }
-                Text { text: adapter.inventory; width: root.state-width; font-size: 11.5px; color: Theme.text; vertical-alignment: center; wrap: word-wrap; }
-                Text { text: adapter.updates; width: root.state-width; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; wrap: word-wrap; }
-                Text { text: adapter.cleanup; width: 96px; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; wrap: word-wrap; }
-            }
-            Rectangle { x: 12px; width: parent.width - 24px; y: parent.height - 1px; height: 1px; background: Theme.line; }
-        }
-    }
-}
+import { SystemOverview } from "system.slint";
 
 export component PackagesPage inherits VerticalLayout {
     min-width: 0px;
@@ -69,14 +14,14 @@ export component PackagesPage inherits VerticalLayout {
         PageHeader {
             horizontal-stretch: 1;
             title: "Pakete";
-            description: "Version und Quelle bleiben getrennt. Fehlende Verweise belegen keine Entbehrlichkeit.";
+            description: "Paketversionen aus deinen Projekten, globale Bestände und Werkzeuge.";
         }
-        UiButton {
+        if Store.package-tab == 0 : UiButton {
             y: (parent.height - self.height) / 2;
-            label: Store.updates ? "Quellen prüfen" : "Update-Einstellungen";
+            label: Store.updates ? "Quellen prüfen" : "Updatehinweise einschalten";
             has-icon: true; icon: Store.updates ? Icons.refresh : Icons.settings;
             available: !Store.busy && !Store.demo;
-            activated => { if Store.updates { Actions.check-updates(); } else { Store.page = 9; } }
+            activated => { if Store.updates { Actions.check-updates(); } else { Store.page = 6; } }
         }
     }
     VerticalLayout {
@@ -84,8 +29,8 @@ export component PackagesPage inherits VerticalLayout {
         vertical-stretch: 0;
         HorizontalLayout {
             spacing: 6px;
-            FilterChip { label: "Inventar"; selected: Store.package-tab == 0; activated => { Store.package-tab = 0; } }
-            FilterChip { label: "Paketmanager"; selected: Store.package-tab == 1; activated => { Store.package-tab = 1; } }
+            FilterChip { label: "Pakete"; count: Store.package-counts[0]; selected: Store.package-tab == 0; activated => { Store.package-tab = 0; } }
+            system-tab := FilterChip { label: "Werkzeuge & globale Bestände"; selected: Store.package-tab == 1; activated => { Store.package-tab = 1; } }
             Rectangle { horizontal-stretch: 1; vertical-stretch: 0; }
             if Store.package-tab == 0 && (!Store.package-panel || !root.compact) : PillField {
                 width: 220px;
@@ -96,11 +41,10 @@ export component PackagesPage inherits VerticalLayout {
                 edited => { Actions.package-query(); }
             }
         }
-        // These five bounded status filters fit the minimum window width.
-        // Flexbox reserves an extra wrapped row here despite a single line.
+        // These bounded status filters fit the minimum window width.
         if Store.package-tab == 0 && (!Store.package-panel || !root.compact) : HorizontalLayout {
             spacing: 6px; alignment: start;
-            FilterChip { label: "Alle"; count: Store.package-counts[0]; selected: Store.package-filter == 0; activated => { Store.package-filter = 0; Actions.package-query(); } }
+            FilterChip { label: "Alle"; selected: Store.package-filter == 0; activated => { Store.package-filter = 0; Actions.package-query(); } }
             FilterChip { label: "Prüfen"; count: Store.package-counts[1]; selected: Store.package-filter == 1; activated => { Store.package-filter = 1; Actions.package-query(); } }
             FilterChip { label: "Abgekündigt"; count: Store.package-counts[2]; selected: Store.package-filter == 2; activated => { Store.package-filter = 2; Actions.package-query(); } }
             FilterChip { label: "Ohne Projektbeleg"; count: Store.package-counts[3]; selected: Store.package-filter == 3; activated => { Store.package-filter = 3; Actions.package-query(); } }
@@ -134,8 +78,5 @@ export component PackagesPage inherits VerticalLayout {
             vertical-stretch: 1;
         }
     }
-    if Store.package-tab == 1 : Card {
-        vertical-stretch: 1;
-        VerticalLayout { padding: 8px; AdapterList { } }
-    }
+    if Store.package-tab == 1 : SystemOverview { vertical-stretch: 1; }
 }

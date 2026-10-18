@@ -74,11 +74,13 @@ export component DialogLayer inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         width: min(Store.modal == 3 ? 850px : 620px, parent.width - 32px);
+        // Detail sheets follow their content up to 500px, then scroll.
         height: min(Store.modal == 3 ? 620px : Store.modal == 2 ? 360px
             : Store.detail-rows.length == 0 && Store.detail-path == ""
                 ? clamp(message-measure.preferred-height + dialog-title.preferred-height
                     + dialog-footer.preferred-height + 64px, 220px, 500px)
-                : 500px, parent.height - 32px);
+                : clamp(detail-measure.preferred-height + dialog-title.preferred-height
+                    + dialog-footer.preferred-height + 64px, 220px, 500px), parent.height - 32px);
         border-width: Theme.stroke;
         border-color: Theme.ink;
         // A simple message needs no full-height detail sheet. This hidden
@@ -87,6 +89,18 @@ export component DialogLayer inherits Rectangle {
             visible: false; accessible-role: none;
             width: parent.width - 52px;
             text: Store.detail-body; font-size: 12px; wrap: word-wrap;
+        }
+        // The same for detail sheets: rows, path and body at the text width.
+        detail-measure := VerticalLayout {
+            visible: false; accessible-role: none;
+            width: parent.width - 36px;
+            spacing: 8px; padding-right: 16px; padding-bottom: 8px;
+            if Store.detail-path != "" : HorizontalLayout {
+                padding: 9px;
+                Text { text: Store.detail-path; font-family: "Consolas"; font-size: 11px; wrap: word-wrap; }
+            }
+            for row in Store.detail-rows : DetailEntry { data: row; }
+            if Store.detail-body != "" : Text { text: Store.detail-body; font-size: 12px; wrap: word-wrap; }
         }
         VerticalLayout {
             padding: 18px; spacing: 10px;

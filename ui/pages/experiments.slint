@@ -74,7 +74,7 @@ component ExperimentDetail inherits VerticalLayout {
         UiButton { small: true; label: "+7 Tage"; available: !Store.demo && !Store.busy; activated => { Actions.experiment-action("extend", Store.experiment-id); } }
         UiButton { small: true; label: "Schützen"; has-icon: true; icon: Icons.lock; available: !Store.demo && !Store.busy; activated => { Actions.experiment-action("protect", Store.experiment-id); } }
         UiButton { small: true; label: "Zum Projekt machen"; available: !Store.demo && !Store.busy; activated => { Actions.experiment-action("promote", Store.experiment-id); } }
-        UiButton { small: true; label: "Details"; available: true; activated => { Actions.open-resource(Store.experiment-id); } }
+        UiButton { small: true; label: "Alle Angaben"; available: true; activated => { Actions.open-resource(Store.experiment-id); } }
     }
     Text { text: Store.experiment-path; font-size: 11px; color: Theme.muted; overflow: elide; }
     if Store.experiment-stall != "" : MochiCallout {
@@ -86,10 +86,10 @@ component ExperimentDetail inherits VerticalLayout {
     if Store.experiment-sessions.length == 0 : HorizontalLayout {
         spacing: 8px;
         Text { text: "Noch keine Session. Verwaltete Läufe startest du über die CLI."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; }
-        UiButton { small: true; quiet: true; label: "CLI-Hilfe"; activated => { Actions.show-cli(); } }
+        UiButton { small: true; quiet: true; label: "CLI-Hilfe"; available: true; activated => { Actions.show-help(); } }
     }
     for session in Store.experiment-sessions : SessionLine { data: session; }
-    Text { text: "Experiment beenden · Planvorschau"; font-size: 12.5px; font-weight: 700; color: Theme.ink; }
+    Text { text: "Ordner"; font-size: 12.5px; font-weight: 700; color: Theme.ink; }
     VerticalLayout {
         spacing: 0px;
         TableHead {
@@ -98,18 +98,16 @@ component ExperimentDetail inherits VerticalLayout {
                 Rectangle { width: 14px; }
                 Text { text: "Ordner"; horizontal-stretch: 1; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
                 Text { text: "Größe"; width: 70px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
-                Text { text: "Beim Beenden"; width: 172px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                Text { text: "Zustand"; width: 172px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
             }
         }
         for folder in Store.experiment-folders : FolderLine { data: folder; }
     }
-    Rectangle { vertical-stretch: 1; }
-    Callout { icon: Icons.lock; text: "Bereinigung gesperrt · Ausführung nur in Wegwerf-Testwurzeln"; }
-    HorizontalLayout {
-        alignment: start;
-        UiButton { primary: true; label: "Plan entwerfen"; available: Store.experiment-plannable && !Store.demo && !Store.busy; activated => { Actions.experiment-action("plan", Store.experiment-id); } }
+    if Store.experiment-plannable : HorizontalLayout {
+        spacing: 10px;
+        UiButton { primary: true; label: "Aufräumplan anzeigen …"; available: !Store.demo && !Store.busy; activated => { Actions.experiment-action("plan", Store.experiment-id); } }
+        Text { text: "Zeigt zuerst einen Plan. Ausgeführt wird nur in Wegwerf-Testordnern."; font-size: 11px; color: Theme.muted; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
     }
-    Text { text: "Neue oder geänderte Dateien machen den Plan ungültig. Ein abgeschlossener Lauf ist keine Löschfreigabe. Keine Wiederherstellung nach einer Ausführung."; font-size: 10.5px; color: Theme.muted; wrap: word-wrap; }
 }
 
 export component ExperimentsPage inherits VerticalLayout {
@@ -122,14 +120,13 @@ export component ExperimentsPage inherits VerticalLayout {
         PageHeader {
             horizontal-stretch: 1;
             title: "Experimente";
-            description: "Scratchpads, Sessions und Planvorschauen.";
+            description: "Scratchpads und ihre verwalteten Läufe.";
         }
-        UiButton { y: (parent.height - self.height) / 2; label: "Sessions prüfen"; has-icon: true; icon: Icons.refresh; available: !Store.busy; activated => { Actions.recheck-sessions(); } }
         UiButton { y: (parent.height - self.height) / 2; primary: true; label: "Scratchpad anlegen"; has-icon: true; icon: Icons.plus; available: !Store.demo && !Store.busy; activated => { Actions.new-scratch(); } }
     }
     if Store.stalled-count > 0 : Callout {
         kind: "alert"; icon: Icons.warning;
-        text: Store.stalled-count + (Store.stalled-count == 1 ? " Session hängt." : " Sessions hängen.") + " Die Sperre bleibt, bis du entscheidest; mogumogu beendet keine Prozesse.";
+        text: Store.stalled-count + (Store.stalled-count == 1 ? " Session hängt." : " Sessions hängen.") + " Prüfe die Ergebnisse und gib die Session frei; mogumogu beendet keine Prozesse.";
     }
     GridLayout {
         spacing: Theme.gap;
@@ -145,7 +142,7 @@ export component ExperimentsPage inherits VerticalLayout {
             VerticalLayout {
                 padding: 8px; spacing: 2px;
                 if Store.experiments.length == 0 : Text {
-                    text: "Noch keine Scratchpads. Lege einen an oder übernimm einen bestehenden Ordner mit der CLI (scratch adopt).";
+                    text: "Noch keine Scratchpads. Ein Scratchpad ist ein Arbeitsordner für einen Versuch, mit Quellcode, Umgebung, Temporärem und Ergebnissen.";
                     font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
                 }
                 ListView {
@@ -162,7 +159,7 @@ export component ExperimentsPage inherits VerticalLayout {
             min-width: 0px;
             if Store.experiment-id < 0 : Text {
                 x: 16px; y: 16px; width: parent.width - 32px;
-                text: "Wähle ein Experiment, um Sessions und die Planvorschau zu sehen.";
+                text: "Wähle ein Experiment, um seine Läufe und Ordner zu sehen.";
                 font-size: 12px; color: Theme.muted; wrap: word-wrap;
             }
             if Store.experiment-id >= 0 : ScrollView {

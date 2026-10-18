@@ -169,17 +169,6 @@ impl Desktop {
             return;
         }
         match self.form {
-            Form::Scope => {
-                match mogumogu::domain::ScopeKind::parse(first.trim())
-                    .filter(|k| *k != mogumogu::domain::ScopeKind::Project)
-                {
-                    Some(kind) => self.submit(Request::ApproveSystem {
-                        kind,
-                        path: (!second.trim().is_empty()).then(|| second.trim().to_string()),
-                    }),
-                    None => self.form_error("Bereichsart nicht erkannt. Einen der genannten Bezeichner eingeben."),
-                }
-            }
             Form::Scratch => match self.selected_project() {
                 Some(project_id) => self.submit(Request::ScratchCreate {
                     project_id,
@@ -211,10 +200,37 @@ impl Desktop {
         }
     }
 
-    pub(super) fn approve_scope(&mut self, kind: &str) {
-        self.form(Form::Scope,"Lesebereich freigeben",
-            "Bereichsart: projects (Dateinamensuche), npm-global, uv-tools, python, cargo-tools oder nuget-cache. Für projects und python einen Ordner angeben; sonst kann der Standardpfad verwendet werden.",
-            [("Bereichsart","npm-global",kind.to_string()),("Ordnerpfad","C:\\dev oder leer für Standardpfad",String::new())],"Zum Lesen freigeben");
+    /// A search folder is read by file names only; the core binds the
+    /// approval to the chosen folder's identity.
+    pub(super) fn approve_search_folder(&mut self) {
+        if let Some(path) = self.pick_folder("Suchordner für mogumogu wählen") {
+            self.submit(Request::ApproveSystem { kind: mogumogu::domain::ScopeKind::ProjectSearch, path: Some(path) });
+        }
+    }
+
+    /// Stores outside their usual place, chosen by kind in plain words.
+    pub(super) fn add_store_dialog(&mut self) {
+        let dialog = Dialog::new("Ort hinzufügen")
+            .row("Python-Umgebung", "Interpreter- oder venv-Ordner mit Lib\\site-packages")
+            .row("npm global", "Ordner node_modules der global installierten Pakete")
+            .row("uv-Tools", "Ordner mit uv-Toolumgebungen, auch an älteren Orten")
+            .row("Cargo", "Cargo-Installationsordner mit .crates2.json")
+            .row("NuGet", "Paketordner, zum Beispiel %USERPROFILE%\\.nuget\\packages")
+            .action("add-store:python", "Python-Umgebung …", true)
+            .action("add-store:npm-global", "npm global …", false)
+            .action("add-store:uv-tools", "uv-Tools …", false)
+            .action("add-store:cargo-tools", "Cargo …", false)
+            .action("add-store:nuget-cache", "NuGet …", false)
+            .body("Wähle die Art und danach den Ordner. mogumogu liest dort nur Paketmetadaten und startet nichts.");
+        self.dialog(dialog);
+    }
+
+    pub(super) fn add_store(&mut self, kind: &str) {
+        self.close_modal();
+        let Some(kind) = mogumogu::domain::ScopeKind::parse(kind) else { return };
+        if let Some(path) = self.pick_folder("Ordner für mogumogu wählen") {
+            self.submit(Request::ApproveSystem { kind, path: Some(path) });
+        }
     }
 
     // ------------------------------------------------------- guided start
@@ -279,7 +295,11 @@ impl Desktop {
         let Some(path) = self.pick_folder("Projektordner für mogumogu wählen") else { return };
         if let Some(ui) = &self.dashboard {
             let store = ui.global::<Store>();
-            if store.get_guide_name().trim().is_empty() {
+            // A name that came from the previous folder follows the new one;
+            // a name the user typed stays.
+            let name = store.get_guide_name().trim().to_string();
+            let previous = store.get_guide_path().to_string();
+            if name.is_empty() || name == folder_name(&previous) {
                 store.set_guide_name(folder_name(&path).into());
             }
             store.set_guide_path(path.into());
@@ -391,19 +411,22 @@ impl Desktop {
     }
 
     /// Shows what leaves before anything is written (PROJEKTPLAN §7.3).
-    pub(super) fn export_preview(&mut self, include_paths: bool) {
+    pub(super) fn export_preview(&mut self) {
         let s = &self.snapshot;
-        let dialog = Dialog::new(if include_paths { "Export mit Pfaden" } else { "Redigierter Export" })
-            .row("Projekte", format!("{} · {}", s.projects.len(), if include_paths { "mit Namen und Pfaden" } else { "als „Projekt 1 … n“" }))
-            .row("Pakete", if include_paths { "Alle Namen, Versionen und Quellenklassen" } else { "Öffentliche Namen; private als „<privat oder unbekannt>“" })
-            .row("Weitere Angaben", "Anzahl der Ressourcen, KI-Konfigurationen und Prüfhinweise")
-            .row("Nicht enthalten", "Systembefund, Sessions, Einstellungen, Freigaben, Inhalte von Dateien")
-            .action(format!("export-confirm:{}", u8::from(include_paths)), "Ordner wählen und speichern", true)
-            .body(if include_paths {
-                "Enthält lokale Pfade und Projektnamen. Nur bewusst teilen. Eine vorhandene Datei wird nie überschrieben."
-            } else {
-                "Kein Anonymitätsversprechen: Auch Paketnamen können etwas über deine Arbeit verraten. Eine vorhandene Datei wird nie überschrieben."
-            });
+        let dialog = Dialog::new("Inventar exportieren")
+            .row(
+                "Redigiert",
+                match s.projects.len() {
+                    1 => "1 Projekt als „Projekt 1“, private Paketnamen verborgen".to_string(),
+                    n => format!("{n} Projekte als „Projekt 1 … {n}“, private Paketnamen verborgen"),
+                },
+            )
+            .row("Mit Pfaden", "Projektnamen, lokale Pfade und alle Paketnamen")
+            .row("Immer enthalten", "Anzahl der Ressourcen, KI-Dateien und Prüfhinweise")
+            .row("Nie enthalten", "Dateiinhalte, Einstellungen, Freigaben, Sessions und Systemfunde")
+            .action("export-confirm:0", "Redigiert speichern …", true)
+            .action("export-confirm:1", "Mit Pfaden speichern …", false)
+            .body("Auch Paketnamen können etwas über deine Arbeit verraten. Eine vorhandene Datei wird nie überschrieben.");
         self.dialog(dialog);
     }
 
@@ -440,7 +463,9 @@ fn guide_result(value: &Value) -> String {
         Some("complete") => {
             "Vollständig erfasst. Die Vergleichsbasis steht; Hinweise brauchen Beobachtungszeit.".into()
         }
-        Some("partial") => "Teilweise erfasst (Limit oder Lesefehler). Details unter Aktivität.".into(),
-        _ => "Erfassung beendet. Details unter Aktivität.".into(),
+        Some("partial") => {
+            "Teilweise erfasst (Limit oder Lesefehler). Details unter Einstellungen › Lesefreigaben.".into()
+        }
+        _ => "Erfassung beendet. Details unter Einstellungen › Lesefreigaben.".into(),
     }
 }

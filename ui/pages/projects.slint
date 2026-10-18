@@ -1,21 +1,46 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { FilterChip, ProjectTable, UiButton } from "../components.slint";
+import { FilterChip, ProjectTable, UiButton, RowCard } from "../components.slint";
 import { PageCard } from "page-card.slint";
 import { DiscoveryFilters, DiscoveryList } from "discoveries.slint";
 
 export component ProjectsPage inherits PageCard {
     title: "Projekte";
-    description: "Registrierte und gefundene Projekte. Lesen und Erfassen separat freigeben; Registrierung erlaubt keine Löschung.";
-    FlexboxLayout {
+    description: "Deine Projektordner, die Ressourcen darin und was die Suche in freigegebenen Ordnern gefunden hat.";
+    HorizontalLayout {
         spacing: 6px; alignment: start;
-        FilterChip { label: "Registriert"; count: Store.count-all; selected: !Store.show-candidates && Store.filter == 0; activated => { Store.show-candidates = false; Store.filter = 0; Actions.filter-projects(); } }
-        FilterChip { label: "Nutzung belegt"; count: Store.count-observed; selected: !Store.show-candidates && Store.filter == 1; activated => { Store.show-candidates = false; Store.filter = 1; Actions.filter-projects(); } }
-        FilterChip { label: "Prüfen"; count: Store.count-review; selected: !Store.show-candidates && Store.filter == 2; activated => { Store.show-candidates = false; Store.filter = 2; Actions.filter-projects(); } }
-        FilterChip { label: "Unbekannt"; count: Store.count-unknown; selected: !Store.show-candidates && Store.filter == 3; activated => { Store.show-candidates = false; Store.filter = 3; Actions.filter-projects(); } }
-        FilterChip { label: "Gefunden"; selected: Store.show-candidates; activated => { Store.show-candidates = true; } }
-        UiButton { label: "Suchwurzel freigeben"; small: true; available: !Store.demo && !Store.busy; activated => { Actions.approve-scope("projects"); } }
+        FilterChip { label: "Projekte"; count: Store.project-count; selected: Store.project-tab == 0; activated => { Store.project-tab = 0; } }
+        FilterChip { label: "Ressourcen"; count: Store.resources.length; selected: Store.project-tab == 1; activated => { Store.project-tab = 1; } }
+        findings-tab := FilterChip { label: "Funde"; count: Store.finding-count; selected: Store.project-tab == 2; activated => { Store.project-tab = 2; } }
+        Rectangle { horizontal-stretch: 1; }
+        if Store.project-tab == 2 : UiButton {
+            label: "Suchordner hinzufügen …"; small: true; has-icon: true; icon: Icons.plus;
+            available: !Store.demo && !Store.busy;
+            activated => { Actions.approve-search-folder(); }
+        }
     }
-    if !Store.show-candidates : ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
-    if Store.show-candidates : DiscoveryFilters { }
-    if Store.show-candidates : DiscoveryList { }
+    if Store.project-tab == 0 : ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
+    if Store.project-tab == 1 && Store.resources.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+        Text { text: "Noch keine Ressourcen."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Ressourcen entstehen, wenn du ein Scratchpad anlegst oder einen Fund einem Projekt zuordnest."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.project-tab == 1 && Store.resources.length > 0 : ListView {
+        vertical-stretch: 1;
+        for row in Store.resources : RowCard {
+            selection-kind: "resource";
+            selection-key: "" + row.id;
+            icon: row.kind == "Temporär" ? Icons.clock : row.kind == "Umgebung" ? Icons.package : row.kind == "Scratchpad" ? Icons.flask : Icons.folder;
+            title: row.name;
+            subtitle: row.kind + " · " + row.owner;
+            meta: row.size;
+            pill: row.state;
+            pill-kind: row.state-kind;
+            label: row.name + ", " + row.kind;
+            activated => { Actions.open-resource(row.id); }
+        }
+    }
+    if Store.project-tab == 2 : DiscoveryFilters { }
+    if Store.project-tab == 2 : DiscoveryList { }
 }

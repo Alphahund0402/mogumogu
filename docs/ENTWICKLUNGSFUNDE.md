@@ -19,9 +19,10 @@ bekannte Dateigröße/Änderungszeit. Ein Änderungsdatum ist kein Nutzungsnachw
 Ordnernamen belegen weder Testzweck noch Entbehrlichkeit. Unbekannte Inhalte
 bleiben unbekannt; Editor-Backups werden nicht als Scratchpads übernommen.
 
-Unter **Ressourcen → Fundliste** oder **Projekte → Gefunden** lassen sich Funde
-nach Experimenten, Umgebungen/Ausgaben, Testdaten/Datenbanken und fehlendem
-Projektbezug filtern. Die Ansicht ist auf 200 Funde begrenzt. Die globale Suche
+Unter **Projekte → Funde** lassen sich Funde nach Skripten/Experimenten,
+Umgebungen/Builds, Testdaten/Datenbanken und fehlendem Projektbezug filtern.
+Dieselbe Liste zeigt auch die bei der Projekterfassung erkannten Umgebungen,
+Build-Ausgaben und Caches. Die Ansicht ist auf 200 Funde begrenzt. Die globale Suche
 fragt gespeicherte Fundmetadaten unabhängig von dieser Grenze ab und öffnet auch
 Funde außerhalb der ersten Seite. Für große Bestände die Suchwurzeln sinnvoll
 aufteilen. Teilläufe ersetzen den letzten vollständigen Stand nicht.

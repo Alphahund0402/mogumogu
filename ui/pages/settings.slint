@@ -1,7 +1,7 @@
-import { ScrollView, SpinBox, CheckBox } from "std-widgets.slint";
+import { ListView, ScrollView, SpinBox, CheckBox } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { UiButton, Panel, SettingToggle, PageHeader, PillField, StatusChip, MochiCallout } from "../components.slint";
+import { UiButton, Panel, SettingToggle, PageHeader, PillField, MochiCallout, RowCard, FilterChip, Card } from "../components.slint";
 
 export component SettingsPage inherits VerticalLayout {
     min-width: 0px;
@@ -10,9 +10,43 @@ export component SettingsPage inherits VerticalLayout {
     spacing: Theme.gap;
     PageHeader {
         title: "Einstellungen";
-        description: "Überwachung, Hinweise und Daten verwalten. Schalter werden sofort gespeichert.";
+        description: "Änderungen werden sofort gespeichert.";
     }
-    ScrollView {
+    HorizontalLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Allgemein"; selected: Store.settings-tab == 0; activated => { Store.settings-tab = 0; } }
+        scopes-tab := FilterChip { label: "Lesefreigaben"; count: Store.scopes.length; selected: Store.settings-tab == 1; activated => { Store.settings-tab = 1; } }
+    }
+    if Store.settings-tab == 1 : Card {
+        vertical-stretch: 1;
+        VerticalLayout {
+            padding: 8px; spacing: 4px;
+            HorizontalLayout {
+                padding-left: 6px; padding-right: 6px; spacing: 8px;
+                Text { text: "Diese Ordner darf mogumogu lesen. Öffne einen Eintrag, um ihn zu erfassen, seine Größe zu messen oder die Freigabe zu widerrufen."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+            }
+            if Store.scopes.length == 0 : VerticalLayout {
+                vertical-stretch: 1; alignment: center; spacing: 10px; padding: 16px;
+                Text { text: "Noch keine Lesefreigaben."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; }
+                HorizontalLayout { alignment: center; UiButton { label: "Projekt hinzufügen"; primary: true; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } } }
+            }
+            if Store.scopes.length > 0 : ListView {
+                vertical-stretch: 1;
+                for scope in Store.scopes : RowCard {
+                    selection-kind: "scope";
+                    selection-key: "" + scope.id;
+                    icon: scope.watched ? Icons.monitor : Icons.shield;
+                    title: scope.name;
+                    subtitle: scope.kind + " · " + scope.coverage + (scope.last != "" ? " · " + scope.last : "") + " · " + scope.path;
+                    pill: scope.healthy ? "" : scope.status;
+                    pill-kind: "warn";
+                    label: scope.path + ", " + scope.kind + ", " + scope.status;
+                    activated => { Actions.open-scope(scope.id); }
+                }
+            }
+        }
+    }
+    if Store.settings-tab == 0 : ScrollView {
         vertical-stretch: 1;
         horizontal-scrollbar-policy: always-off;
         content-width: self.visible-width;
@@ -30,7 +64,7 @@ export component SettingsPage inherits VerticalLayout {
                     if Store.pause-text != "" : MochiCallout {
                         pose: 5; figure: 60px;
                         title: Store.pause-text;
-                        text: "Automatische Neuerfassung ruht. „Jetzt erfassen“ geht trotzdem.";
+                        text: "„Jetzt erfassen“ funktioniert trotzdem.";
                         UiButton { small: true; label: "Fortsetzen"; y: (parent.height - self.height) / 2; available: !Store.demo && !Store.busy; activated => { Actions.pause-monitoring(0); } }
                     }
                     if Store.pause-text == "" && Store.monitoring : FlexboxLayout {
@@ -43,7 +77,7 @@ export component SettingsPage inherits VerticalLayout {
                     col: root.compact ? 0 : 1;
                     row: root.compact ? 1 : 0;
                     title: "Tray-Hinweise";
-                    description: "Neue Prüfhinweise gesammelt im Tray anzeigen. Pfade und Paketnamen bleiben verborgen.";
+                    description: "Neue Prüfhinweise im Tray melden, ohne Pfade oder Paketnamen.";
                     checked: Store.notifications; enabled: !Store.demo;
                     toggled(on) => { Actions.set-notifications(on); }
                     HorizontalLayout {
@@ -96,7 +130,7 @@ export component SettingsPage inherits VerticalLayout {
                     col: 0;
                     row: 0;
                     title: "Mit Windows starten";
-                    description: "mogumogu nach der Anmeldung im Tray starten. Das Fenster bleibt geschlossen.";
+                    description: "Nach der Anmeldung im Tray starten, ohne Fenster.";
                     checked: Store.autostart; enabled: !Store.demo && Store.autostart-available;
                     toggled(on) => { Actions.set-autostart(on); }
                     if Store.autostart-note != "" : Text { text: Store.autostart-note; font-size: 11px; color: Theme.review-ink; wrap: word-wrap; }
@@ -105,13 +139,9 @@ export component SettingsPage inherits VerticalLayout {
                     col: root.compact ? 0 : 1;
                     row: root.compact ? 1 : 0;
                     title: "Geführter Einstieg";
-                    description: "Bei leerem Inventar durch Ordnerwahl, Lesefreigabe und erste Erfassung führen.";
+                    description: "Bei leerem Inventar Schritt für Schritt zum ersten Projekt führen.";
                     checked: Store.guide-enabled; enabled: !Store.demo;
                     toggled(on) => { Actions.set-guide(on); }
-                    HorizontalLayout {
-                        alignment: start;
-                        UiButton { small: true; label: "Jetzt starten"; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } }
-                    }
                 }
             }
             GridLayout {
@@ -120,7 +150,7 @@ export component SettingsPage inherits VerticalLayout {
                     col: 0;
                     row: 0;
                     title: "Updatehinweise";
-                    description: "Netzwerk nur für unten freigegebene öffentliche Quellen erlauben. Private Quellen werden nie abgefragt.";
+                    description: "Öffentliche Paketquellen nach neueren und abgekündigten Versionen fragen. Nur die hier erlaubten Quellen werden kontaktiert.";
                     checked: Store.updates; enabled: !Store.demo;
                     toggled(on) => { Actions.set-updates(on); }
                     for source in Store.sources : HorizontalLayout {
@@ -128,7 +158,7 @@ export component SettingsPage inherits VerticalLayout {
                         Text { text: source.host; min-width: 0px; overflow: elide; font-size: 11.5px; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
                         UiButton {
                             small: true;
-                            label: source.enabled ? "Freigegeben" : "Freigeben";
+                            label: source.enabled ? "Erlaubt" : "Erlauben";
                             selected: source.enabled;
                             checkable: true;
                             has-icon: source.enabled;
@@ -142,47 +172,23 @@ export component SettingsPage inherits VerticalLayout {
                     col: root.compact ? 0 : 1;
                     row: root.compact ? 1 : 0;
                     title: "Ordner für Scratchpads";
-                    Text { text: "Neue Scratchpads mit Quellcode, Umgebung, temporären Daten und Ergebnissen hier anlegen."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
-                    root-field := PillField { text: Store.scratch-root; icon: Icons.folder; placeholder: "C:\\dev\\scratch"; label: "Scratchpad-Wurzel"; enabled: !Store.demo && Store.modal == 0 && !Store.busy; }
+                    Text { text: "Hier legt mogumogu neue Scratchpads an."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                    root-field := PillField { text: Store.scratch-root; icon: Icons.folder; placeholder: "C:\\dev\\scratch"; label: "Ordner für Scratchpads"; enabled: !Store.demo && Store.modal == 0 && !Store.busy; }
                     FlexboxLayout {
                         spacing: 8px; alignment: start;
                         UiButton { small: true; label: "Durchsuchen …"; available: !Store.demo && !Store.busy; activated => { Actions.browse-scratch-root(); } }
-                        UiButton { small: true; primary: true; label: "Speichern"; available: !Store.demo && !Store.busy; activated => { Actions.save-scratch-root(root-field.text); } }
+                        UiButton { small: true; primary: true; label: "Speichern"; available: !Store.demo && !Store.busy && root-field.text != Store.scratch-root; activated => { Actions.save-scratch-root(root-field.text); } }
                     }
-                }
-            }
-            GridLayout {
-                spacing: Theme.gap;
-                Panel {
-                    col: 0;
-                    row: 0;
-                    title: "Daten sichern und teilen";
-                    Text { text: "Sicherung für dich; Export zum Teilen. Der redigierte Export verbirgt Pfade, Projektnamen und private Paketnamen."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
-                    FlexboxLayout {
-                        spacing: 8px; alignment: start;
-                        UiButton { small: true; label: "Sicherung erstellen …"; available: !Store.demo && !Store.busy; activated => { Actions.backup-now(); } }
-                        UiButton { small: true; label: "Redigiert exportieren …"; available: !Store.busy; activated => { Actions.export-now(false); } }
-                        UiButton { small: true; label: "Mit Pfaden exportieren …"; available: !Store.busy; activated => { Actions.export-now(true); } }
-                    }
-                }
-                Panel {
-                    col: root.compact ? 0 : 1;
-                    row: root.compact ? 1 : 0;
-                    title: "Datenort und Modus";
-                    Text { text: Store.demo ? "Demo · eigene Datenbank, schreibgeschützt" : "Lokales Inventar"; font-size: 11.5px; color: Theme.ink; wrap: word-wrap; }
-                    Text { text: Store.data-path; font-size: 10.5px; color: Theme.muted; wrap: word-wrap; }
-                    Text { text: "SQLite " + Store.sqlite-version + " · Fenster schließen beendet die App nicht."; font-size: 10.5px; color: Theme.muted; wrap: word-wrap; }
                 }
             }
             Panel {
-                title: "Bereinigung";
-                chip: "Gesperrt"; chip-kind: "locked";
-                Text { text: Store.cleanup-status; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
-            }
-            HorizontalLayout {
-                spacing: 12px; alignment: start;
-                UiButton { label: "In den Tray wechseln"; available: true; activated => { Actions.hide-dashboard(); } }
-                Text { text: "Strg+K Suche · Strg+N Projekt · F5 Aktualisieren · Alt+1…9, Alt+0 Bereiche · Esc schließen"; font-size: 11px; color: Theme.muted; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
+                title: "Daten";
+                Text { text: (Store.demo ? "Demo-Datenbank, schreibgeschützt: " : "Lokale Datenbank: ") + Store.data-path; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                FlexboxLayout {
+                    spacing: 8px; alignment: start;
+                    UiButton { small: true; label: "Sicherung erstellen …"; available: !Store.demo && !Store.busy; activated => { Actions.backup-now(); } }
+                    UiButton { small: true; label: "Exportieren …"; available: !Store.busy; activated => { Actions.export-now(); } }
+                }
             }
         }
     }

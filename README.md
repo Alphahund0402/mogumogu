@@ -21,13 +21,13 @@ Die Basis des [Implementierungsplans](docs/IMPLEMENTIERUNGSPLAN.md) ist innerhal
 
 | Fähigkeit | Umfang |
 |---|---|
-| Tray und Dashboard | Kompaktes Windows-Fenster mit elf Ansichten, Speicherübersicht für Laufwerke und Projekte, navigierbarer Ordnerstruktur, geführtem Einstieg, globaler Suche und Tastaturnavigation; Tray mit Pause, Hinweisen und Ruhezeiten; Lokalmodus als Standard, Demo separat |
+| Tray und Dashboard | Kompaktes Windows-Fenster mit sieben Ansichten (Übersicht mit Prüfhinweisen, Projekte, Pakete, KI-Konfiguration, Experimente, Speicher, Einstellungen), Speicherübersicht für Laufwerke und Projekte, navigierbarer Ordnerstruktur, geführtem Einstieg, globaler Suche und Tastaturnavigation; Tray mit Pause, Hinweisen und Ruhezeiten; Lokalmodus als Standard, Demo separat |
 | Lesefreigaben | Pro Ordner, an die Ordneridentität gebunden; Junctions, Symlinks und Cloud-Platzhalter werden nie verfolgt |
 | Inventar | npm, pnpm, pip, uv, Cargo, NuGet statisch je Projekt; Scoop, Chocolatey, Windows-Softwareliste systemweit; deklariert/aufgelöst/installiert getrennt |
 | KI-Konfiguration | Projektdateien für Agent Skills, Codex, Claude Code, Copilot/VS Code, Cursor, Gemini, Windsurf, Cline, Roo, OpenCode, Continue, Aider sowie persönliche Ordner bekannter Clients nach eigener Freigabe – als Daten, nie ausgeführt |
 | Generationen | Vergleichsbasis ohne Meldungsflut, gruppierte Änderungen, keine falschen Entfernungen nach Teilläufen |
-| Scratchpads und Sessions | Anlegen, Registrieren/Übernehmen und automatische Kandidatensuche in freigegebenen Bereichen; Fundliste für Skripte, Notebooks, Umgebungen, Ausgaben, Testdaten und Datenbanken; explizite Zuordnung mit Zweck und Schutz; verwaltete Läufe in Job-Objekten |
-| Prüfliste und Bereinigung | Hinweise mit Evidenz, Plan per Fingerabdruck, journalisierte Ausführung, Abgleich nach Absturz |
+| Scratchpads und Sessions | Anlegen, Registrieren/Übernehmen und automatische Kandidatensuche in freigegebenen Bereichen; Funde für Skripte, Notebooks, Umgebungen, Ausgaben, Testdaten und Datenbanken; explizite Zuordnung mit Zweck und Schutz; verwaltete Läufe in Job-Objekten |
+| Prüfhinweise und Bereinigung | Hinweise mit Evidenz, Plan per Fingerabdruck, journalisierte Ausführung, Abgleich nach Absturz |
 | Paketbelege | Version und Quelle getrennt; Projekt-Lockbelege, mögliche Abhängigkeits-/Befehls-/MCP-Verweise, Abdeckung, Behalten-Vormerkung |
 | Systembefund und globale Bestände | Werkzeuge im Suchpfad mit Nachweis (Pfad, Shim, App-Alias), bekannte Orte globaler Bestände; npm, uv-Tools, Cargo und NuGet nach eigener Ordnerfreigabe erfassbar; Entwicklungssuche liest nur Namen und Metadaten |
 | Speicher und Inhaltsansicht | Laufwerkskapazität, belegter/freier Speicher und gemessene logische Projektanteile; Ordnerstruktur auf Anfrage in freigegebenen Bereichen; Skill-/Instruktionstexte schreibgeschützt, begrenzt und mit Redaktion erkannter sensibler Werte, ohne Inhaltspersistenz |

@@ -15,10 +15,33 @@ mod desktop {
     #[path = "../../../src/desktop/view.rs"]
     #[allow(dead_code)]
     pub mod view;
+    #[path = "../../../src/desktop/disk.rs"]
+    #[allow(dead_code)]
+    pub mod disk;
+    #[path = "../../../src/desktop/dialogs.rs"]
+    #[allow(dead_code)]
+    pub mod dialogs;
+
+    /// The drive view shares `Desktop` with the app; rendering never submits.
+    pub struct Owner;
+    impl Owner {
+        pub fn submit(&self, _: mogumogu::service::Request) -> bool {
+            false
+        }
+    }
+    pub struct Desktop {
+        pub folder_pending: Option<(i64, String)>,
+        pub owner: Owner,
+        pub status: String,
+        pub dashboard: Option<ui::Dashboard>,
+    }
+    impl Desktop {
+        pub fn render_status(&self) {}
+    }
 }
 
 use desktop::ui::*;
-use desktop::view;
+use desktop::{dialogs, view};
 use mogumogu::clock::{Clock, DAY, HOUR, MINUTE, SystemClock};
 use mogumogu::domain::*;
 use mogumogu::service::ScanProgress;
@@ -195,6 +218,9 @@ fn ai(client: &str, kind: &str, label: &str, path: &str, scope: &str) -> AiEntry
         kind: kind.into(),
         scope: scope.into(),
         references: Vec::new(),
+        scope_id: None,
+        rel_path: String::new(),
+        viewable: true,
     }
 }
 
@@ -369,10 +395,131 @@ fn fixture(now: i64) -> Snapshot {
         packages: report,
         discoveries: Vec::new(),
         artifacts: Vec::new(),
+        disks: StorageOverview::default(),
         system,
         last_scan_at: Some(now - 25 * MINUTE),
         autostart: Some(Autostart { enabled: false, current: false }),
     }
+}
+
+fn enrich(s: &mut Snapshot, now: i64) {
+    let gb = 1_000_000_000u64;
+    s.disks = StorageOverview {
+        checked_at: Some(now - 5 * MINUTE),
+        drives: vec![
+            DriveUsage {
+                root: "C:\\".into(),
+                label: "System".into(),
+                kind: "Lokales Laufwerk".into(),
+                total_bytes: Some(512 * gb),
+                free_bytes: Some(162 * gb),
+                used_bytes: Some(350 * gb),
+                project_bytes: Some(38 * gb),
+                status: "Metadaten vom Betriebssystem".into(),
+            },
+            DriveUsage {
+                root: "D:\\".into(),
+                label: "Daten".into(),
+                kind: "Lokales Laufwerk".into(),
+                total_bytes: Some(2000 * gb),
+                free_bytes: Some(1180 * gb),
+                used_bytes: Some(820 * gb),
+                project_bytes: Some(14 * gb),
+                status: "Metadaten vom Betriebssystem".into(),
+            },
+        ],
+        projects: s
+            .projects
+            .iter()
+            .map(|p| ProjectStorage {
+                project_id: p.id,
+                name: p.name.clone(),
+                path: p.path.clone(),
+                drive: p.path[..3].to_string(),
+                bytes: p.bytes.map(|b| b as u64),
+                share: p.bytes.map(|b| b as f64 / 5.12e9),
+                scope_id: Some(p.id),
+                included: true,
+                note: String::new(),
+            })
+            .collect(),
+        scopes: s
+            .scopes
+            .iter()
+            .map(|sc| StorageScope {
+                scope_id: sc.id,
+                path: sc.path.clone(),
+                label: sc.path.rsplit('\\').next().unwrap_or("").into(),
+                project_id: sc.project_id,
+                kind: sc.kind,
+            })
+            .collect(),
+        note: "Projektgrößen sind logische Dateigrößen.".into(),
+    };
+    let cand = |rel: &str, name: &str, kind: DiscoveryKind, project: &str, registered: bool| ProjectCandidate {
+        scope_id: 8,
+        rel_path: rel.into(),
+        evidence: "Dateiname".into(),
+        current: true,
+        registered,
+        name: name.into(),
+        kind,
+        is_dir: true,
+        bytes: None,
+        modified_at: Some(now - 20 * DAY),
+        project_id: None,
+        project: project.into(),
+        project_rel_path: None,
+        resource_id: None,
+    };
+    s.discoveries = vec![
+        cand("old/api-v1", "api-v1", DiscoveryKind::Project, "", false),
+        cand("ml/notebooks/eda.ipynb", "eda.ipynb", DiscoveryKind::Notebook, "ml-experiments", false),
+        cand("ml/.venv", ".venv", DiscoveryKind::Environment, "ml-experiments", false),
+        cand("web/testdata", "testdata", DiscoveryKind::TestData, "website", false),
+    ];
+    s.artifacts = vec![
+        ArtifactFinding {
+            scope_id: 1,
+            name: "node_modules".into(),
+            rel_path: "node_modules".into(),
+            category: ItemCategory::Environment,
+            project: "my-app".into(),
+            detail: "npm-Installation".into(),
+            current: true,
+        },
+        ArtifactFinding {
+            scope_id: 4,
+            name: "target".into(),
+            rel_path: "target".into(),
+            category: ItemCategory::Output,
+            project: "tools".into(),
+            detail: "Cargo-Build".into(),
+            current: true,
+        },
+    ];
+    s.scopes.push(scope(
+        8,
+        None,
+        ScopeKind::ProjectSearch,
+        r"C:\dev",
+        generation(19, GenerationState::Complete, now - 25 * MINUTE, 40, None),
+        None,
+    ));
+}
+
+fn show_dialog(ui: &Dashboard, d: dialogs::Dialog) {
+    let store = ui.global::<Store>();
+    store.set_detail_title(d.title.into());
+    store.set_detail_path(d.path.into());
+    store.set_detail_body(d.body.into());
+    store.set_detail_rows(rows_model(
+        d.rows.into_iter().map(|(l, v)| DetailRow { label: l.into(), value: v.into() }).collect(),
+    ));
+    store.set_detail_actions(rows_model(
+        d.actions.into_iter().map(|(id, l, p)| DetailAction { id: id.into(), label: l.into(), primary: p }).collect(),
+    ));
+    store.set_modal(1);
 }
 
 fn rusqlite_version() -> String {
@@ -410,17 +557,39 @@ fn main() {
     let ui = Dashboard::new().unwrap();
     ui.show().unwrap();
     let now = SystemClock.now();
-    let snapshot = fixture(now);
+    let mut snapshot = fixture(now);
+    enrich(&mut snapshot, now);
     let store = ui.global::<Store>();
     let state = |experiment| view::ViewState { package_key: None, experiment, scanning: false };
 
-    let pages = ["uebersicht", "projekte", "pakete", "ki", "experimente", "ressourcen", "system", "pruefliste", "aktivitaet", "einstellungen"];
+    let pages = ["uebersicht", "projekte", "pakete", "ki", "experimente", "speicher", "einstellungen"];
     for (page, name) in pages.iter().enumerate() {
         store.set_page(page as i32);
         view::render_snapshot(&ui, &snapshot, r"C:\Users\x\AppData\Local\mogumogu\inventory.sqlite3", &state(Some(20)));
-        view::render_status(&ui, false, "5 Lesefreigaben · Updatehinweise an · Bereinigung nur in Wegwerf-Testwurzeln");
+        view::render_status(&ui, false, "Bereit · 8 Lesefreigaben");
         renderer.shot(&format!("{page:02}-{name}"), 1080, 680, 1.0);
     }
+
+    // Tabs that replaced separate pages.
+    for (page, tab, name) in [
+        (1, 1, "projekte-ressourcen"),
+        (1, 2, "projekte-funde"),
+        (2, 1, "pakete-werkzeuge"),
+        (3, 1, "ki-persoenlich"),
+        (6, 1, "einstellungen-freigaben"),
+    ] {
+        store.invoke_open(page, tab);
+        renderer.shot(&format!("0{page}-{name}"), 1080, 680, 1.0);
+    }
+    store.invoke_open(0, 0);
+    store.set_overview_tab(1);
+    renderer.shot("00-uebersicht-aenderungen", 1080, 680, 1.0);
+    store.set_overview_tab(0);
+    show_dialog(&ui, dialogs::project(&snapshot, &snapshot.projects[0]));
+    renderer.shot("16-projekt-dialog", 1080, 680, 1.0);
+    show_dialog(&ui, dialogs::message("Hilfe", dialogs::HELP));
+    renderer.shot("17-hilfe", 1080, 680, 1.0);
+    store.set_modal(0);
 
     // Package explanation next to the list.
     store.set_page(2);
@@ -467,7 +636,7 @@ fn main() {
     if let Some(settings) = paused.settings.as_mut() {
         settings.monitoring_paused_until = Some(now + 50 * MINUTE);
     }
-    store.set_page(9);
+    store.set_page(6);
     view::render_snapshot(&ui, &paused, "", &state(Some(20)));
     renderer.shot("14-pausiert", 1080, 680, 1.0);
 
@@ -500,4 +669,8 @@ fn main() {
     store.set_page(0);
     renderer.shot("32-uebersicht-150", 1080, 680, 1.5);
     println!("Native renders written; synthetic data only.");
+}
+
+fn rows_model<T: Clone + 'static>(items: Vec<T>) -> slint::ModelRc<T> {
+    Rc::new(slint::VecModel::from(items)).into()
 }

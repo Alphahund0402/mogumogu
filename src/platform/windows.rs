@@ -1123,14 +1123,12 @@ pub fn pick_folder(title: &str) -> io::Result<Option<String>> {
     use windows_sys::Win32::UI::Shell::{
         BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW, SHBrowseForFolderW, SHGetPathFromIDListW,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     // SAFETY: plain COM initialisation of the calling UI thread; a positive
     // result (S_OK or S_FALSE) is balanced by CoUninitialize below.
     let initialized = unsafe { CoInitializeEx(ptr::null(), COINIT_APARTMENTTHREADED as u32) } >= 0;
     let title = wide(OsStr::new(title));
     let mut display = [0_u16; 260];
-    // SAFETY: no arguments; returns null when no window has the focus.
-    let owner = unsafe { GetForegroundWindow() };
+    let owner = own_window();
     let info = BROWSEINFOW {
         hwndOwner: owner,
         pidlRoot: ptr::null_mut(),
@@ -1178,6 +1176,37 @@ pub fn local_utc_offset_seconds() -> i64 {
         _ => info.Bias,
     };
     -i64::from(bias) * 60
+}
+
+/// The calling UI thread's visible captioned window (the dashboard). A modal
+/// dialog must never belong to another application's foreground window: it
+/// would disable that window, or fail when the window is not this thread's,
+/// which happens when the action comes from a shortcut, the tray or
+/// assistive technology while mogumogu is not in front.
+fn own_window() -> windows_sys::Win32::Foundation::HWND {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumThreadWindows, GWL_STYLE, GetWindowLongW, IsWindowVisible, WS_CAPTION,
+    };
+    unsafe extern "system" fn first_dashboard(hwnd: HWND, found: LPARAM) -> windows_sys::core::BOOL {
+        // SAFETY: `hwnd` comes from the enumeration and is a live window.
+        let visible = unsafe { IsWindowVisible(hwnd) } != 0;
+        // SAFETY: as above; reading the style has no side effects.
+        let style = unsafe { GetWindowLongW(hwnd, GWL_STYLE) } as u32;
+        if visible && style & WS_CAPTION == WS_CAPTION {
+            // SAFETY: `found` is the address of the HWND in `own_window`,
+            // alive for the whole synchronous enumeration.
+            unsafe { *(found as *mut HWND) = hwnd };
+            return 0;
+        }
+        1
+    }
+    let mut found: HWND = ptr::null_mut();
+    // SAFETY: the callback only writes `found`, which outlives this
+    // synchronous call on the current thread.
+    unsafe { EnumThreadWindows(GetCurrentThreadId(), Some(first_dashboard), &mut found as *mut HWND as LPARAM) };
+    found
 }
 
 /// Modal error box for GUI builds without a console.
