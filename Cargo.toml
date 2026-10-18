@@ -25,18 +25,20 @@ path = "src/bin/cli/main.rs"
 [features]
 default = ["desktop", "network"]
 # Native Slint dashboard and tray. Core tests run without it.
-desktop = ["dep:slint", "dep:slint-build"]
+desktop = ["dep:slint", "dep:slint-build", "dep:embed-resource"]
 # Opt-in update hints. Compiled in, but every request still needs a local,
 # per-source approval at runtime. Without this feature no HTTP client exists.
 network = ["dep:ureq"]
 
 [dependencies]
 notify = { version = "8.2", default-features = false }
+pep440_rs = "0.7.3"
 quick-xml = "0.41"
 regex = "1"
 rusqlite = { version = "=0.40.2", features = ["bundled", "backup"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+semver = "1"
 sha2 = "0.10"
 slint = { version = "=1.18.1", optional = true, default-features = false, features = ["std", "backend-winit", "renderer-software", "system-tray", "accessibility", "compat-1-18"] }
 toml = "0.9"
@@ -51,6 +53,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
+    "Win32_System_Com",
     "Win32_System_IO",
     "Win32_System_JobObjects",
     "Win32_System_Memory",
@@ -60,11 +63,17 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",
     "Win32_System_Time",
+    "Win32_System_WindowsProgramming",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
     "Win32_UI_WindowsAndMessaging",
 ] }
 
 [build-dependencies]
 slint-build = { version = "=1.18.1", optional = true }
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = { version = "=3.0.11", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

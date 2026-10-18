@@ -6,41 +6,44 @@ import { PageCard } from "page-card.slint";
 
 export component ReviewPage inherits PageCard {
     title: "Prüfliste";
-    description: "Eine Prüfliste ist kein Löschplan. Hinweise nennen Auslöser, Beleg, Besitzer und Unsicherheit; Schutz gewinnt immer.";
-    Callout { warn: true; icon: Icons.shield; text: "Keine Nutzung beobachtet ≠ sicher entbehrlich. Geschützte Quellen und unklare Ergebnisse bleiben erhalten. Bereinigt wird nur verwaltete Temp-Ausgabe nach bestätigtem Plan – vor dem unabhängigen Review (G5) ausschließlich in Wegwerf-Testwurzeln."; }
-    if Store.hints.length == 0 : Text { text: "Keine Prüfhinweise. Unbekannte Nutzung wird nicht automatisch als entbehrlich eingestuft."; font-size: 12px; color: Theme.muted; }
-    ListView {
+    description: "Hinweise mit Auslösern und Belegen prüfen. Schutz hat Vorrang; ein Hinweis ist kein Löschplan.";
+    Callout { warn: true; icon: Icons.shield; text: "Unbeobachtete Nutzung ≠ entbehrlich. Produktive Bereinigung ist gesperrt. Bis zur unabhängigen Freigabe (G5): nur verwaltete Temp-Ausgabe in Wegwerf-Testwurzeln, mit bestätigtem Plan."; }
+    if Store.hints.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+        Text { text: "Keine offenen Prüfhinweise."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Unbekannte Nutzung wird nicht als entbehrlich eingestuft."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.hints.length > 0 : ListView {
         vertical-stretch: 1;
-        for hint in Store.hints : Rectangle {
-            height: 68px;
-            RowCard {
-                y: 3px; height: parent.height - 6px;
-                selection-kind: "hint";
-                selection-key: "" + hint.id + "|" + hint.kind;
-                icon: hint.kind == "Prüftermin erreicht" ? Icons.clock : hint.kind == "Möglicherweise verwaist" ? Icons.folder : Icons.package;
-                title: hint.name + " · " + hint.kind;
-                subtitle: hint.trigger != "" ? hint.trigger + " " + hint.evidence : hint.evidence;
-                meta: hint.size;
-                pill: hint.protected ? "Geschützt" : hint.plannable ? "Planbar" : "Prüfen";
-                pill-kind: hint.protected ? "protected" : "review";
-                label: hint.name;
-                activated => { Actions.open-hint(hint.id); }
-            }
+        for hint in Store.hints : RowCard {
+            selection-kind: "hint";
+            selection-key: "" + hint.id + "|" + hint.kind;
+            icon: hint.stalled ? Icons.warning : hint.kind == "Prüftermin erreicht" ? Icons.clock : hint.kind == "Möglicherweise verwaist" ? Icons.folder : Icons.package;
+            title: hint.name + " · " + hint.kind;
+            subtitle: hint.trigger != "" ? hint.trigger + (hint.evidence != "" ? " · " + hint.evidence : "") : hint.evidence;
+            meta: hint.size;
+            pill: hint.stalled ? "Hängt" : hint.protected ? "Geschützt" : hint.plannable ? "Planbar" : "Prüfen";
+            pill-kind: hint.stalled ? "alert" : hint.protected ? "protected" : "review";
+            label: hint.name;
+            activated => { if hint.stalled { Store.page = 4; Actions.select-experiment(hint.id); } else { Actions.open-hint(hint.id); } }
         }
     }
     if Store.plans.length > 0 : VerticalLayout {
-        spacing: 6px;
-        Text { text: "Pläne"; font-size: 13px; font-weight: 700; color: Theme.ink; }
-        for plan in Store.plans : RowCard {
-            selection-kind: "plan";
-            selection-key: "" + plan.id;
-            icon: Icons.check;
-            title: "Plan " + plan.id + " · " + plan.summary;
-            subtitle: "Fingerabdruck " + plan.fingerprint + " · " + plan.created;
-            pill: plan.state;
-            pill-kind: "protected";
-            label: "Plan " + plan.id;
-            activated => { Actions.open-plan(plan.id); }
+        spacing: 8px;
+        max-height: 150px;
+        Text { text: "Bereinigungspläne · " + Store.plans.length; font-size: 13px; font-weight: 700; color: Theme.ink; }
+        ListView {
+            for plan in Store.plans : RowCard {
+                selection-kind: "plan";
+                selection-key: "" + plan.id;
+                icon: Icons.check;
+                title: "Plan " + plan.id + " · " + plan.summary;
+                subtitle: plan.created + " · Fingerabdruck " + plan.fingerprint;
+                pill: plan.state;
+                pill-kind: "protected";
+                label: "Plan " + plan.id;
+                activated => { Actions.open-plan(plan.id); }
+            }
         }
     }
 }

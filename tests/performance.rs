@@ -38,7 +38,8 @@ fn lockfile(project: usize) -> String {
 fn reference_inventory_stays_bounded() {
     let temp = tempfile::tempdir().unwrap();
     let config = Config::new(Some(temp.path().join("data")), false).unwrap();
-    let mut core = Core::open_with(config, Arc::new(FixedClock::new(1_800_000_000)), Box::new(NoNetwork)).unwrap();
+    let clock = Arc::new(FixedClock::new(1_800_000_000));
+    let mut core = Core::open_with(config, clock.clone(), Box::new(NoNetwork)).unwrap();
     let mut scopes = Vec::new();
     for p in 0..PROJECTS {
         let dir = temp.path().join(format!("p{p}"));
@@ -82,6 +83,42 @@ fn reference_inventory_stays_bounded() {
     }
     samples.sort_unstable();
     println!("Snapshot warm (30 Samples): Median {:?} · p95 {:?}", samples[15], samples[28]);
+
+    // Real refreshes happen at different seconds. Without data changes the
+    // package page must stay cached until a source check turns stale.
+    let mut samples = Vec::with_capacity(30);
+    for _ in 0..30 {
+        clock.advance(1);
+        let started = Instant::now();
+        std::hint::black_box(core.snapshot().unwrap());
+        samples.push(started.elapsed());
+    }
+    samples.sort_unstable();
+    println!("Snapshot mit laufender Uhr (30 Samples): Median {:?} · p95 {:?}", samples[15], samples[28]);
+
+    // What the owner computes after changes while no dashboard is open.
+    let hints = core.snapshot().unwrap().review_count();
+    let mut samples = Vec::with_capacity(30);
+    for _ in 0..30 {
+        let started = Instant::now();
+        let summary = core.tray_summary().unwrap();
+        assert_eq!(summary.review_count, hints, "tray and dashboard count the same hints");
+        std::hint::black_box(summary);
+        samples.push(started.elapsed());
+    }
+    samples.sort_unstable();
+    println!("Tray-Zusammenfassung (30 Samples): Median {:?} · p95 {:?}", samples[15], samples[28]);
+
+    let mut samples = Vec::with_capacity(30);
+    for _ in 0..30 {
+        let started = Instant::now();
+        let status = core.status().unwrap();
+        assert_eq!(status.projects, PROJECTS);
+        std::hint::black_box(status);
+        samples.push(started.elapsed());
+    }
+    samples.sort_unstable();
+    println!("Status (30 Samples): Median {:?} · p95 {:?}", samples[15], samples[28]);
 
     let database = std::fs::metadata(temp.path().join("data").join("inventory.sqlite3")).unwrap().len();
     println!(

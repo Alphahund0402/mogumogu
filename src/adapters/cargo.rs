@@ -1,6 +1,6 @@
 //! Cargo: Cargo.toml (declared, workspace), Cargo.lock (resolved with
 //! explicit sources) and `target/` as build output. Nothing is resolved,
-//! built or fetched; `cargo metadata` would run build scripts of path deps.
+//! built or fetched; no Cargo command is invoked.
 use super::*;
 use crate::domain::{InstallState, InventoryItem, ItemCategory, SourceClass};
 use crate::parsers::toml_table;
@@ -16,7 +16,7 @@ static DESCRIPTOR: Descriptor = Descriptor {
     updates: Support::Experimental,
     cleanup: Support::Unsupported,
     formats: &["Cargo.toml (Abhängigkeitstabellen, Workspace)", "Cargo.lock v3/v4"],
-    limits: "Features und Zielplattformen nur als Deklaration; ~/.cargo und Registry-Caches werden nicht gelesen.",
+    limits: "Features und Ziele nur als Deklaration; Cargo-Tools mit eigener Freigabe; keine Registry-Quellen oder Credentials gelesen.",
 };
 
 impl Adapter for Cargo {
@@ -48,14 +48,14 @@ impl Adapter for Cargo {
     }
 }
 
-fn crates_io(source: &str) -> (SourceClass, Option<String>) {
+pub(super) fn crates_io(source: &str) -> (SourceClass, Option<String>) {
     let lower = source.to_ascii_lowercase();
     if lower.starts_with("git+") {
         return (SourceClass::Git, None);
     }
     let url = lower.trim_start_matches("registry+").trim_start_matches("sparse+");
     match crate::privacy::url_host(url).as_deref() {
-        Some("github.com") if url.contains("rust-lang/crates.io-index") => {
+        Some("github.com") if url.trim_end_matches('/') == "https://github.com/rust-lang/crates.io-index" => {
             (SourceClass::PublicRegistry, Some("crates.io".into()))
         }
         Some("index.crates.io") => (SourceClass::PublicRegistry, Some("crates.io".into())),
@@ -71,13 +71,36 @@ fn lock_items(file: &FoundFile<'_>, table: &toml::Table) -> Vec<InventoryItem> {
         let Some(name) = package.get("name").and_then(|n| n.as_str()) else { continue };
         let Some(source) = package.get("source").and_then(|s| s.as_str()) else { continue }; // workspace member
         let (class, host) = crates_io(source);
-        items.push(
-            InventoryItem::new(ItemCategory::Package, "cargo", name, file.rel_path())
-                .version(package.get("version").and_then(|v| v.as_str()).unwrap_or_default())
-                .state(InstallState::Resolved)
-                .source(class, host)
-                .detail("aufgelöst laut Cargo.lock"),
+        let mut item = InventoryItem::new(ItemCategory::Package, "cargo", name, file.rel_path())
+            .version(package.get("version").and_then(|v| v.as_str()).unwrap_or_default())
+            .state(InstallState::Resolved)
+            .source(class, host)
+            .detail("aufgelöst laut Cargo.lock");
+        item.evidence.qualifier = format!(
+            "{}|{}|{}",
+            item.version.as_deref().unwrap_or(""),
+            class,
+            item.source_host.as_deref().unwrap_or("")
         );
+        item.evidence.dependencies = package
+            .get("dependencies")
+            .and_then(|d| d.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|d| d.as_str())
+            .map(|d| {
+                let mut parts = d.split_whitespace();
+                let name = parts.next().unwrap_or("").to_string();
+                let version = parts.next().filter(|v| !v.starts_with('(')).unwrap_or("").to_string();
+                crate::domain::PackageDependency {
+                    name,
+                    exact: !version.is_empty(),
+                    requirement: version,
+                    kind: "lock".into(),
+                }
+            })
+            .collect();
+        items.push(item);
     }
     items
 }
@@ -98,8 +121,10 @@ fn manifest_items(file: &FoundFile<'_>, table: &toml::Table) -> Vec<InventoryIte
         }
     }
     for (target, spec) in table.get("target").and_then(|t| t.as_table()).into_iter().flatten() {
-        if let Some(deps) = spec.get("dependencies").and_then(|d| d.as_table()) {
-            sections.push((deps, format!(" · Ziel {target}")));
+        for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(deps) = spec.get(section).and_then(|d| d.as_table()) {
+                sections.push((deps, format!(" · Ziel {target} · {section}")));
+            }
         }
     }
     if let Some(deps) = table.get("workspace").and_then(|w| w.get("dependencies")).and_then(|d| d.as_table()) {
@@ -122,12 +147,13 @@ fn manifest_items(file: &FoundFile<'_>, table: &toml::Table) -> Vec<InventoryIte
                 }
                 _ => (SourceClass::Unknown, "?".into()),
             };
-            items.push(
-                InventoryItem::new(ItemCategory::Package, "cargo", name.as_str(), file.rel_path())
-                    .state(InstallState::Declared)
-                    .source(source, None)
-                    .detail(format!("Spezifikation {requirement}{label}")),
-            );
+            let actual_name = spec.as_table().and_then(|t| t.get("package")).and_then(|v| v.as_str()).unwrap_or(name);
+            let mut item = InventoryItem::new(ItemCategory::Package, "cargo", actual_name, file.rel_path())
+                .state(InstallState::Declared)
+                .source(source, None)
+                .detail(format!("Spezifikation {requirement}{label}"));
+            item.evidence.context = label.clone();
+            items.push(item);
         }
     }
     items

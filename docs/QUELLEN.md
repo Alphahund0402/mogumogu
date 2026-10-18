@@ -12,6 +12,7 @@ Offizielle Dokumentation, die der Umsetzung zugrunde liegt (Stand Oktober 2026).
 - Rust `File::try_lock`: https://doc.rust-lang.org/std/fs/struct.File.html#method.try_lock
 
 ## Windows-APIs der Sicherheitsgrenzen
+- Besitzerstart ohne Handle-Vererbung (`CreateProcessW`, expliziter Programmpfad, beschreibbare UTF-16-Kommandozeile): https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw
 - `NtCreateFile` (handle-relatives Öffnen über `OBJECT_ATTRIBUTES.RootDirectory`, `FILE_OPEN_REPARSE_POINT`): https://learn.microsoft.com/windows/win32/api/winternl/nf-winternl-ntcreatefile
 - `GetFileInformationByHandleEx` (`FileIdInfo`, `FileIdExtdDirectoryInfo`): https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex
 - `FILE_DISPOSITION_INFO_EX` (POSIX-Löschsemantik am Handle): https://learn.microsoft.com/windows/win32/api/winbase/ns-winbase-file_disposition_info_ex
@@ -37,4 +38,16 @@ Offizielle Dokumentation, die der Umsetzung zugrunde liegt (Stand Oktober 2026).
 - Slint-Lizenzoptionen: https://slint.dev/pricing
 - Windows-10-Lebenszyklus: https://learn.microsoft.com/lifecycle/products/windows-10-home-and-pro
 
-Die Anwendung enthält keine automatische Verbindung zu diesen Seiten.
+## Paketbelege (Ergänzung 17. Oktober 2026)
+
+- npm Registry-Metadaten und Abkündigung: https://github.com/npm/registry/blob/main/docs/responses/package-metadata.md · https://docs.npmjs.com/deprecating-and-undeprecating-packages-or-package-versions/
+- Python-Projektstatus / Simple JSON: https://packaging.python.org/en/latest/specifications/project-status-markers/ · https://docs.pypi.org/api/index-api/
+- PyPI Release-Metadaten/Yanks: https://docs.pypi.org/api/json/ · https://docs.pypi.org/project-management/yanking/
+- Cargo-Yanks und Installationsdatensätze: https://doc.rust-lang.org/cargo/commands/cargo-yank.html · https://doc.rust-lang.org/cargo/guide/cargo-home.html
+- NuGet-Metadaten/Abkündigung und Versionsnormalisierung: https://learn.microsoft.com/en-us/nuget/api/registration-base-url-resource · https://learn.microsoft.com/en-us/nuget/concepts/package-versioning
+- uv-Datenorte: https://docs.astral.sh/uv/reference/storage/ · https://docs.astral.sh/uv/configuration/environment/
+- Einfache GitHub-Workflow-Referenzen: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+- Konkrete Versionsordnung: https://docs.rs/pep440_rs/0.7.3/pep440_rs/struct.Version.html · https://docs.rs/semver/1.0.28/semver/struct.Version.html
+
+Dokumentationsseiten werden von der Anwendung nicht abgerufen. Öffentliche
+Registry-Metadaten werden nur bei separat freigegebenen Quellenhinweisen abgefragt.

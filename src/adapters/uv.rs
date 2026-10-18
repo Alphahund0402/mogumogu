@@ -17,7 +17,7 @@ static DESCRIPTOR: Descriptor = Descriptor {
     updates: Support::Experimental,
     cleanup: Support::Unsupported,
     formats: &["uv.lock (version 1)", "uv.toml", "pyproject.toml mit uv.lock"],
-    limits: "Tool-, Skript- und Cachekontext außerhalb freigegebener Ordner wird nicht gelesen.",
+    limits: "uv-Tools nur mit eigener Freigabe; Cache und fremde Konfigurationen werden nicht gelesen.",
 };
 
 impl Adapter for Uv {
@@ -65,13 +65,32 @@ fn lock_items(file: &FoundFile<'_>) -> AdapterResult {
                 .map_or((SourceClass::Unknown, None), |url| classify_url(url, super::pip::PUBLIC)),
             None => (SourceClass::Unknown, None),
         };
-        items.push(
-            InventoryItem::new(ItemCategory::Package, "uv", super::pip::normalize(name), file.rel_path())
-                .version(package.get("version").and_then(|v| v.as_str()).unwrap_or_default())
-                .state(InstallState::Resolved)
-                .source(class, host)
-                .detail("aufgelöst laut uv.lock"),
+        let mut item = InventoryItem::new(ItemCategory::Package, "uv", super::pip::normalize(name), file.rel_path())
+            .version(package.get("version").and_then(|v| v.as_str()).unwrap_or_default())
+            .state(InstallState::Resolved)
+            .source(class, host)
+            .detail("aufgelöst laut uv.lock");
+        item.evidence.qualifier = format!(
+            "{}|{}|{}",
+            item.version.as_deref().unwrap_or(""),
+            class,
+            item.source_host.as_deref().unwrap_or("")
         );
+        item.evidence.dependencies = package
+            .get("dependencies")
+            .and_then(|d| d.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|d| {
+                Some(crate::domain::PackageDependency {
+                    name: super::pip::normalize(d.get("name")?.as_str()?),
+                    requirement: d.get("version").and_then(|v| v.as_str()).unwrap_or("").into(),
+                    exact: d.get("version").is_some(),
+                    kind: "lock (Marker ungeprüft)".into(),
+                })
+            })
+            .collect();
+        items.push(item);
     }
     Ok(items)
 }

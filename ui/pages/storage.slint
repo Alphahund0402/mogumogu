@@ -1,0 +1,140 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions, DriveRow, DiskProjectRow } from "../store.slint";
+import { Card, PageHeader, UiButton, FilterChip, Icon, RowCard } from "../components.slint";
+
+component DriveCard inherits Card {
+    in property <DriveRow> data;
+    property <bool> details-open: false;
+    // Fixed wrapping-card width keeps intrinsic text height independent of flex layout.
+    width: 250px;
+    height: drive-content.preferred-height;
+    border-color: Store.selected-drive == root.data.root ? Theme.focus : Theme.edge;
+    drive-content := VerticalLayout {
+        x: 0px; y: 0px; width: root.width; height: self.preferred-height;
+        padding: 14px; spacing: 6px;
+        HorizontalLayout {
+            spacing: 8px;
+            Icon { source: Icons.drive; width: 20px; height: 20px; tone: Theme.protected-ink; }
+            Text { text: root.data.label == root.data.root ? root.data.label : root.data.root + "  " + root.data.label; font-size: 14px; font-weight: 700; color: Theme.ink; overflow: elide; horizontal-stretch: 1; }
+        }
+        HorizontalLayout {
+            alignment: start; spacing: 6px;
+            Text { text: root.data.used; font-size: 21px; font-weight: 700; color: Theme.ink; vertical-alignment: bottom; }
+            Text { text: "belegt / " + root.data.total; font-size: 11px; color: Theme.muted; wrap: word-wrap; vertical-alignment: bottom; horizontal-stretch: 1; }
+        }
+        Rectangle {
+            height: 9px; border-radius: 4px; background: Theme.fog;
+            Rectangle { x: 0px; y: 0px; width: parent.width * clamp(root.data.usage, 0, 1); height: parent.height; border-radius: 4px; background: Theme.chart-blue; }
+        }
+        Text { text: root.data.free + " frei · Projekte: " + root.data.projects; font-size: 11.5px; color: Theme.text; wrap: word-wrap; }
+        FlexboxLayout {
+            alignment: start; spacing: 6px;
+            UiButton { small: true; selected: Store.selected-drive == root.data.root; label: Store.selected-drive == root.data.root ? "Ausgewählt" : "Projekte anzeigen"; activated => { Actions.storage-drive(root.data.root); } }
+            drive-details-toggle := UiButton { small: true; quiet: true; label: root.details-open ? "Weniger" : "Details"; activated => { root.details-open = !root.details-open; } }
+        }
+        if root.details-open : Text { height: self.preferred-height; text: root.data.kind + (root.data.note != "" ? " · " + root.data.note : ""); font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+    }
+}
+
+component ProjectStorageCard inherits Card {
+    in property <DiskProjectRow> data;
+    VerticalLayout {
+        padding: 12px; spacing: 6px;
+        HorizontalLayout {
+            spacing: 10px;
+            Text { text: root.data.name; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-stretch: 1; overflow: elide; }
+            Text { text: root.data.size; font-size: 15px; font-weight: 700; color: Theme.protected-ink; }
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            Text { text: root.data.path; horizontal-stretch: 1; min-width: 0px; font-size: 11px; color: Theme.muted; overflow: elide; }
+            Text { text: root.data.share; font-size: 11px; color: Theme.muted; }
+        }
+        if root.data.note != "" : Text { text: root.data.note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        FlexboxLayout {
+            alignment: start; spacing: 6px;
+            UiButton { small: true; label: "Projekt"; activated => { Actions.open-project(root.data.id); } }
+            UiButton { small: true; label: "Ordnerstruktur"; available: root.data.scope-id > 0; activated => { Store.storage-tab = 1; Actions.tree-open(root.data.scope-id, ""); } }
+            UiButton { small: true; label: "Größe messen"; available: root.data.scope-id > 0 && !Store.demo && !Store.busy; activated => { Actions.detail-action("measure-scope:" + root.data.scope-id); } }
+        }
+    }
+}
+
+export component StoragePage inherits VerticalLayout {
+    min-width: 0px; preferred-width: 0px; spacing: Theme.gap;
+    property <bool> measurement-details: false;
+    PageHeader {
+        title: "Laufwerke & Speicher";
+        description: "Belegung, Projektgrößen und Ordnerstruktur. Nicht vollständig gemessene Größen bleiben unbekannt.";
+    }
+    ScrollView {
+        vertical-stretch: 1; content-width: self.visible-width;
+        VerticalLayout {
+            spacing: Theme.gap; padding-right: 16px; padding-bottom: 12px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text { text: Store.disk-checked; font-size: 11px; color: Theme.muted; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+                UiButton { small: true; label: "Aktualisieren"; has-icon: true; icon: Icons.refresh; available: !Store.busy; activated => { Actions.storage-refresh(); } }
+            }
+            FlexboxLayout {
+                spacing: Theme.gap; alignment: start;
+                for drive in Store.drives : DriveCard { data: drive; }
+            }
+            if Store.drives.length == 0 : Text { text: "Laufwerksinformationen sind noch nicht verfügbar."; color: Theme.muted; font-size: 12px; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 8px;
+                Text { text: "Projektgrößen sind logische Dateigrößen, kein freigebbarer Speicher."; font-size: 11px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; }
+                measurement-toggle := UiButton { small: true; quiet: true; label: root.measurement-details ? "Weniger" : "Messhinweise"; activated => { root.measurement-details = !root.measurement-details; } }
+            }
+            if root.measurement-details : Text { text: Store.disk-note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+            FlexboxLayout {
+                alignment: start; spacing: 6px;
+                FilterChip { label: "Projekte"; count: "" + Store.disk-projects.length; selected: Store.storage-tab == 0; activated => { Store.storage-tab = 0; } }
+                FilterChip { label: "Ordnerstruktur"; selected: Store.storage-tab == 1; activated => { Store.storage-tab = 1; } }
+                if Store.selected-drive != "" : UiButton { small: true; label: "Alle Laufwerke"; activated => { Actions.storage-drive(""); } }
+            }
+            if Store.storage-tab == 0 : VerticalLayout {
+                spacing: Theme.gap;
+                for project in Store.disk-projects : ProjectStorageCard { data: project; }
+                if Store.disk-projects.length == 0 : Text { text: "Auf diesem Laufwerk sind noch keine Projekte registriert."; color: Theme.muted; font-size: 12px; wrap: word-wrap; }
+            }
+            if Store.storage-tab == 1 : Card {
+                VerticalLayout {
+                    padding: 14px; spacing: 10px;
+                    Text { text: Store.tree-loading ? "Ordner werden gelesen …" : "Freigegebene Ordner"; font-size: 13px; font-weight: 700; color: Theme.ink; }
+                    FlexboxLayout {
+                        spacing: 6px; alignment: start;
+                        for scope in Store.tree-scopes : UiButton {
+                            small: true; label: scope.label; available: !Store.busy && !Store.tree-loading;
+                            activated => { Actions.tree-open(scope.id, ""); }
+                        }
+                    }
+                    if Store.tree-scopes.length == 0 : Text { text: "Gib einen Projektordner oder eine Suchwurzel zum Lesen frei, um die Struktur zu sehen."; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        UiButton { small: true; label: "Eine Ebene höher"; available: Store.tree-up && !Store.busy && !Store.tree-loading; activated => { Actions.tree-parent(); } }
+                        Text { text: Store.tree-path; font-size: 11px; color: Theme.muted; horizontal-stretch: 1; min-width: 0px; wrap: word-wrap; vertical-alignment: center; }
+                    }
+                    Text { text: Store.tree-note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                    for row in Store.tree-rows : VerticalLayout {
+                        if row.is-dir : RowCard {
+                            wrap-content: true;
+                            icon: Icons.folder;
+                            title: row.name; subtitle: row.note; meta: row.size;
+                            pill: "Öffnen"; pill-kind: "neutral";
+                            selection-kind: "tree"; selection-key: row.path;
+                            activated => { Actions.tree-enter(row.index); }
+                        }
+                        if !row.is-dir : RowCard {
+                            interactive: false; accessible-role: text;
+                            icon: Icons.history;
+                            title: row.name; subtitle: row.note; meta: row.size;
+                            pill: "Datei"; pill-kind: "neutral";
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

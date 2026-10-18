@@ -1,61 +1,100 @@
-// Design tokens of the selected nature dashboard (design/dashboard.html).
+// Mochi-Wolke: creme paper sidebar, sky canvas, white cloud cards and Mochi's
+// ink outline on the few things that act. Status pairs colour with an icon
+// and a word. Text colours keep at least 4.5:1 against their backgrounds.
 export global Theme {
-    out property <color> ink: #172c48;
-    out property <color> muted: #5d6d80;
-    out property <color> line: #e6edf3;
-    out property <color> canvas: #f3f6f9;
+    out property <string> font-family: "Zen Maru Gothic";
+    // Surfaces
+    out property <color> creme: #fffdf8;
+    out property <color> canvas: #eaf3fb;
     out property <color> surface: #ffffff;
-    out property <color> blue: #246dd6;
-    out property <color> blue-hover: #1c5dbb;
-    out property <color> blue-pressed: #174b98;
-    out property <color> blue-soft: #e5efff;
-    // Shared interaction states for navigation, filters, buttons and rows.
-    out property <color> selected: #e5efff;
-    out property <color> selected-hover: #d8e7ff;
-    out property <color> selected-pressed: #c7dcfb;
-    out property <color> selected-ink: #174b98;
-    out property <color> selected-border: #5983bd;
-    out property <color> hover: #edf3fb;
-    out property <color> hover-border: #a8bfdc;
-    out property <color> pressed: #dce8f7;
-    out property <color> disabled: #edf1f5;
-    out property <color> disabled-ink: #667487;
-    out property <color> green: #159b79;
-    out property <color> green-soft: #edf8f3;
-    out property <color> amber: #a87a35;
-    out property <color> amber-soft: #fff3de;
-    out property <color> row: #f8fafc;
-    out property <color> row-hover: #f1f6fc;
-    out property <color> focus: #174b98;
-    out property <length> radius: 13px;
-    out property <length> radius-small: 8px;
+    // Text and lines
+    out property <color> ink: #2f3640;
+    out property <color> text: #4b5563;
+    out property <color> muted: #5e6a79;
+    out property <color> line: #e1e6ec;
+    out property <color> edge: #2f36401f;
+    out property <color> edge-strong: #2f364047;
+    out property <color> input-border: #7a8695;
+    // Sky: primary actions and selection
+    out property <color> sky: #c7e0f6;
+    out property <color> sky-hover: #b4d4f1;
+    out property <color> sky-pressed: #a3c9ec;
+    out property <color> sky-soft: #dcebf8;
+    out property <color> hover: #f4f8fc;
+    out property <color> pressed: #e7eff8;
+    out property <color> row-selected: #f0f7fd;
+    // Status fills and their ink
+    out property <color> sage: #d7ebd9;
+    out property <color> sage-soft: #eef6ef;
+    out property <color> ok-ink: #2e6544;
+    out property <color> amber: #ffe7b3;
+    out property <color> amber-soft: #fff5dc;
+    out property <color> review-ink: #6e4c0f;
+    out property <color> blush: #fadadd;
+    out property <color> blush-soft: #fdeef0;
+    out property <color> alert-ink: #8e3441;
+    out property <color> protected-ink: #24496e;
+    out property <color> fog: #eceff3;
+    out property <color> neutral-ink: #4f5a68;
+    out property <color> disabled: #eceff3;
+    out property <color> disabled-ink: #5e6a79;
+    out property <color> focus: #2d5a86;
+    // Charts
+    out property <color> chart-blue: #7fb0dd;
+    out property <color> chart-sky: #a9cdee;
+    out property <color> chart-amber: #f2c66b;
+    out property <color> chart-sage: #9ccba6;
+    out property <color> chart-blush: #e7a9b1;
+    out property <color> chart-fog: #c9d2dc;
+    // Geometry
+    out property <length> radius: 16px;
+    out property <length> radius-small: 12px;
+    out property <length> stroke: 1.5px;
+    out property <length> control-height: 30px;
+    out property <length> row-height: 40px;
+    out property <length> detail-row-height: 56px;
+    out property <length> page-padding: 14px;
+    out property <length> gap: 14px;
+    // Equal clearance between a speech bubble's text and its body outline.
+    out property <length> bubble-padding: 14px;
 }
 
-// Line icons (own drawings, GPL-3.0-only). Colour comes from `colorize`.
+// Line icons (own drawings, GPL-3.0-only): 24 grid, 2px round strokes; a
+// 16 % fill marks the main shape of navigation icons. Colour comes from `colorize`.
 export global Icons {
     out property <image> activity: @image-url("../assets/icons/activity.svg");
     out property <image> arrow: @image-url("../assets/icons/arrow.svg");
     out property <image> bell: @image-url("../assets/icons/bell.svg");
     out property <image> branch: @image-url("../assets/icons/branch.svg");
     out property <image> check: @image-url("../assets/icons/check.svg");
+    out property <image> checklist: @image-url("../assets/icons/checklist.svg");
     out property <image> chevron: @image-url("../assets/icons/chevron.svg");
     out property <image> clock: @image-url("../assets/icons/clock.svg");
     out property <image> close: @image-url("../assets/icons/close.svg");
     out property <image> command: @image-url("../assets/icons/command.svg");
-    out property <image> database: @image-url("../assets/icons/database.svg");
+    out property <image> drive: @image-url("../assets/icons/drive.svg");
+    out property <image> flask: @image-url("../assets/icons/flask.svg");
     out property <image> folder: @image-url("../assets/icons/folder.svg");
-    out property <image> home: @image-url("../assets/icons/home.svg");
+    out property <image> history: @image-url("../assets/icons/history.svg");
     out property <image> info: @image-url("../assets/icons/info.svg");
-    out property <image> leaf: @image-url("../assets/icons/leaf.svg");
     out property <image> lock: @image-url("../assets/icons/lock.svg");
     out property <image> monitor: @image-url("../assets/icons/monitor.svg");
+    out property <image> overview: @image-url("../assets/icons/overview.svg");
     out property <image> package: @image-url("../assets/icons/package.svg");
+    out property <image> pause: @image-url("../assets/icons/pause.svg");
+    out property <image> paw: @image-url("../assets/icons/paw.svg");
     out property <image> plus: @image-url("../assets/icons/plus.svg");
+    out property <image> question: @image-url("../assets/icons/question.svg");
     out property <image> refresh: @image-url("../assets/icons/refresh.svg");
+    out property <image> scan: @image-url("../assets/icons/scan.svg");
     out property <image> search: @image-url("../assets/icons/search.svg");
     out property <image> settings: @image-url("../assets/icons/settings.svg");
     out property <image> shield: @image-url("../assets/icons/shield.svg");
     out property <image> spark: @image-url("../assets/icons/spark.svg");
-    out property <image> logo: @image-url("../assets/logo.svg");
-    out property <image> mountains: @image-url("../assets/mountains.jpg");
+    out property <image> system: @image-url("../assets/icons/system.svg");
+    out property <image> warning: @image-url("../assets/icons/warning.svg");
+    out property <image> logo: @image-url("../assets/brand/icon.png");
+    out property <image> wordmark: @image-url("../assets/brand/wordmark.png");
+    out property <image> mascots: @image-url("../assets/brand/mascots-v2.png");
+    out property <image> moods: @image-url("../assets/brand/mascots-v3-moods.png");
 }

@@ -36,12 +36,12 @@ impl Adapter for Pnpm {
         let mut items = vec![manifest("pnpm", file, format!("Lockfile v{version}"))];
         for line in lines::section_keys(file.content, "packages") {
             if let Some((name, version)) = split_package_key(line.key) {
-                items.push(
-                    InventoryItem::new(ItemCategory::Package, "pnpm", name, file.rel_path())
-                        .version(version)
-                        .state(InstallState::Resolved)
-                        .detail("aufgelöst laut pnpm-lock.yaml"),
-                );
+                let mut item = InventoryItem::new(ItemCategory::Package, "pnpm", name, file.rel_path())
+                    .version(version)
+                    .state(InstallState::Resolved)
+                    .detail("aufgelöst laut pnpm-lock.yaml");
+                item.evidence.qualifier = line.key.into();
+                items.push(item);
             }
         }
         bounded(items)
@@ -68,12 +68,12 @@ impl Adapter for Pnpm {
             // Store folder names encode "@scope+name@version(peer…)".
             let decoded = entry.replacen('+', "/", usize::from(entry.starts_with('@')));
             if let Some((name, version)) = split_package_key(&decoded) {
-                items.push(
-                    InventoryItem::new(ItemCategory::Package, "pnpm", name, format!("{rel_path}/.pnpm"))
-                        .version(version)
-                        .state(InstallState::Installed)
-                        .detail("im virtuellen Store vorhanden"),
-                );
+                let mut item = InventoryItem::new(ItemCategory::Package, "pnpm", name, format!("{rel_path}/.pnpm"))
+                    .version(version)
+                    .state(InstallState::Installed)
+                    .detail("im virtuellen Store vorhanden");
+                item.evidence.qualifier = entry;
+                items.push(item);
             }
         }
         bounded(items)

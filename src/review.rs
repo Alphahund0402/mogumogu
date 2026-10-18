@@ -4,10 +4,10 @@
 //! the observation window actually covers the threshold; file age, names
 //! or missing references are never used.
 use crate::cleanup::static_blockers;
-use crate::clock::{DAY, Timestamp, display_date};
+use crate::clock::{DAY, Timestamp, display_date, display_relative};
 use crate::domain::{
     Acquisition, HintKind, Observation, OwnerKind, OwnerLink, Resource, ResourceKind, ReviewHint, Session,
-    SessionState, Settings,
+    SessionState, Settings, Stall,
 };
 
 #[derive(Debug)]
@@ -79,12 +79,33 @@ fn hint_for(input: &ReviewInput<'_>, resource: &Resource) -> Option<ReviewHint> 
         bytes: resource.bytes,
     };
 
-    if sessions.iter().any(|s| s.state == SessionState::InterruptedUnknown) {
+    // The most pressing stuck session of this scratchpad, if any.
+    let stalled = [Stall::Unclear, Stall::Silent, Stall::Unverified, Stall::LongRunning]
+        .into_iter()
+        .find_map(|wanted| sessions.iter().find(|s| s.stall(input.now) == Some(wanted)).map(|s| (s, wanted)));
+    if let Some((session, stall)) = stalled {
+        let since = display_relative(input.now - session.quiet_for(input.now), input.now);
         base.kind = HintKind::Unclear;
-        base.trigger = "Eine Session wurde unklar unterbrochen.".into();
-        base.evidence = "Starterende oder Absturz ohne Abschlussmeldung.".into();
-        base.next_action =
-            "Diagnose in results/ prüfen, dann Session nach Prüfung freigeben oder erneut ausführen.".into();
+        base.trigger = match stall {
+            Stall::Unclear => "Eine Session wurde unklar unterbrochen.".into(),
+            Stall::Silent => format!("Session {} ohne Lebenszeichen ({since}).", session.id),
+            Stall::Unverified => format!("Session {}: Abschluss gemeldet, aber nicht prüfbar ({since}).", session.id),
+            Stall::LongRunning => {
+                format!("Session {} läuft seit {}.", session.id, display_relative(session.started_at, input.now))
+            }
+        };
+        base.evidence = match stall {
+            Stall::Unclear => "Starterende oder Absturz ohne Abschlussmeldung.".into(),
+            Stall::Silent => "Weder Job noch Prozess zu prüfen und kein Heartbeat.".into(),
+            Stall::Unverified => "Prozesse im Job oder fehlender Prozessbeleg halten den Abschluss offen.".into(),
+            Stall::LongRunning => "Prozesse im Job sind weiterhin aktiv.".into(),
+        };
+        base.uncertainty = "Die Sperre bleibt, bis eine Person entscheidet; mogumogu beendet keine Prozesse.".into();
+        base.next_action = if stall == Stall::LongRunning {
+            "Prüfen, ob der Lauf noch gebraucht wird, und ihn selbst beenden.".into()
+        } else {
+            "In Experimente prüfen, Diagnose in results/ lesen, dann begründet freigeben oder erneut ausführen.".into()
+        };
     } else if resource.kind == ResourceKind::Temporary && resource.acquisition == Acquisition::Managed {
         let done = sessions.iter().any(|s| s.state == SessionState::CompletedVerified);
         if !done && !resource.expendable {

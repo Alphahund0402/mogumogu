@@ -1,4 +1,5 @@
 use super::*;
+use crate::clock::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// One slice of the storage overview. `bytes == None` means not measured.
@@ -33,7 +34,42 @@ pub struct Snapshot {
     #[serde(default)]
     pub storage: Vec<StorageSlice>,
     #[serde(default)]
+    pub disks: StorageOverview,
+    #[serde(default)]
     pub settings: Option<Settings>,
+    #[serde(default)]
+    pub packages: PackageReport,
+    #[serde(default)]
+    pub discoveries: Vec<ProjectCandidate>,
+    #[serde(default)]
+    pub artifacts: Vec<ArtifactFinding>,
+    /// Metadata-only system check, from the owner's cache.
+    #[serde(default)]
+    pub system: SystemReport,
+    /// Finish time of the newest complete generation.
+    #[serde(default)]
+    pub last_scan_at: Option<Timestamp>,
+    #[serde(default)]
+    pub autostart: Option<Autostart>,
+}
+
+/// The per-user start entry as found, never assumed: another program or an
+/// older copy of mogumogu may have written it.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Autostart {
+    pub enabled: bool,
+    /// The entry starts exactly this owner with its data directory.
+    pub current: bool,
+}
+
+/// What the tray needs while no dashboard is shown: no lists, no package
+/// analysis. `review_count` equals [`Snapshot::review_count`] for the same state.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TraySummary {
+    pub demo: bool,
+    pub review_count: usize,
+    pub settings: Settings,
+    pub last_scan_at: Option<Timestamp>,
 }
 
 impl Snapshot {

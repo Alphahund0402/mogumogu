@@ -87,3 +87,120 @@ aller Texte und Zustände; DPI und Screenreader bleiben manuell zu prüfen.
 ## Weitere offene Messungen
 
 Windows 11, eine zweite Hardware, GPU-Speicher, I/O-Last großer realer Projektbäume, die Watcher-Last unter Dauerschreiblast sowie Zeiten bis zum vollständigen Zeichnen des Fensters. Diese Punkte gehören zur Abnahme G6.
+
+## Paketbelege und Referenzanalyse (17. Oktober 2026)
+
+Reproduzierbar mit `cargo test --locked --offline --release --no-default-features
+--test performance -- --ignored --nocapture`. Rust 1.98.0, optimierter Build,
+Windows 10.0.19045.0 (lokal geprüft), AMD64 Family 26 Model 68 Stepping 0,
+16 logische Prozessoren. Vollständiger CPU-Name und RAM wurden in dieser
+Toolsitzung nicht erneut über WMI erhoben. Schutzsoftware-Einstellungen wurden
+nicht verändert. Kein Registryverkehr, keine geöffneten Test-Dashboards;
+Editor und Tools aktiv, keine kontrollierte Lastisolation.
+
+Gleiche Referenzfixture: 50 Projekte, je 200 npm-Pakete, zusätzliche KI-Dateien.
+Der Snapshot enthält jetzt auch Paketbelege, Quellenstatus und Referenzabdeckung.
+
+| Messung | Ergebnis |
+|---|---|
+| Erste Erfassung | 250,6 ms |
+| Neuerfassung ohne Änderung | 265,2 ms |
+| Erster Snapshot einschließlich Belegaufbau | 124,1 ms |
+| Warme Snapshots, 30 Samples | Median 51,2 ms; p95 55,2 ms |
+| Datenbank nach zwei Generationen | 8.672 KiB |
+
+Die Fixture verwendet eine feste Uhr. Warme Samples messen dieselbe Revision,
+Uhrzeit und Seite; neue Commits, Uhrzeit oder Seite erzwingen die Neubewertung.
+Der Seitencache hält maximal 60 aufbereitete Paketidentitäten, kein volles
+Inventar. Gemeinsame Projekt-/Scope-Daten werden beim Snapshot wiederverwendet.
+Ein erster Lauf ohne diese Wiederverwendung meldete etwa 200 ms pro Snapshot;
+das ist ein interner Diagnosewert, kein allgemeiner Beschleunigungsnachweis.
+
+Die zusätzlichen Belege kosten gegenüber einem reinen Inventar mehr Arbeit und
+Speicher auf Platte. Beide gemessenen Snapshot-Werte liegen auf diesem Host unter
+dem 500-ms-Ziel; daraus folgt kein Nachweis für größere Bestände oder andere
+Hardware. Tray-Private-Bytes, zehnminütiger Leerlauf, 100 Fensterzyklen und
+Windows-11-Abnahme wurden für diese Erweiterung nicht neu gemessen. Die älteren
+Messreihen oben sind historische Ergebnisse ihres jeweiligen Builds.
+
+## Architekturumbau und schlanke Statusabfrage (17. Oktober 2026)
+
+Derselbe Host: Windows 10.0.19045.0, AMD64 Family 26 Model 68 Stepping 0,
+16 logische Prozessoren, Rust 1.98.0, optimierter Build. Die Hardwareangaben
+wurden über .NET/Umgebung erneut bestätigt; vollständiger CPU-Name und RAM
+wurden nicht erhoben. Editor und Tools waren aktiv, die übrige Hintergrundlast
+war nicht kontrolliert. Während der Messungen lief kein weiterer Cargo-Build.
+Kein Registryverkehr und kein geöffnetes Testfenster.
+
+```powershell
+cargo test --locked --offline --release --no-default-features --test performance -- --ignored --nocapture
+```
+
+Drei aufeinanderfolgende Läufe derselben Fixture (50 Projekte, 10.000 Pakete),
+jeweils 30 warme Snapshots und 30 Statusabfragen. Die Testläufe dauerten nach dem
+Build etwa 2,9–3,9 Sekunden. Die Tabelle zeigt die Spanne der drei Ergebnisse.
+
+| Messung | Ergebnis |
+|---|---|
+| Erste Erfassung | 277,5–318,0 ms |
+| Neuerfassung ohne Änderung | 284,9–334,4 ms |
+| Erster Snapshot einschließlich Belegaufbau | 150,5–284,8 ms |
+| Warme Snapshots: Median / p95 | 62,9–82,6 ms / 68,4–128,6 ms |
+| Status im Kern: Median / p95 | 12,7–19,3 µs / 19,4–46,6 µs |
+| Datenbank nach zwei Generationen | 8.672 KiB |
+
+Status liest nach dem Sessionabgleich vier Gesamtzähler in einer kurzen
+Lesetransaktion. Dafür werden weder Paketbelege geladen noch Dashboard-Modelle
+berechnet. Die Statuswerte messen den Kernaufruf, nicht CLI-Start oder IPC.
+Die Snapshot-Samples verwenden wie zuvor eine feste Uhr und damit denselben
+gültigen Paket-Seitencache.
+
+Die Snapshotzeiten liegen höher als in der vorigen Messreihe und schwanken
+zwischen den aktuellen Läufen. Ein allgemeiner Beschleunigungsnachweis für
+das Dashboard ergibt sich daraus nicht. Nachweisbar entfällt bei Statusaufrufen
+die vollständige Snapshot-Arbeit. Alle aktuellen Snapshotwerte bleiben auf
+diesem Host unter dem 500-ms-Ziel. Neue Tray-, Fensterzyklus-, DPI- oder
+Windows-11-Messungen sind damit nicht verbunden.
+
+## Abfragepläne, Seitencache und Tray-Zusammenfassung (18. Oktober 2026)
+
+Derselbe Host: Windows 10.0.19045.7807, AMD64 Family 26 Model 68 Stepping 0,
+16 logische Prozessoren, Rust 1.98.0, optimierter Build. Editor und Tools aktiv,
+Hintergrundlast nicht kontrolliert; während der Messläufe lief kein weiterer
+Cargo-Build. Gleiche Referenzfixture (50 Projekte, 10.000 Pakete).
+
+Befunde vor der Änderung:
+
+- Die Referenzmessung verwendet eine feste Uhr. Der Paket-Seitencache war an die
+  exakte Sekunde gebunden und traf deshalb mit der Systemuhr praktisch nie. Ein
+  Snapshot mit laufender Uhr dauerte 116,5–117,0 ms statt der gemessenen 50 ms.
+- Projektliste und Managerzählung liefen laut Abfrageplan über den Index
+  `inventory_items_package` durch alle gehaltenen Generationen (20.800 statt
+  10.400 Zeilen), jeweils mit Einzelabfragen auf `generations` und `scopes`.
+- Ohne geöffnetes Dashboard berechnete der Besitzer nach jeder Änderung einen
+  vollständigen Snapshot. Der Tray nutzte davon nur Einstellungen und die Anzahl
+  der Prüfhinweise; der Headless-Betrieb verwarf ihn.
+
+Änderungen: `CROSS JOIN` legt die Schleifenreihenfolge auf veröffentlichte
+Generationen fest. Auf einer Kopie der Fixture lieferten alte und neue Abfragen
+identische Zeilen. Der Seitencache gilt bis zur nächsten Veraltungsgrenze einer
+Quellenprüfung (`updates::stale_at`). Ohne sichtbares Dashboard veröffentlicht
+der Besitzer eine `TraySummary`. Lese-, Lösch- und Journalgrenzen sind unverändert.
+
+| Messung | Vorher | Nachher (drei Läufe) |
+|---|---|---|
+| Snapshot, feste Uhr: Median / p95 | 50,0 / 53,1 ms | 24,9–26,5 / 28,6–35,2 ms |
+| Snapshot, laufende Uhr: Median / p95 | 116,5–117,0 / 120,3–122,4 ms¹ | 24,4–25,0 / 27,3–31,0 ms |
+| Projektliste (`Repository::projects`) | 23,4 ms¹ | 6,9 ms¹ |
+| Managerzählung (`ecosystem_counts`) | 13,9 ms¹ | 5,5 ms¹ |
+| Arbeit nach Änderungen ohne Dashboard | vollständiger Snapshot | Tray-Zusammenfassung: Median 29–48 µs |
+| Erster Snapshot einschließlich Belegaufbau | 117,1 ms | 95,5–105,9 ms |
+| Erste Erfassung / Neuerfassung | 250,0 / 268,6 ms | 256,1–272,6 / 272,6–298,5 ms |
+
+¹ Aus einem temporären Messprogramm dieser Sitzung mit derselben Fixture. Es ist
+nicht Teil des Repositorys. Die Referenzmessung enthält jetzt selbst die Reihen
+„laufende Uhr“ und „Tray-Zusammenfassung“.
+
+Die Erfassungszeiten sind nicht Ziel dieser Änderung und schwanken im Rahmen
+der früheren Läufe. Fensterzyklen, Tray-Private-Bytes, zehnminütiger Leerlauf,
+DPI und Windows 11 wurden nicht neu gemessen.

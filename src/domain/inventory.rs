@@ -1,3 +1,4 @@
+use super::{PackageEvidence, PackageId, package_ecosystem, package_name};
 use crate::clock::Timestamp;
 use serde::{Deserialize, Serialize};
 
@@ -65,6 +66,8 @@ pub struct InventoryItem {
     /// Redacted, bounded description. Never raw file content.
     pub detail: String,
     pub bytes: Option<i64>,
+    #[serde(default)]
+    pub evidence: PackageEvidence,
 }
 
 impl InventoryItem {
@@ -80,6 +83,7 @@ impl InventoryItem {
             rel_path: rel_path.into(),
             detail: String::new(),
             bytes: None,
+            evidence: PackageEvidence::default(),
         }
     }
     pub fn version(mut self, version: impl Into<String>) -> Self {
@@ -104,11 +108,23 @@ impl InventoryItem {
     /// Copy with every free-text field redacted and bounded; storage keys are
     /// derived from this form so no raw text reaches an index either.
     pub fn sanitized(&self) -> Self {
+        let mut evidence = self.evidence.clone();
+        evidence.context = crate::privacy::label(&evidence.context);
+        evidence.qualifier = crate::privacy::label(&evidence.qualifier);
+        evidence.deprecated = evidence.deprecated.as_deref().map(crate::privacy::label);
+        evidence.executables = evidence.executables.iter().map(|s| crate::privacy::label(s)).collect();
+        evidence.commands = evidence.commands.iter().map(|s| crate::privacy::label(s)).collect();
+        for dependency in &mut evidence.dependencies {
+            dependency.name = crate::privacy::label(&dependency.name);
+            dependency.requirement = crate::privacy::label(&dependency.requirement);
+            dependency.kind = crate::privacy::label(&dependency.kind);
+        }
         Self {
             name: crate::privacy::label(&self.name),
             version: self.version.as_deref().map(crate::privacy::label),
             detail: crate::privacy::label(&self.detail),
             rel_path: crate::privacy::label(&self.rel_path),
+            evidence,
             ..self.clone()
         }
     }
@@ -116,14 +132,31 @@ impl InventoryItem {
     /// Identity of an item across generations. Version is deliberately not
     /// part of the key so that a version bump is a change, not add+remove.
     pub fn key(&self) -> String {
-        format!(
-            "{}|{}|{}|{}|{}",
+        serde_json::to_string(&(
             self.category,
-            self.ecosystem,
-            self.rel_path,
-            self.name,
-            self.install_state.map_or("", InstallState::as_str)
-        )
+            &self.ecosystem,
+            &self.rel_path,
+            &self.name,
+            self.install_state,
+            &self.evidence.context,
+            &self.evidence.qualifier,
+        ))
+        .expect("string item key")
+    }
+
+    pub fn package_id(&self) -> PackageId {
+        let host = match self.source_host.as_deref() {
+            Some("files.pythonhosted.org") => "pypi.org",
+            Some(host) => host,
+            None => "",
+        };
+        PackageId {
+            ecosystem: package_ecosystem(&self.ecosystem).into(),
+            name: package_name(&self.ecosystem, &self.name),
+            version: self.version.clone().unwrap_or_default(),
+            source: self.source,
+            source_host: host.to_string(),
+        }
     }
 }
 

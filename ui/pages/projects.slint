@@ -1,18 +1,21 @@
-import { Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { UiButton, FilterChip, ProjectTable } from "../components.slint";
+import { FilterChip, ProjectTable, UiButton } from "../components.slint";
 import { PageCard } from "page-card.slint";
+import { DiscoveryFilters, DiscoveryList } from "discoveries.slint";
 
 export component ProjectsPage inherits PageCard {
     title: "Projekte";
-    description: "Registrierung ist keine Lese-, Scan- oder Löschfreigabe. Die Lesefreigabe wird pro Projekt bewusst erteilt.";
-    HorizontalLayout {
-        spacing: 5px; alignment: start;
-        FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.filter-projects(); } }
-        FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.filter-projects(); } }
-        FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.filter-projects(); } }
-        Rectangle { horizontal-stretch: 1; }
-        UiButton { label: "Projekt registrieren"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-project(); } }
+    description: "Registrierte und gefundene Projekte. Lesen und Erfassen separat freigeben; Registrierung erlaubt keine Löschung.";
+    FlexboxLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Registriert"; count: Store.count-all; selected: !Store.show-candidates && Store.filter == 0; activated => { Store.show-candidates = false; Store.filter = 0; Actions.filter-projects(); } }
+        FilterChip { label: "Nutzung belegt"; count: Store.count-observed; selected: !Store.show-candidates && Store.filter == 1; activated => { Store.show-candidates = false; Store.filter = 1; Actions.filter-projects(); } }
+        FilterChip { label: "Prüfen"; count: Store.count-review; selected: !Store.show-candidates && Store.filter == 2; activated => { Store.show-candidates = false; Store.filter = 2; Actions.filter-projects(); } }
+        FilterChip { label: "Unbekannt"; count: Store.count-unknown; selected: !Store.show-candidates && Store.filter == 3; activated => { Store.show-candidates = false; Store.filter = 3; Actions.filter-projects(); } }
+        FilterChip { label: "Gefunden"; selected: Store.show-candidates; activated => { Store.show-candidates = true; } }
+        UiButton { label: "Suchwurzel freigeben"; small: true; available: !Store.demo && !Store.busy; activated => { Actions.approve-scope("projects"); } }
     }
-    ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
+    if !Store.show-candidates : ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
+    if Store.show-candidates : DiscoveryFilters { }
+    if Store.show-candidates : DiscoveryList { }
 }

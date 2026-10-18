@@ -1,0 +1,16 @@
+# B / Nibble
+
+Use case: logo-brand and ui-mockup.
+Create a polished, landscape 3:2 art-direction board for "mogumogu", a compact native Windows development-inventory application.
+Visual style: much more manga-like, inspired by Chiikawa's soft slice-of-life kawaii manga aesthetic: very small rounded bodies, disproportionately round heads, tiny dot or oval eyes, a tiny expressive mouth, stubby limbs, softly hatched blush cheeks, slightly imperfect thin dark ink lines, simple flat pastel fills, ample clean paper-like space. Draw an ORIGINAL cat mascot for mogumogu. Keep it unmistakably a cat. Do not reproduce any existing franchise character, franchise logo, or copyrighted wordmark.
+Important: hand-drawn 2D manga charm, not a generic vector emoji, not thick corporate icon outlines, not glossy 3D, not a human anime character.
+Composition: on the left roughly one third of the board, a large original mascot design. On the right, roughly two thirds, a tasteful crisp compact Windows application window concept with title-bar controls, practical small typography, real data rows, and normal desktop proportions. Below, a small expression strip of the SAME cat (neutral, happy, concentrating), a clean simplified head-only app-icon version, and a subtle palette strip. The large mascot is outside the application window; only a small brand mark is inside the application. This is a visual design exploration with synthetic data.
+Text must be sparse and carefully typeset. Brand text verbatim: "mogumogu". Preserve the requested concept title. For app navigation use only the readable short labels "Übersicht", "Projekte", "Pakete", "Prüfliste". Visible status "Demo". No marketing hero, no web browser address bar, no ornamental charts, no deletion button, no claims that unreferenced packages are safe to remove. Keep table and navigation text sharp; omit minor copy rather than drawing gibberish.
+
+Concept title verbatim: "B / Nibble".
+Character direction: a warm milk-white or pale biscuit-colored, chubby bean-shaped CAT with very small pointed ears, closed smiling crescent eyes, tiny chewing mouth and gently puffed blush cheeks. One miniature paw is raised near its cheek as if happily nibbling; the other rests on a tiny sage-green package box. Very short legs and a small curled cat tail. An original cozy little manga companion, naive and tender rather than polished vector art. The head silhouette is rounder and the ears smaller than a standard cat emoji.
+Interface direction: Moss, a compact native Windows project workspace using warm ivory, soft sage and warm dark gray. Use top-level text tabs instead of a persistent sidebar, a slim project navigator on the left and the selected project and package list on the right. Clear small native-style controls, thin separators, useful dense rows, a quiet amber review note. No huge welcome panel, no webpage hero.
+Backdrop: clean pale cream, restrained manga touches and a few tiny ink emotion marks around the mascot only.
+
+Extra rendering direction: keep the character contours clean, thin, dark and slightly wobbly. Use mostly flat milk-white fills with small blush hatching. Aim for a simple Japanese four-panel manga character, not a furry watercolor pet portrait. No fur strokes and no glossy shading.
+

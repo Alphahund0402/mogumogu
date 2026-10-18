@@ -1,0 +1,185 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions, SystemRow } from "../store.slint";
+import { Card, CardTitle, Icon, UiButton, StatusChip, PageHeader, TableHead, Activatable } from "../components.slint";
+
+component ToolLine inherits Activatable {
+    in property <SystemRow> data;
+    property <bool> details-open: false;
+    height: max(Theme.row-height, tool-content.preferred-height);
+    label: root.data.name + ", " + root.data.evidence + ", " + root.data.location + ", " + root.data.note + (root.details-open ? ", Details schließen" : ", Details anzeigen");
+    activated => { root.details-open = !root.details-open; }
+    tool-content := VerticalLayout {
+        x: 0px; y: 0px; width: root.width; height: self.preferred-height;
+        spacing: 0px; alignment: start;
+        HorizontalLayout {
+            height: Theme.row-height;
+            padding-left: 12px; padding-right: 12px; spacing: 10px;
+            Text { text: root.data.name; width: 150px; font-size: 12.5px; font-weight: 700; color: Theme.ink; vertical-alignment: center; overflow: elide; }
+            Text { text: root.data.location; horizontal-stretch: 1; min-width: 40px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+            HorizontalLayout { width: 136px; alignment: start; StatusChip { width: 136px; constrained: true; label: root.data.evidence; kind: root.data.evidence-kind; y: (parent.height - self.height) / 2; } }
+            Text { text: root.details-open ? "−" : "+"; width: 12px; color: Theme.muted; vertical-alignment: center; horizontal-alignment: center; }
+        }
+        if root.details-open : VerticalLayout {
+            width: root.width; height: self.preferred-height;
+            padding-left: 12px; padding-right: 12px; padding-bottom: 10px; spacing: 4px;
+            Text { text: root.data.name; font-size: 12px; font-weight: 700; color: Theme.ink; wrap: word-wrap; }
+            Text { text: root.data.location; font-size: 11px; color: Theme.text; wrap: word-wrap; }
+            Text { text: "Beleg: " + root.data.evidence; font-size: 11px; color: Theme.text; wrap: word-wrap; }
+            if root.data.note != "" && root.data.note != root.data.evidence : Text { text: root.data.note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        }
+    }
+    Rectangle { x: 12px; width: parent.width - 24px; y: parent.height - 1px; height: 1px; background: Theme.line; }
+}
+
+component PlaceLine inherits Rectangle {
+    in property <SystemRow> data;
+    property <bool> details-open: false;
+    height: max(46px, place-content.preferred-height);
+    border-radius: 12px;
+    place-content := VerticalLayout {
+    x: 0px; y: 0px; width: root.width; height: self.preferred-height;
+    spacing: 0px; alignment: start;
+    HorizontalLayout {
+        padding-left: 10px; padding-right: 8px; padding-top: 5px; padding-bottom: 5px; spacing: 8px;
+        VerticalLayout {
+            alignment: center; spacing: 1px; horizontal-stretch: 1; min-width: 0px;
+            Text { text: root.data.name; font-size: 12px; font-weight: 700; color: Theme.ink; overflow: elide; }
+            Text { text: root.data.location; font-size: 10.5px; color: Theme.muted; overflow: elide; }
+            Text { text: root.data.approved ? root.data.coverage : root.data.note; font-size: 10.5px; color: root.data.approved ? Theme.ok-ink : Theme.muted; overflow: elide; }
+        }
+        place-details-toggle := UiButton {
+            y: (parent.height - self.height) / 2;
+            small: true; quiet: true; label: root.details-open ? "Weniger" : "Details";
+            activated => { root.details-open = !root.details-open; }
+        }
+        if root.data.approved : HorizontalLayout {
+            spacing: 6px;
+            StatusChip { y: (parent.height - self.height) / 2; label: "Freigegeben"; kind: "ok"; }
+            UiButton { y: (parent.height - self.height) / 2; small: true; label: "Erfassen"; available: !Store.demo && !Store.busy; activated => { Actions.open-scope-scan(root.data.scope-id); } }
+        }
+        if !root.data.approved && root.data.approvable : UiButton {
+            y: (parent.height - self.height) / 2;
+            small: true; label: "Freigeben";
+            available: !Store.demo && !Store.busy;
+            activated => { Actions.system-approve(root.data.id); }
+        }
+        if !root.data.approved && !root.data.approvable : StatusChip { y: (parent.height - self.height) / 2; label: root.data.evidence; kind: root.data.evidence-kind; }
+    }
+    if root.details-open : VerticalLayout {
+        width: root.width; height: self.preferred-height;
+        padding-left: 10px; padding-right: 10px; padding-bottom: 10px; spacing: 4px;
+        Text { text: root.data.name; font-size: 12px; font-weight: 700; color: Theme.ink; wrap: word-wrap; }
+        Text { text: root.data.location; font-size: 11px; color: Theme.text; wrap: word-wrap; }
+        if root.data.approved || root.data.evidence != root.data.note : Text { text: "Beleg: " + root.data.evidence; font-size: 11px; color: Theme.text; wrap: word-wrap; }
+        Text { text: root.data.approved ? root.data.coverage : root.data.note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        if root.data.approved && root.data.note != "" && root.data.note != root.data.coverage && root.data.note != root.data.evidence : Text { text: root.data.note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+    }
+    }
+}
+
+export component SystemPage inherits VerticalLayout {
+    min-width: 0px;
+    preferred-width: 0px;
+    property <bool> compact: Store.window-width < 1000px + 188px + 2 * Theme.page-padding;
+    spacing: Theme.gap;
+    HorizontalLayout {
+        spacing: 10px;
+        PageHeader {
+            horizontal-stretch: 1;
+            title: "System";
+            description: "Gefundene Werkzeuge, globale Bestände und KI-Benutzerkonfiguration.";
+        }
+        Text { text: Store.system-checked; max-width: 140px; font-size: 11px; color: Theme.muted; vertical-alignment: center; wrap: word-wrap; }
+        UiButton { y: (parent.height - self.height) / 2; label: "Erneut prüfen"; has-icon: true; icon: Icons.refresh; available: !Store.demo && !Store.busy; activated => { Actions.system-refresh(); } }
+    }
+    ScrollView {
+        vertical-stretch: 1;
+        horizontal-scrollbar-policy: always-off;
+        content-width: self.visible-width;
+        GridLayout {
+            spacing: Theme.gap; padding-right: 16px; padding-bottom: 12px;
+            Card {
+                col: 0; row: 0;
+                min-height: 240px;
+                horizontal-stretch: 13;
+                min-width: 0px;
+                VerticalLayout {
+                    CardTitle { title: "Werkzeuge im Suchpfad"; eyebrow: Store.system-tools.length + " Funde"; }
+                    TableHead {
+                        HorizontalLayout {
+                            padding-left: 12px; padding-right: 12px; spacing: 10px;
+                            Text { text: "Werkzeug"; width: 150px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                            Text { text: "Fundort"; horizontal-stretch: 1; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                            Text { text: "Beleg"; width: 136px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                            Rectangle { width: 12px; }
+                        }
+                    }
+                    if Store.system-tools.length == 0 : HorizontalLayout {
+                        padding-left: 14px; padding-right: 14px; padding-top: 8px; padding-bottom: 8px;
+                        Text {
+                            vertical-alignment: center;
+                            text: Store.demo ? "Im Demomodus wird das System nicht geprüft." : "Kein bekannter Befehl im lokalen Suchpfad gefunden.";
+                            font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+                        }
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        for row in Store.system-tools : tool-details-toggle := ToolLine { data: row; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 14px; padding-right: 14px; padding-top: 6px; padding-bottom: 10px;
+                        Text {
+                            text: "Nur Fundorte geprüft, nichts gestartet. Installation und Funktionsfähigkeit bleiben unbekannt.";
+                            font-size: 10.5px; color: Theme.muted; wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+            VerticalLayout {
+                col: root.compact ? 0 : 1;
+                row: root.compact ? 1 : 0;
+                horizontal-stretch: 10;
+                min-width: 0px;
+                spacing: Theme.gap;
+                Card {
+                    min-height: 180px;
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        CardTitle { title: "Globale Bestände"; eyebrow: Store.system-stores.length + " Orte"; }
+                        if Store.system-stores.length == 0 : HorizontalLayout {
+                            padding: 14px;
+                            Text { text: "Keine bekannten globalen Bestände gefunden."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                        }
+                        ListView {
+                            vertical-stretch: 1;
+                            for row in Store.system-stores : PlaceLine { data: row; }
+                        }
+                    }
+                }
+                Card {
+                    min-height: 180px;
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        CardTitle { title: "KI-Benutzerkonfiguration"; eyebrow: Store.system-ai.length + " Orte"; }
+                        if Store.system-ai.length == 0 : HorizontalLayout {
+                            padding: 14px;
+                            Text { text: "Keine bekannten KI-Konfigurationsordner gefunden."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                        }
+                        ListView {
+                            vertical-stretch: 1;
+                            for row in Store.system-ai : PlaceLine { data: row; }
+                        }
+                        HorizontalLayout {
+                            padding-left: 14px; padding-right: 14px; padding-top: 4px; padding-bottom: 10px;
+                            Text {
+                                text: "Zugangsdaten, Sitzungen und Chatverläufe werden nie gelesen.";
+                                font-size: 10.5px; color: Theme.muted; wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

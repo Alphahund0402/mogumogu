@@ -14,7 +14,7 @@ static DESCRIPTOR: Descriptor = Descriptor {
     markers: &["*.csproj", "*.fsproj", "*.vbproj", "Directory.Packages.props", "packages.config", "packages.lock.json"],
     scope: AdapterScope::Project,
     inventory: Support::Experimental,
-    updates: Support::Unsupported,
+    updates: Support::Limited,
     cleanup: Support::Unsupported,
     formats: &[
         "SDK-Projektdateien",
@@ -23,7 +23,7 @@ static DESCRIPTOR: Descriptor = Descriptor {
         "packages.lock.json v1/v2",
         "obj/project.assets.json",
     ],
-    limits: "Quellen aus NuGet.config werden nicht ausgewertet – Updatehinweise nicht unterstützt; globaler Paketordner wird nicht gelesen.",
+    limits: "Projektquellen bleiben unbekannt; Quellenhinweise nur für separat freigegebene Cache-Einträge mit belegter api.nuget.org-Quelle.",
 };
 
 const PROJECT_EXTENSIONS: &[&str] = &[".csproj", ".fsproj", ".vbproj"];
@@ -151,12 +151,23 @@ fn lock_items(file: &FoundFile<'_>) -> AdapterResult {
             if entry["type"].as_str() == Some("Project") {
                 continue;
             }
-            items.push(
-                InventoryItem::new(ItemCategory::Package, "nuget", name.as_str(), file.rel_path())
-                    .version(entry["resolved"].as_str().unwrap_or_default())
-                    .state(InstallState::Resolved)
-                    .detail(format!("{} · {framework}", entry["type"].as_str().unwrap_or("?"))),
-            );
+            let mut item = InventoryItem::new(ItemCategory::Package, "nuget", name.as_str(), file.rel_path())
+                .version(entry["resolved"].as_str().unwrap_or_default())
+                .state(InstallState::Resolved)
+                .detail(format!("{} · {framework}", entry["type"].as_str().unwrap_or("?")));
+            item.evidence.context = framework.into();
+            item.evidence.dependencies = entry["dependencies"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(name, spec)| crate::domain::PackageDependency {
+                    name: name.clone(),
+                    requirement: spec.as_str().unwrap_or("").into(),
+                    kind: "lock".into(),
+                    exact: false,
+                })
+                .collect();
+            items.push(item);
         }
     }
     Ok(items)

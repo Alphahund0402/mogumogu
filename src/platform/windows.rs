@@ -12,7 +12,7 @@
 //!   the handle itself.
 //! - Deletion uses the handle whose identity was just verified.
 use super::{DirEntryInfo, FileIdentity, HandleStat, UninstallEntry, attributes, filetime_to_unix};
-use crate::domain::ProcessIdentity;
+use crate::domain::{DriveUsage, ProcessIdentity};
 use std::ffi::{OsStr, OsString, c_void};
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -47,9 +47,9 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_ID_EXTD_DIR_INFO,
     FILE_ID_INFO, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
     FILE_STANDARD_INFO, FileBasicInfo, FileDispositionInfo, FileDispositionInfoEx, FileIdExtdDirectoryInfo,
-    FileIdExtdDirectoryRestartInfo, FileIdInfo, FileStandardInfo, FlushFileBuffers, GetFileInformationByHandle,
-    GetFileInformationByHandleEx, OPEN_EXISTING, PIPE_ACCESS_DUPLEX, ReadFile, SECURITY_IDENTIFICATION,
-    SECURITY_SQOS_PRESENT, SYNCHRONIZE, SetFileInformationByHandle, WriteFile,
+    FileIdExtdDirectoryRestartInfo, FileIdInfo, FileStandardInfo, FlushFileBuffers, GetDiskFreeSpaceExW, GetDriveTypeW,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, GetLogicalDrives, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
+    ReadFile, SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT, SYNCHRONIZE, SetFileInformationByHandle, WriteFile,
 };
 use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
 use windows_sys::Win32::System::JobObjects::{
@@ -81,6 +81,57 @@ const FILE_TRAVERSE: u32 = 0x20;
 
 fn wide(text: &OsStr) -> Vec<u16> {
     text.encode_wide().chain(std::iter::once(0)).collect()
+}
+
+/// Drive-letter metadata only. Directory contents are never opened here.
+/// Remote, optical and unknown drives are listed without probing capacity;
+/// removable media are also left untouched to avoid waking absent devices.
+pub fn logical_drives() -> io::Result<Vec<DriveUsage>> {
+    // SAFETY: GetLogicalDrives has no pointer arguments or output buffers.
+    let mask = unsafe { GetLogicalDrives() };
+    if mask == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let mut drives = Vec::new();
+    for index in 0..26_u32 {
+        if mask & (1 << index) == 0 {
+            continue;
+        }
+        let root = format!("{}:\\", char::from(b'A' + index as u8));
+        let path = wide(OsStr::new(&root));
+        // SAFETY: path is a live NUL-terminated drive root, with trailing slash.
+        let drive_type = unsafe { GetDriveTypeW(path.as_ptr()) };
+        let (kind, mut status) = match drive_type {
+            2 => ("Wechseldatenträger", "Kapazität nicht abgefragt"),
+            3 => ("Lokales Laufwerk", "Vom Betriebssystem gemeldet"),
+            4 => ("Netzlaufwerk", "Kapazität nicht abgefragt"),
+            5 => ("Optisches Laufwerk", "Kapazität nicht abgefragt"),
+            6 => ("RAM-Laufwerk", "Vom Betriebssystem gemeldet"),
+            _ => ("Unbekannter Typ", "Nicht erreichbar oder nicht unterstützt"),
+        };
+        let mut total = 0_u64;
+        let mut free = 0_u64;
+        let mut known = false;
+        if matches!(drive_type, 3 | 6) {
+            // SAFETY: path stays alive; total and free are writable u64 values.
+            // Only generated local drive roots reach the API, never a config path.
+            known = unsafe { GetDiskFreeSpaceExW(path.as_ptr(), &mut free, &mut total, ptr::null_mut()) } != 0;
+            if !known {
+                status = "Kapazität derzeit nicht verfügbar";
+            }
+        }
+        drives.push(DriveUsage {
+            label: root.clone(),
+            root,
+            kind: kind.into(),
+            total_bytes: known.then_some(total),
+            free_bytes: known.then_some(free.min(total)),
+            used_bytes: known.then_some(total.saturating_sub(free)),
+            project_bytes: None,
+            status: status.into(),
+        });
+    }
+    Ok(drives)
 }
 
 /// Long-path form for an already validated absolute drive path.
@@ -430,6 +481,98 @@ pub fn path_identity(path: &Path) -> io::Result<FileIdentity> {
 }
 
 // -------------------------------------------------------------- processes
+
+/// Starts only the sibling owner, without inheriting any caller handles.
+/// In particular a background owner must not keep captured CLI pipes open.
+pub fn spawn_owner(exe: &Path, data_dir: Option<&Path>, demo: bool) -> io::Result<()> {
+    use windows_sys::Win32::System::Threading::{
+        CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, PROCESS_INFORMATION, STARTUPINFOW,
+    };
+    let mut command = owner_command_line(exe, data_dir, demo)?;
+    command.push(0);
+    if command.len() > 32767 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Besitzeraufruf zu lang"));
+    }
+    let executable = wide(exe.as_os_str());
+    // SAFETY: STARTUPINFOW is a C output/input record; zero represents no
+    // optional desktop, title, standard handles or window-position overrides.
+    let mut startup: STARTUPINFOW = unsafe { zeroed() };
+    startup.cb = size_of::<STARTUPINFOW>() as u32;
+    // SAFETY: PROCESS_INFORMATION is a C output record; CreateProcessW fills
+    // the handles and identifiers on success. Zero initialization is valid.
+    let mut info: PROCESS_INFORMATION = unsafe { zeroed() };
+    // SAFETY: executable and command are NUL-terminated, owned UTF-16 buffers;
+    // command is writable for the duration of this call. Both structures live
+    // through the call. FALSE disables all handle inheritance; no elevation,
+    // shell, alternate user, custom environment or security descriptor is used.
+    let created = unsafe {
+        CreateProcessW(
+            executable.as_ptr(),
+            command.as_mut_ptr(),
+            ptr::null(),
+            ptr::null(),
+            0,
+            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+            ptr::null(),
+            ptr::null(),
+            &startup,
+            &mut info,
+        )
+    };
+    if created == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let _process = owned(info.hProcess)?;
+    let _thread = owned(info.hThread)?;
+    Ok(())
+}
+
+/// `"…\mogumogu.exe" --tray [--demo] [--data-dir "…"]`, without NUL. Shared by
+/// owner start and the per-user start entry, so both quote identically.
+fn owner_command_line(exe: &Path, data_dir: Option<&Path>, demo: bool) -> io::Result<Vec<u16>> {
+    if !exe.is_absolute()
+        || exe.file_name() != Some(OsStr::new("mogumogu.exe"))
+        || data_dir.is_some_and(|p| !p.is_absolute())
+    {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Absoluter Besitzerpfad erforderlich"));
+    }
+    let mut args = vec![exe.as_os_str(), OsStr::new("--tray")];
+    if demo {
+        args.push(OsStr::new("--demo"));
+    }
+    if let Some(dir) = data_dir {
+        args.extend([OsStr::new("--data-dir"), dir.as_os_str()]);
+    }
+    let mut command = Vec::new();
+    for arg in args {
+        if !command.is_empty() {
+            command.push(b' ' as u16);
+        }
+        command.extend(quote_owner_arg(arg)?);
+    }
+    Ok(command)
+}
+
+fn quote_owner_arg(arg: &OsStr) -> io::Result<Vec<u16>> {
+    let input = arg.encode_wide().collect::<Vec<_>>();
+    if input.contains(&0) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "NUL im Besitzerargument"));
+    }
+    let mut out = vec![b'"' as u16];
+    let mut slashes = 0;
+    for unit in input {
+        if unit == b'\\' as u16 {
+            slashes += 1;
+            continue;
+        }
+        out.extend(std::iter::repeat_n(b'\\' as u16, if unit == b'"' as u16 { slashes * 2 + 1 } else { slashes }));
+        out.push(unit);
+        slashes = 0;
+    }
+    out.extend(std::iter::repeat_n(b'\\' as u16, slashes * 2));
+    out.push(b'"' as u16);
+    Ok(out)
+}
 
 fn creation_time(handle: HANDLE) -> io::Result<u64> {
     let (mut created, mut exited, mut kernel, mut user) = Default::default();
@@ -912,6 +1055,116 @@ pub fn uninstall_entries(max: usize) -> io::Result<(Vec<UninstallEntry>, bool)> 
     Ok((out, false))
 }
 
+// ------------------------------------------------------- shell and system
+
+/// Only local fixed drives are inspected by the system check: network and
+/// removable media can block, wake devices or ask for credentials.
+pub fn local_fixed_path(path: &Path) -> bool {
+    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
+    use windows_sys::Win32::System::WindowsProgramming::{DRIVE_FIXED, DRIVE_RAMDISK};
+    let text = path.as_os_str().to_string_lossy();
+    let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+    let bytes = text.as_bytes();
+    if bytes.len() < 3 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' || bytes[2] != b'\\' {
+        return false;
+    }
+    let root = wide(OsStr::new(&text[..3]));
+    // SAFETY: NUL-terminated drive root such as `C:\`; the call only reads it.
+    let kind = unsafe { GetDriveTypeW(root.as_ptr()) };
+    matches!(kind, DRIVE_FIXED | DRIVE_RAMDISK)
+}
+
+const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+const RUN_VALUE: &str = "mogumogu";
+
+/// The per-user start entry named `mogumogu`, if present. Another program
+/// may have written it; callers compare it with [`autostart_command`].
+pub fn autostart_entry() -> io::Result<Option<String>> {
+    Ok(reg_open(HKEY_CURRENT_USER, RUN_KEY, 0).and_then(|key| reg_string(&key, RUN_VALUE)))
+}
+
+/// The entry this owner would register: itself, in the tray, same data.
+pub fn autostart_command(exe: &Path, data_dir: Option<&Path>, demo: bool) -> io::Result<String> {
+    Ok(String::from_utf16_lossy(&owner_command_line(exe, data_dir, demo)?))
+}
+
+/// Writes or removes the per-user start entry. Only the owner command line
+/// is ever written; no elevation, no machine-wide key, no scheduled task.
+pub fn set_autostart(exe: &Path, data_dir: Option<&Path>, demo: bool, enabled: bool) -> io::Result<()> {
+    use windows_sys::Win32::System::Registry::{KEY_SET_VALUE, REG_SZ, RegDeleteValueW, RegSetValueExW};
+    let key = reg_open(HKEY_CURRENT_USER, RUN_KEY, KEY_SET_VALUE)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Startschlüssel des Benutzers nicht erreichbar"))?;
+    let name = wide(OsStr::new(RUN_VALUE));
+    let status = if enabled {
+        let mut command = owner_command_line(exe, data_dir, demo)?;
+        command.push(0);
+        let bytes = u32::try_from(command.len() * 2)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Startbefehl zu lang"))?;
+        // SAFETY: opened key with KEY_SET_VALUE; NUL-terminated value name;
+        // `command` is a NUL-terminated UTF-16 buffer of exactly `bytes` bytes.
+        unsafe { RegSetValueExW(key.0, name.as_ptr(), 0, REG_SZ, command.as_ptr().cast(), bytes) }
+    } else {
+        // SAFETY: opened key with KEY_SET_VALUE; NUL-terminated value name.
+        match unsafe { RegDeleteValueW(key.0, name.as_ptr()) } {
+            ERROR_FILE_NOT_FOUND => 0,
+            other => other,
+        }
+    };
+    if status != 0 {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+    Ok(())
+}
+
+/// Native folder dialog owned by the foreground window. Returns the chosen
+/// file-system folder or `None` when cancelled. Nothing is read or created.
+pub fn pick_folder(title: &str) -> io::Result<Option<String>> {
+    use windows_sys::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize};
+    use windows_sys::Win32::UI::Shell::{
+        BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW, SHBrowseForFolderW, SHGetPathFromIDListW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    // SAFETY: plain COM initialisation of the calling UI thread; a positive
+    // result (S_OK or S_FALSE) is balanced by CoUninitialize below.
+    let initialized = unsafe { CoInitializeEx(ptr::null(), COINIT_APARTMENTTHREADED as u32) } >= 0;
+    let title = wide(OsStr::new(title));
+    let mut display = [0_u16; 260];
+    // SAFETY: no arguments; returns null when no window has the focus.
+    let owner = unsafe { GetForegroundWindow() };
+    let info = BROWSEINFOW {
+        hwndOwner: owner,
+        pidlRoot: ptr::null_mut(),
+        pszDisplayName: display.as_mut_ptr(),
+        lpszTitle: title.as_ptr(),
+        ulFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE,
+        lpfn: None,
+        lParam: 0,
+        iImage: 0,
+    };
+    // SAFETY: `info` and its buffers outlive this modal call; no callback.
+    let pidl = unsafe { SHBrowseForFolderW(&info) };
+    let result = if pidl.is_null() {
+        Ok(None)
+    } else {
+        let mut buffer = [0_u16; 260];
+        // SAFETY: valid ID list from the dialog; MAX_PATH-sized out buffer.
+        let ok = unsafe { SHGetPathFromIDListW(pidl, buffer.as_mut_ptr()) };
+        // SAFETY: the dialog allocated the ID list with the COM allocator.
+        unsafe { CoTaskMemFree(pidl.cast()) };
+        let end = buffer.iter().position(|u| *u == 0).unwrap_or(buffer.len());
+        if ok == 0 || end == 0 {
+            Err(io::Error::new(io::ErrorKind::InvalidInput, "Kein Dateisystemordner gewählt"))
+        } else {
+            Ok(Some(String::from_utf16_lossy(&buffer[..end])))
+        }
+    };
+    if initialized {
+        // SAFETY: balances the successful CoInitializeEx above on this thread.
+        unsafe { CoUninitialize() };
+    }
+    result
+}
+
 // ------------------------------------------------------------------- misc
 
 pub fn local_utc_offset_seconds() -> i64 {
@@ -934,4 +1187,17 @@ pub fn show_error(title: &str, message: &str) {
     // SAFETY: both buffers are NUL-terminated and alive during this
     // synchronous call; a null owner window is allowed.
     unsafe { MessageBoxW(ptr::null_mut(), text.as_ptr(), caption.as_ptr(), MB_OK | MB_ICONERROR) };
+}
+
+#[cfg(test)]
+mod owner_arguments {
+    use super::*;
+    #[test]
+    fn windows_quoting_preserves_spaces_quotes_and_final_backslashes() {
+        let quoted = quote_owner_arg(OsStr::new("a\"b\\")).unwrap();
+        assert_eq!(String::from_utf16(&quoted).unwrap(), r#""a\"b\\""#);
+        let quoted = quote_owner_arg(OsStr::new(r"C:\data folder\")).unwrap();
+        assert_eq!(String::from_utf16(&quoted).unwrap(), r#""C:\data folder\\""#);
+        assert!(quote_owner_arg(OsStr::new("bad\0arg")).is_err());
+    }
 }

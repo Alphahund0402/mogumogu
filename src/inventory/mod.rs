@@ -4,18 +4,21 @@
 //! generation. Traversal is handle-relative and bounded (see `fsread`);
 //! adapters and AI profiles only ever receive bounded text.
 mod access;
+mod discovery;
 mod measure;
 mod scanner;
+pub mod system;
 
 pub use measure::{Measurement, measure};
 
 use crate::domain::ScopeKind;
-use crate::fsread::{Budget, RootError, ScopeRoot};
+use crate::fsread::{Budget, RootError, ScanControl, ScopeRoot};
 use crate::limits::ScanLimits;
 use crate::platform::FileIdentity;
 use crate::storage::GenerationResult;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Software entries read from the registry per pass.
 const REGISTRY_MAX: usize = 5_000;
@@ -26,6 +29,8 @@ pub struct ScanRequest {
     pub path: PathBuf,
     pub identity: Option<FileIdentity>,
     pub limits: ScanLimits,
+    /// Progress and cancel requests from the dashboard, if any.
+    pub control: Option<Arc<ScanControl>>,
 }
 
 /// Why a scope could not be read at all.
@@ -56,14 +61,24 @@ pub fn scan(request: &ScanRequest) -> ScanOutcome {
             return ScanOutcome { result, failure: Some(failure) };
         }
     };
-    let mut budget = Budget::new(request.limits);
+    let mut budget = Budget::with_control(request.limits, request.control.clone());
     let root = Rc::new(root.into_handle());
     let mut result = match request.kind {
         ScopeKind::Project => scanner::scan_project(Rc::clone(&root), &mut budget),
+        ScopeKind::ProjectSearch => discovery::scan(Rc::clone(&root), &mut budget),
         ScopeKind::Scoop | ScopeKind::Chocolatey => {
             scanner::scan_system_root(request.kind, Rc::clone(&root), &mut budget)
         }
+        ScopeKind::UserAi => match system::user_ai_prefix(&request.path, &system::ProcessEnv) {
+            Some(prefix) => scanner::scan_user_ai(Rc::clone(&root), prefix, &mut budget),
+            None => {
+                let reason = "Ordner ist keinem bekannten KI-Client zugeordnet".to_string();
+                let result = GenerationResult { failed: true, errors: vec![reason.clone()], ..Default::default() };
+                return ScanOutcome { result, failure: Some(ScanFailure::Unavailable(reason)) };
+            }
+        },
         ScopeKind::Winget => unreachable!("handled above"),
+        _ => scanner::scan_global_root(request.kind, Rc::clone(&root), &mut budget),
     };
     result.entries_seen = budget.entries;
     result.files_read = budget.files;

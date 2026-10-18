@@ -26,7 +26,7 @@ Legende: ☑ geprüft · ☐ offen. Spalte „W10“ = Windows 10 Pro 22H2 (Buil
 | Moduswechsel Demo/Lokal nach Beenden | ☑ | ☐ |
 | Explorer-Neustart, Schlafmodus, Mehrmonitor | ☐ | ☐ |
 | DPI 125/150/200 % | ☐ | ☐ |
-| Tastatur: Strg+K, Alt+1…8, Tab, Enter/Leertaste, Esc im Dialog | ☑ (Alt+1…8, Esc, Fokusrahmen) | ☐ |
+| Tastatur: Strg+F/Strg+K, Strg+N, F1/F5, Alt+1…8, Tab, Enter/Leertaste, Esc im Dialog | ☐ nach Layoutänderung erneut prüfen (früher: Alt+1…8, Esc, Fokusrahmen) | ☐ |
 | Screenreader (Narrator) liest Navigation, Kennzahlen, Dialoge | ☐ | ☐ |
 | Native Screenshots statt HTML-Vorschau | ☑ | ☐ |
 
@@ -77,3 +77,68 @@ Der native Release-Build und 100 Öffnen-/Schließen-Anfragen per IPC bestanden 
 | Große Lesefreigabenliste scrollt, Ereignisliste bleibt erreichbar | ☐ | ☐ |
 | Beschäftigt-Zustand sperrt Schreibaktionen; Navigation und Dialogschließen bleiben möglich | ☐ | ☐ |
 | Geänderte Farben, Formularhöhe und Fokusrahmen bei 100–200 % DPI prüfen | ☐ | ☐ |
+
+## F. Kompaktes Fenster (17. Oktober 2026)
+
+Slint-Renders und direkt eingespeiste Slint-Tastenereignisse ergänzen diese
+Prüfpunkte. Sie ersetzen keine Bedienung des echten Windows-Fensters.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Alle acht Bereiche bei 1080 × 680 und 900 × 560 ohne Überlagerung bedienen | ☐ | ☐ |
+| Befehlsleiste und Statusleiste bleiben bei Verkleinerung erreichbar | ☐ | ☐ |
+| KI-Profile horizontal, Einstellungen und lange Planlisten vertikal scrollen | ☐ | ☐ |
+| Strg+F aus einem Eingabefeld, F5 und Alt+1…8; Dialoge sperren Hintergrundkürzel | ☐ | ☐ |
+| Nach Esc, Schließen-Schaltfläche und erfolgreichem Formular funktionieren Kürzel wieder | ☐ | ☐ |
+| Strg+N nur lokal; ungültige Formulare behalten Werte und sichtbaren Fehler | ☐ | ☐ |
+
+## G. Paketbelege und globale Bereiche (17. Oktober 2026)
+
+Automatisierte Fixtures prüfen Daten- und Leseverträge. Diese Bedienpunkte des
+echten Windows-Fensters bleiben separat abzunehmen.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Paketbestand, Adapter, Seitennavigation und lange Paketdetails bei beiden Fenstergrößen bedienen | ☐ | ☐ |
+| Suchwurzel freigeben, Kandidaten ansehen und registrieren; Inhaltsfreigabe bleibt eigener Schritt | ☐ | ☐ |
+| Globale Bereiche mit explizitem Pfad und Standardpfad freigeben; falsche Art/Pfade behalten sichtbare Fehler | ☐ | ☐ |
+| Quellen offline/nicht freigegeben, veraltete Warnungen und gleiche Namen verschiedener Versionen prüfen | ☐ | ☐ |
+| Behalten und Vormerkung lösen; Upstream-Warnung bleibt sichtbar | ☐ | ☐ |
+| Ressourcen → Erkannt: Fundstelle, Projektbezug, unbekannte Größe; keine Entfernungsaktion | ☐ | ☐ |
+
+## H. Mochi und japanische Schrift (18. Oktober 2026)
+
+Native Renders und Unicode-Tabellen prüfen Darstellung und Zeichenvorrat;
+die tatsächliche Windows-Eingabe und Darstellung bei anderem DPI bleiben hier.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Mochi in Explorer, Fenster, Taskleiste und Tray bei 100–200 % DPI sowie hellem/dunklem Systemhintergrund prüfen | ☐ | ☐ |
+| Japanische Projekt-/Paketnamen in Listen und Dialogen lesen; beide Schriftgewichte ohne Ersatzkästchen | ☐ | ☐ |
+| Japanische IME-Eingabe, Auswahl, Cursor und Kopieren in Suche/Formularen prüfen | ☐ | ☐ |
+| Wortmarke mit Narrator als mogumogu erkannt; dekoratives Maskottchen erzeugt kein zusätzliches Fokusziel | ☐ | ☐ |
+| Maus, Alt+1…8 und Projektsuche wechseln zum passenden Mochi-Ausdruck; der Bildbereich über Einstellungen bleibt stabil | ☐ | ☐ |
+| Vereinheitlichter v2-Zeichensatz: alle vier Posen bei 100–200 % DPI mit vergleichbarer Strichstärke und Größe; Ordner, Laptop und Ausdruckszeichen vollständig sichtbar | ☐ | ☐ |
+
+## I. Systembefund, Einstieg, Experimente und Tray (18. Oktober 2026)
+
+Automatisiert geprüft: Systembefund mit synthetischer Umgebung, `user-ai`-Erfassung
+entlang der Katalogmuster, Migration v3→v4, hängende Sessions, Suche, Export und
+neue Einstellungen. Native Renders (`design/screens/render.ps1`) zeigen alle zehn
+Ansichten, den Einstieg, Suche, Fortschritt und Pause bei 1080 × 680, 900 × 560
+und 150 %. Am Entwicklungsrechner (W10) lief der Systembefund in 9,7 ms. Die
+Bedienung des echten Fensters steht aus.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Systembefund auf diesem Rechner: Funde passen zu `where.exe`, keine Programmstarts (Prozessmonitor), UNC-/Netzlaufwerk im `PATH` wird übersprungen | ☐ | ☐ |
+| Persönlichen KI-Ordner freigeben und erfassen; `projects`, `todos`, Sitzungen und Zugangsdateien erscheinen nicht | ☐ | ☐ |
+| Geführter Einstieg: Ordnerdialog (`SHBrowseForFolderW`), Freigabe, Erfassung mit Fortschritt, Abbrechen; Überspringen, Nicht mehr anzeigen, in den Einstellungen wieder einschalten | ☐ | ☐ |
+| Hängende Session: Hinweis in Übersicht/Experimente, Freigabe gesperrt solange ein Prozess lebt, danach mit Begründung möglich | ☐ | ☐ |
+| Tray: Statuszeile, Hinweisanzahl, Pause 1 Std./bis morgen, Fortsetzen nach Ablauf, Einstellungen-Eintrag; Symbolvarianten bei 100–200 % DPI | ☐ | ☐ |
+| Ruhezeiten und Tageszusammenfassung: Markierung erscheint erst zur eingestellten Stunde und verschwindet nach dem Öffnen des Dashboards | ☐ | ☐ |
+| Tray-Symbol und Menü bleiben nach Explorer-Neustart erhalten | ☐ | ☐ |
+| Autostart an/aus: genau der Wert `mogumogu` unter `HKCU\…\Run`; nach Anmeldung startet nur der Tray-Besitzer | ☐ | ☐ |
+| Suche (Strg+K): Treffer aus allen Bereichen, Enter öffnet den ersten, Esc schließt | ☐ | ☐ |
+| Sicherung und Export aus den Einstellungen: Vorschau, Ordnerwahl, vorhandene Datei wird nicht überschrieben | ☐ | ☐ |
+| Stimmungsposen (Mampft, Schläft, Besorgt) bei 100–200 % DPI neben den v2-Posen vergleichen; in Fortschrittsleiste, Pausenkarte und Hinweis zum hängenden Experiment ohne sichtbare Papierkante | ☐ | ☐ |

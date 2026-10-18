@@ -50,5 +50,13 @@ fn validate(settings: &Settings) -> Result<()> {
             return Err(Error::invalid("Prüfzeiträume: 1–365 Tage."));
         }
     }
+    if settings.summary_hour > 23 {
+        return Err(Error::invalid("Zusammenfassung: Stunde 0–23."));
+    }
+    if let Some(quiet) = settings.quiet_hours
+        && (quiet.from > 23 || quiet.to > 23 || quiet.from == quiet.to)
+    {
+        return Err(Error::invalid("Ruhezeiten: zwei verschiedene Stunden 0–23."));
+    }
     Ok(())
 }

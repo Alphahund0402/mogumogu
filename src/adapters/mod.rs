@@ -4,6 +4,8 @@
 //! Inventory support grants no update or cleanup capability.
 mod cargo;
 mod chocolatey;
+pub(crate) mod commands;
+mod global;
 mod npm;
 mod nuget;
 mod pip;
@@ -11,12 +13,13 @@ mod pnpm;
 mod scoop;
 mod uv;
 mod winget;
+pub use global::inventory_global;
 
 use crate::domain::{InventoryItem, ItemCategory, SourceClass};
 use serde::Serialize;
 
 /// Version of the adapter set; part of the comparison basis of generations.
-pub const ADAPTERS_VERSION: &str = "adapters-2";
+pub const ADAPTERS_VERSION: &str = "adapters-3";
 
 /// Support level per capability (published support matrix, §8.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
@@ -196,6 +199,9 @@ pub(crate) fn classify_url(url: &str, public_hosts: &[&str]) -> (SourceClass, Op
 pub(crate) fn bounded(items: Vec<InventoryItem>) -> AdapterResult {
     if items.len() > crate::limits::ITEMS_PER_FILE {
         return Err(format!("mehr als {} Einträge in einer Datei", crate::limits::ITEMS_PER_FILE));
+    }
+    if items.iter().map(|i| i.evidence.dependencies.len()).sum::<usize>() > crate::limits::ITEMS_PER_FILE {
+        return Err(format!("mehr als {} Abhängigkeitsverweise in einer Datei", crate::limits::ITEMS_PER_FILE));
     }
     Ok(items)
 }

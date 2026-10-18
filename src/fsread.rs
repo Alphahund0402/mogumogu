@@ -9,7 +9,68 @@ use crate::platform::{DirEntryInfo, DirHandle, FileIdentity};
 use std::ffi::OsStr;
 use std::io::{self, Read};
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
+
+/// Limit reason of a pass that a person stopped.
+pub const CANCELLED: &str = "Vom Benutzer abgebrochen";
+
+/// Shared by the owner and its dashboard: progress counters and a cancel
+/// request that a running pass honours at its next entry. A cancelled pass
+/// ends partial; the last complete state stays published.
+#[derive(Debug, Default)]
+pub struct ScanControl {
+    cancel: AtomicBool,
+    running: AtomicBool,
+    entries: AtomicU64,
+    done: AtomicUsize,
+    total: AtomicUsize,
+}
+
+/// One consistent-enough reading of [`ScanControl`] for display.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ScanProgress {
+    pub running: bool,
+    pub cancelling: bool,
+    pub entries: u64,
+    pub done: usize,
+    pub total: usize,
+}
+
+impl ScanControl {
+    pub fn begin(&self, total: usize) {
+        self.cancel.store(false, Ordering::Relaxed);
+        self.entries.store(0, Ordering::Relaxed);
+        self.done.store(0, Ordering::Relaxed);
+        self.total.store(total, Ordering::Relaxed);
+        self.running.store(true, Ordering::Release);
+    }
+    pub fn scope_done(&self) {
+        self.done.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn finish(&self) {
+        self.running.store(false, Ordering::Release);
+    }
+    /// Only a running pass can be cancelled; a later pass starts fresh.
+    pub fn cancel(&self) {
+        if self.running.load(Ordering::Acquire) {
+            self.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+    pub fn cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
+    pub fn progress(&self) -> ScanProgress {
+        ScanProgress {
+            running: self.running.load(Ordering::Acquire),
+            cancelling: self.cancelled(),
+            entries: self.entries.load(Ordering::Relaxed),
+            done: self.done.load(Ordering::Relaxed),
+            total: self.total.load(Ordering::Relaxed),
+        }
+    }
+}
 
 /// Why an approved root cannot be used right now.
 #[derive(Debug)]
@@ -73,6 +134,7 @@ impl ScopeRoot {
 pub struct Budget {
     limits: ScanLimits,
     started: Instant,
+    control: Option<Arc<ScanControl>>,
     pub entries: u64,
     pub bytes: u64,
     pub files: u64,
@@ -81,7 +143,12 @@ pub struct Budget {
 
 impl Budget {
     pub fn new(limits: ScanLimits) -> Self {
-        Self { limits, started: Instant::now(), entries: 0, bytes: 0, files: 0, limit_reason: None }
+        Self { limits, started: Instant::now(), control: None, entries: 0, bytes: 0, files: 0, limit_reason: None }
+    }
+
+    /// A budget that reports progress and stops on a cancel request.
+    pub fn with_control(limits: ScanLimits, control: Option<Arc<ScanControl>>) -> Self {
+        Self { control, ..Self::new(limits) }
     }
 
     pub fn limits(&self) -> ScanLimits {
@@ -101,6 +168,12 @@ impl Budget {
             return false;
         }
         self.entries += 1;
+        if let Some(control) = &self.control {
+            control.entries.fetch_add(1, Ordering::Relaxed);
+            if control.cancelled() {
+                return self.stop(CANCELLED);
+            }
+        }
         if self.entries > self.limits.max_entries {
             return self.stop("Eintragslimit erreicht");
         }

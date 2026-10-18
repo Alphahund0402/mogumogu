@@ -48,20 +48,23 @@ pub struct PublishReport {
 }
 
 const ITEM_COLUMNS: &str =
-    "category, ecosystem, name, version, install_state, source, source_host, rel_path, detail, bytes";
+    "category, ecosystem, name, version, install_state, source, source_host, rel_path, detail, bytes, evidence";
 
-fn map_item(row: &Row<'_>) -> rusqlite::Result<InventoryItem> {
+fn map_item(row: &Row<'_>, offset: usize) -> rusqlite::Result<InventoryItem> {
     Ok(InventoryItem {
-        category: row.get(0)?,
-        ecosystem: row.get(1)?,
-        name: row.get(2)?,
-        version: row.get(3)?,
-        install_state: row.get(4)?,
-        source: row.get(5)?,
-        source_host: row.get(6)?,
-        rel_path: row.get(7)?,
-        detail: row.get(8)?,
-        bytes: row.get(9)?,
+        category: row.get(offset)?,
+        ecosystem: row.get(offset + 1)?,
+        name: row.get(offset + 2)?,
+        version: row.get(offset + 3)?,
+        install_state: row.get(offset + 4)?,
+        source: row.get(offset + 5)?,
+        source_host: row.get(offset + 6)?,
+        rel_path: row.get(offset + 7)?,
+        detail: row.get(offset + 8)?,
+        bytes: row.get(offset + 9)?,
+        evidence: serde_json::from_str(&row.get::<_, String>(offset + 10)?).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(offset + 10, rusqlite::types::Type::Text, Box::new(error))
+        })?,
     })
 }
 
@@ -145,61 +148,137 @@ impl Repository {
     }
 
     pub fn published_items(&mut self, scope_id: i64) -> Result<Vec<InventoryItem>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(&format!(
+        self.query(
+            &format!(
                 "SELECT {ITEM_COLUMNS} FROM inventory_items WHERE generation_id =
                    (SELECT id FROM generations WHERE scope_id = ?1 AND state = 'complete' ORDER BY id DESC LIMIT 1)
                  ORDER BY item_key"
-            ))?;
-            let rows = statement.query_map([scope_id], map_item)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+            ),
+            [scope_id],
+            |r| map_item(r, 0),
+        )
+    }
+
+    /// Filename-only discoveries for a bounded dashboard page. Package and
+    /// AI rows are filtered in SQLite rather than materialized and discarded.
+    pub fn published_discoveries(&mut self, scope_id: i64, limit: usize) -> Result<Vec<InventoryItem>> {
+        self.query(
+            &format!(
+                "SELECT {ITEM_COLUMNS} FROM inventory_items WHERE generation_id =
+                   (SELECT id FROM generations WHERE scope_id = ?1 AND state = 'complete' ORDER BY id DESC LIMIT 1)
+                   AND ecosystem = 'discovery' ORDER BY item_key LIMIT ?2"
+            ),
+            params![scope_id, limit.min(limits::UI_PAGE as usize) as i64],
+            |row| map_item(row, 0),
+        )
+    }
+
+    /// Exact published discovery for metadata-only registration/adoption.
+    pub fn published_discovery(&mut self, scope_id: i64, rel: &str) -> Result<Option<InventoryItem>> {
+        Ok(self
+            .query(
+                &format!(
+                    "SELECT {ITEM_COLUMNS} FROM inventory_items WHERE generation_id =
+                       (SELECT id FROM generations WHERE scope_id = ?1 AND state = 'complete' ORDER BY id DESC LIMIT 1)
+                       AND ecosystem = 'discovery' AND rel_path = ?2 ORDER BY item_key LIMIT 1"
+                ),
+                params![scope_id, rel],
+                |row| map_item(row, 0),
+            )?
+            .into_iter()
+            .next())
+    }
+
+    /// Search all published development metadata, independently of the
+    /// dashboard page cap, without loading unrelated package or AI rows.
+    pub fn search_discoveries(&mut self, needle: &str, limit: usize) -> Result<Vec<(i64, InventoryItem)>> {
+        let pattern = format!("%{}%", needle.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+        self.query(
+            &format!(
+                "SELECT s.id, {} FROM scopes s
+                 CROSS JOIN generations g ON g.scope_id = s.id
+                 CROSS JOIN inventory_items i ON i.generation_id = g.id
+                 WHERE g.state = 'complete' AND s.status = 'approved' AND s.kind = 'project'
+                   AND s.profile IN ('', 'projects') AND s.realm = ''
+                   AND i.ecosystem = 'discovery'
+                   AND (lower(i.name) LIKE ?1 ESCAPE '\\' OR lower(i.rel_path) LIKE ?1 ESCAPE '\\')
+                 ORDER BY s.id, i.item_key LIMIT ?2",
+                ITEM_COLUMNS.split(", ").map(|c| format!("i.{c}")).collect::<Vec<_>>().join(", ")
+            ),
+            params![pattern, limit.min(limits::UI_PAGE as usize) as i64],
+            |row| Ok((row.get(0)?, map_item(row, 1)?)),
+        )
+    }
+
+    /// One published instruction/skill candidate for an on-demand content view.
+    /// Raw content is never stored here; the caller still checks catalog and
+    /// approval identity before opening the file.
+    pub fn published_ai_artifact(&mut self, scope_id: i64, rel_path: &str) -> Result<Option<InventoryItem>> {
+        Ok(self
+            .query(
+                &format!(
+                    "SELECT {ITEM_COLUMNS} FROM inventory_items WHERE generation_id =
+                       (SELECT id FROM generations WHERE scope_id = ?1 AND state = 'complete' ORDER BY id DESC LIMIT 1)
+                       AND category = ?3 AND rel_path = ?2 ORDER BY item_key LIMIT 1"
+                ),
+                params![scope_id, rel_path, ItemCategory::AiArtifact],
+                |row| map_item(row, 0),
+            )?
+            .into_iter()
+            .next())
     }
 
     /// Published items of all approved scopes, optionally by category.
     pub fn published_items_all(&mut self, category: Option<ItemCategory>, limit: i64) -> Result<Vec<PublishedItem>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(&format!(
+        self.query(
+            &format!(
                 "SELECT s.id, s.project_id, {} FROM inventory_items i
                  JOIN generations g ON g.id = i.generation_id JOIN scopes s ON s.id = g.scope_id
                  WHERE g.state = 'complete' AND s.status = 'approved' AND (?1 IS NULL OR i.category = ?1)
                  ORDER BY s.id, i.item_key LIMIT ?2",
                 ITEM_COLUMNS.split(", ").map(|c| format!("i.{c}")).collect::<Vec<_>>().join(", ")
-            ))?;
-            let rows = statement.query_map(params![category, limit], |r| {
-                Ok(PublishedItem {
-                    scope_id: r.get(0)?,
-                    project_id: r.get(1)?,
-                    item: InventoryItem {
-                        category: r.get(2)?,
-                        ecosystem: r.get(3)?,
-                        name: r.get(4)?,
-                        version: r.get(5)?,
-                        install_state: r.get(6)?,
-                        source: r.get(7)?,
-                        source_host: r.get(8)?,
-                        rel_path: r.get(9)?,
-                        detail: r.get(10)?,
-                        bytes: r.get(11)?,
-                    },
-                })
-            })?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+            ),
+            params![category, limit],
+            |r| Ok(PublishedItem { scope_id: r.get(0)?, project_id: r.get(1)?, item: map_item(r, 2)? }),
+        )
     }
 
+    /// Package names of the published inventory containing `needle`
+    /// (lower case), with their number of versions. Declarations are left out
+    /// like in the package review; the search never reads files.
+    pub fn search_packages(&mut self, needle: &str, limit: usize) -> Result<Vec<(String, String, i64)>> {
+        let pattern = format!("%{}%", needle.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+        self.query(
+            "SELECT i.ecosystem, i.name, COUNT(DISTINCT IFNULL(i.version, ''))
+             FROM scopes s CROSS JOIN generations g ON g.scope_id = s.id
+                  CROSS JOIN inventory_items i ON i.generation_id = g.id
+             WHERE g.state = 'complete' AND s.status = 'approved'
+               AND (i.category = 'package' OR (i.category = 'cache' AND i.ecosystem = 'nuget'))
+               AND IFNULL(i.install_state, '') <> 'declared'
+               AND lower(i.name) LIKE ?1 ESCAPE '\\'
+             GROUP BY i.ecosystem, i.name ORDER BY i.name LIMIT ?2",
+            params![pattern, limit as i64],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+    }
+
+    /// `CROSS JOIN` keeps the loop on published generations; otherwise SQLite
+    /// walks the package index over every kept generation.
     pub fn ecosystem_counts(&mut self) -> Result<Vec<EcosystemCount>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(
-                "SELECT i.ecosystem,
+        self.query(
+            "SELECT i.ecosystem,
                     SUM(i.install_state = 'declared'), SUM(i.install_state = 'resolved'), SUM(i.install_state = 'installed'),
-                    SUM(EXISTS(SELECT 1 FROM update_checks u WHERE u.ecosystem = i.ecosystem AND u.name = i.name
+                    SUM(EXISTS(SELECT 1 FROM update_checks u WHERE u.ecosystem = CASE i.ecosystem
+                                 WHEN 'pip' THEN 'python' WHEN 'uv' THEN 'python' WHEN 'pnpm' THEN 'npm' ELSE i.ecosystem END
+                               AND u.name = lower(i.name) AND u.source = i.source
+                               AND u.source_host = COALESCE(i.source_host, '') AND u.installed_version = i.version
                                AND u.status = 'update_available'))
-                 FROM inventory_items i JOIN generations g ON g.id = i.generation_id JOIN scopes s ON s.id = g.scope_id
+                 FROM scopes s CROSS JOIN generations g ON g.scope_id = s.id
+                      CROSS JOIN inventory_items i ON i.generation_id = g.id
                  WHERE g.state = 'complete' AND s.status = 'approved' AND i.category IN ('package', 'software')
                  GROUP BY i.ecosystem ORDER BY i.ecosystem",
-            )?;
-            let rows = statement.query_map([], |r| {
+            [],
+            |r| {
                 Ok(EcosystemCount {
                     ecosystem: r.get(0)?,
                     declared: r.get(1)?,
@@ -207,17 +286,15 @@ impl Repository {
                     installed: r.get(3)?,
                     updates_available: r.get(4)?,
                 })
-            })?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+            },
+        )
     }
 
     pub fn inventory_events(&mut self, limit: i64) -> Result<Vec<InventoryEvent>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(
-                "SELECT id, scope_id, kind, summary, created_at FROM inventory_events ORDER BY id DESC LIMIT ?1",
-            )?;
-            let rows = statement.query_map([limit], |r| {
+        self.query(
+            "SELECT id, scope_id, kind, summary, created_at FROM inventory_events ORDER BY id DESC LIMIT ?1",
+            [limit],
+            |r| {
                 Ok(InventoryEvent {
                     id: r.get(0)?,
                     scope_id: r.get(1)?,
@@ -225,17 +302,16 @@ impl Repository {
                     summary: r.get(3)?,
                     created_at: r.get(4)?,
                 })
-            })?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+            },
+        )
     }
 }
 
 fn insert_items(tx: &Transaction<'_>, generation_id: i64, items: &[InventoryItem]) -> Result<usize> {
     let mut statement = tx.prepare(
         "INSERT OR IGNORE INTO inventory_items(generation_id, item_key, category, ecosystem, name, version,
-            install_state, source, source_host, rel_path, detail, bytes)
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            install_state, source, source_host, rel_path, detail, bytes, evidence)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
     )?;
     let mut inserted = 0;
     for item in items.iter().map(InventoryItem::sanitized) {
@@ -251,14 +327,20 @@ fn insert_items(tx: &Transaction<'_>, generation_id: i64, items: &[InventoryItem
             item.source_host,
             item.rel_path,
             item.detail,
-            item.bytes
+            item.bytes,
+            serde_json::to_string(&item.evidence)?
         ])?;
     }
     Ok(inserted)
 }
 
 fn keyed(tx: &Transaction<'_>, generation_id: i64) -> Result<HashMap<String, (String, Option<String>)>> {
-    let mut statement = tx.prepare("SELECT item_key, name, version FROM inventory_items WHERE generation_id = ?1")?;
+    let mut statement = tx.prepare(
+        "SELECT item_key, name,
+                CASE WHEN ecosystem = 'discovery' THEN 'metadata:' || IFNULL(bytes, -1) || ':' || evidence
+                     ELSE version END
+         FROM inventory_items WHERE generation_id = ?1",
+    )?;
     let rows = statement.query_map([generation_id], |r| Ok((r.get::<_, String>(0)?, (r.get(1)?, r.get(2)?))))?;
     Ok(rows.collect::<std::result::Result<HashMap<_, _>, _>>()?)
 }

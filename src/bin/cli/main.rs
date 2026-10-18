@@ -5,6 +5,7 @@ mod commands;
 mod output;
 
 use commands::{Action, HELP, View};
+use mogumogu::clock::Clock;
 use mogumogu::config::Config;
 use mogumogu::ipc::Client;
 use mogumogu::service::Request;
@@ -53,15 +54,7 @@ fn ensure_owner(client: &Client, global: &Global) -> Result<()> {
         std::env::current_exe()?.parent().map(|dir| dir.join("mogumogu.exe")).filter(|p| p.is_file()).ok_or_else(
             || Error::unsupported("mogumogu.exe wurde neben mogumogu-cli.exe nicht gefunden; bitte zuerst starten."),
         )?;
-    let mut command = std::process::Command::new(exe);
-    command.arg("--tray");
-    if global.demo {
-        command.arg("--demo");
-    }
-    if let Some(dir) = &global.data_dir {
-        command.arg("--data-dir").arg(dir);
-    }
-    command.spawn()?;
+    mogumogu::platform::spawn_owner(&exe, global.data_dir.as_deref(), global.demo)?;
     let deadline = Instant::now() + Duration::from_secs(15);
     while Instant::now() < deadline {
         if client.owner_running() {
@@ -98,7 +91,7 @@ fn execute(global: &Global, action: Action) -> Result<(View, serde_json::Value)>
         Action::SettingsSet { key, value } => {
             ensure_owner(&client, global)?;
             let mut settings = serde_json::from_value(client.call(Request::GetSettings)?)?;
-            commands::apply_setting(&mut settings, &key, &value)?;
+            commands::apply_setting(&mut settings, &key, &value, mogumogu::clock::SystemClock.now())?;
             Ok((View::Json, client.call(Request::SaveSettings { settings })?))
         }
         Action::Call(request, view) => {

@@ -6,8 +6,12 @@ use rusqlite::{Connection, TransactionBehavior};
 use std::path::Path;
 use std::time::Duration;
 
-const MIGRATIONS: &[(i64, &str)] =
-    &[(1, include_str!("../../migrations/001_initial.sql")), (2, include_str!("../../migrations/002_inventory.sql"))];
+const MIGRATIONS: &[(i64, &str)] = &[
+    (1, include_str!("../../migrations/001_initial.sql")),
+    (2, include_str!("../../migrations/002_inventory.sql")),
+    (3, include_str!("../../migrations/003_package_evidence.sql")),
+    (4, include_str!("../../migrations/004_user_scopes.sql")),
+];
 
 pub const SCHEMA_VERSION: i64 = MIGRATIONS[MIGRATIONS.len() - 1].0;
 

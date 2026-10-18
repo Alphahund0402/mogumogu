@@ -1,0 +1,44 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { FilterChip, PillField, RowCard, UiButton } from "../components.slint";
+
+export component DiscoveryFilters inherits VerticalLayout {
+    spacing: 8px;
+    FlexboxLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Alle"; selected: Store.candidate-filter == 0; activated => { Store.candidate-filter = 0; Actions.filter-candidates(); } }
+        FilterChip { label: "Ohne Zuordnung"; selected: Store.candidate-filter == 1; activated => { Store.candidate-filter = 1; Actions.filter-candidates(); } }
+        FilterChip { label: "Experimente & Skripte"; selected: Store.candidate-filter == 2; activated => { Store.candidate-filter = 2; Actions.filter-candidates(); } }
+        FilterChip { label: "Umgebungen & Ausgaben"; selected: Store.candidate-filter == 3; activated => { Store.candidate-filter = 3; Actions.filter-candidates(); } }
+        FilterChip { label: "Testdaten & Datenbanken"; selected: Store.candidate-filter == 4; activated => { Store.candidate-filter = 4; Actions.filter-candidates(); } }
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        PillField { horizontal-stretch: 1; text <=> Store.candidate-search; placeholder: "Name, Pfad oder Beleg"; label: "Funde filtern"; edited => { Actions.filter-candidates(); } }
+        Text { text: Store.candidates.length + " angezeigt"; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; }
+        if Store.candidate-search != "" || Store.candidate-filter != 0 : UiButton { small: true; label: "Zurücksetzen"; available: true; activated => { Store.candidate-search = ""; Store.candidate-filter = 0; Actions.filter-candidates(); } }
+    }
+}
+
+export component DiscoveryList inherits VerticalLayout {
+    vertical-stretch: 1;
+    if Store.candidates.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+        Text { text: Store.candidate-search != "" || Store.candidate-filter != 0 ? "Keine Funde passen zum Filter." : "Noch keine Entwicklungsdateien gefunden."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: Store.candidate-search != "" || Store.candidate-filter != 0 ? "Passe die Suche an oder setze die Filter zurück." : "Eine Suchwurzel freigeben und erfassen. Erkannt werden Namen und Metadaten; die Nutzung bleibt ungeprüft."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+        if Store.candidate-search == "" && Store.candidate-filter == 0 : HorizontalLayout {
+            alignment: center;
+            UiButton { small: true; label: "Suchwurzel freigeben"; available: !Store.demo && !Store.busy; activated => { Actions.approve-scope("projects"); } }
+        }
+    }
+    if Store.candidates.length > 0 : ListView {
+        vertical-stretch: 1;
+        for candidate in Store.candidates : RowCard {
+            icon: Icons.search; title: candidate.path; subtitle: candidate.evidence;
+            pill: candidate.status; pill-kind: "protected";
+            selection-kind: "candidate"; selection-key: "" + candidate.index;
+            activated => { Actions.open-candidate(candidate.index); }
+        }
+    }
+}

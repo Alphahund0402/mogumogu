@@ -1,174 +1,139 @@
-import { ListView } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
-import { Store, Actions } from "../store.slint";
-import { Activatable, Card, CardTitle, Icon, UiButton, FilterChip, QuickAction, Donut, Legend, ProjectTable } from "../components.slint";
+import { Store, Actions, AttentionCard } from "../store.slint";
+import { Card, CardTitle, Icon, UiButton, FilterChip, Legend, SegmentBar, StatusChip, ProjectTable, PageHeader } from "../components.slint";
 
-component ActivityCard inherits Card {
+// One trigger with its count and the next step; never a verdict.
+component AttentionTile inherits Card {
+    in property <AttentionCard> data;
+    min-width: 240px;
+    preferred-width: 260px;
+    horizontal-stretch: 1;
     VerticalLayout {
-        CardTitle { title: "Aktivität"; eyebrow: "LETZTE EINTRÄGE"; }
+        padding: 12px; padding-left: 14px; padding-right: 14px; spacing: 4px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: root.data.title; font-size: 12.5px; font-weight: 700; color: Theme.ink; wrap: word-wrap; horizontal-stretch: 1; }
+            Text { text: root.data.count; font-size: 20px; font-weight: 700; color: Theme.ink; vertical-alignment: center; }
+        }
+        Text { text: root.data.detail; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        FlexboxLayout {
+            alignment: start; padding-top: 3px; spacing: 6px;
+            StatusChip { label: root.data.label; kind: root.data.kind; }
+            UiButton { small: true; label: root.data.action; available: true; activated => { Store.page = root.data.page; } }
+        }
+    }
+}
+
+component CalmTile inherits Card {
+    horizontal-stretch: 1;
+    HorizontalLayout {
+        padding: 14px; spacing: 12px;
+        Icon { source: Icons.check; width: 20px; height: 20px; y: (parent.height - self.height) / 2; tone: Theme.ok-ink; }
         VerticalLayout {
-            padding-left: 16px; padding-right: 16px; padding-top: 6px; spacing: 0px; alignment: start;
-            for event[index] in Store.events : Rectangle {
-                height: index < 4 ? 52px : 0px;
-                visible: index < 4;
-                HorizontalLayout {
-                    spacing: 11px; padding-top: 8px; padding-bottom: 8px;
-                    Rectangle {
-                        width: 30px; height: 30px; border-radius: 9px;
-                        background: event.kind == "session" || event.kind == "cleanup" ? #fff3df : #eaf4fc;
-                        Icon {
-                            width: 15px; height: 15px;
-                            source: event.kind == "session" || event.kind == "cleanup" ? Icons.clock : Icons.activity;
-                            tone: event.kind == "session" || event.kind == "cleanup" ? #bc8a3f : Theme.blue;
-                        }
-                    }
-                    VerticalLayout {
-                        spacing: 3px; horizontal-stretch: 1;
-                        Text { text: event.title; font-size: 10px; color: Theme.ink; overflow: elide; }
-                        Text { text: event.detail + (event.time != "" ? " · " + event.time : ""); font-size: 9px; color: Theme.muted; overflow: elide; }
-                    }
-                }
-                Rectangle { y: parent.height - 1px; height: 1px; background: #f0f3f7; visible: index < 3; }
-            }
-            if Store.events.length == 0 : Text {
-                text: "Noch keine Ereignisse. Starte mit einer Projektregistrierung.";
-                wrap: word-wrap; font-size: 11px; color: Theme.muted;
-            }
+            alignment: center; spacing: 2px; horizontal-stretch: 1;
+            Text { text: Store.project-count == "0" ? "Noch nichts zu prüfen." : "Gerade braucht nichts deine Aufmerksamkeit."; font-size: 13px; font-weight: 700; color: Theme.ink; wrap: word-wrap; }
+            Text { text: "Keine offenen Prüfhinweise oder hängenden Sessions. Ungeklärte Nutzung bleibt unbekannt."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
         }
     }
 }
 
-component StorageCard inherits Card {
+component ProjectsPane inherits Card {
     VerticalLayout {
-        CardTitle { title: "Speicherüberblick"; }
-        HorizontalLayout {
-            padding-left: 18px; height: 16px;
-            Text { text: Store.storage-subtitle; font-size: 8px; color: Theme.muted; }
-        }
-        HorizontalLayout {
-            padding-left: 12px; padding-right: 16px; spacing: 14px; vertical-stretch: 1;
-            Donut { segments: Store.donut; value: Store.donut-value; caption: Store.donut-caption; y: (parent.height - self.height) / 2; }
-            Legend { rows: Store.legend; horizontal-stretch: 1; }
-        }
-        Rectangle {
-            height: 44px;
-            note := Activatable {
-                x: 16px; y: 2px; width: parent.width - 32px; height: 32px; border-radius: 7px;
-                background: self.hovered ? #e2f4ec : Theme.green-soft;
-                label: Store.review-count + " Ressourcen prüfen · nichts wird gelöscht";
-                activated => { Store.page = 5; }
-                HorizontalLayout {
-                    padding-left: 10px; spacing: 8px;
-                    Icon { source: Icons.leaf; width: 15px; height: 15px; y: (parent.height - self.height) / 2; tone: #21856d; }
-                    Text { text: note.label; font-size: 9px; color: #21856d; vertical-alignment: center; }
-                }
-            }
-        }
-    }
-}
-
-component QuickCard inherits Card {
-    VerticalLayout {
-        CardTitle { title: "Schnellaktionen"; }
-        VerticalLayout {
-            padding: 14px; padding-top: 12px; spacing: 7px;
-            QuickAction {
-                label: Store.demo ? "Ansicht aktualisieren" : "Freigaben erfassen";
-                subtitle: Store.demo ? "Demodaten neu laden · kein Dateiscan" : "Statisch lesen · keine Programme";
-                icon: Icons.refresh;
-                activated => { if Store.demo { Actions.refresh(); } else { Actions.scan-all(); } }
-            }
-            QuickAction { label: "Projekt registrieren"; subtitle: "Name und Pfad hinterlegen"; icon: Icons.plus; activated => { Actions.new-project(); } }
-            QuickAction { label: "Prüfliste öffnen"; subtitle: "Herkunft und Schutz verstehen"; icon: Icons.leaf; activated => { Store.page = 5; } }
-            QuickAction { label: "CLI-Befehle anzeigen"; subtitle: "Für Skripte und Integrationen"; icon: Icons.command; activated => { Actions.show-cli(); } }
-        }
-    }
-}
-
-component ProjectsCard inherits Card {
-    VerticalLayout {
-        HorizontalLayout {
-            padding-left: 17px; padding-right: 17px; padding-top: 14px; height: 46px;
-            Text { text: "Deine Projekte"; font-size: 14px; font-weight: 700; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
-            UiButton { label: "Projekt"; primary: true; has-icon: true; icon: Icons.plus; activated => { Actions.new-project(); } }
-        }
-        HorizontalLayout {
-            padding-left: 17px; padding-right: 17px; padding-top: 10px; padding-bottom: 8px; spacing: 5px; alignment: start;
+        spacing: 2px;
+        FlexboxLayout {
+            padding-left: 14px; padding-right: 10px; padding-top: 8px; padding-bottom: 4px; spacing: 4px;
+            alignment: start;
+            Text { text: "Projekte"; font-size: 13.5px; font-weight: 700; color: Theme.ink; vertical-alignment: center; }
             FilterChip { label: "Alle"; count: Store.count-all; selected: Store.filter == 0; activated => { Store.filter = 0; Actions.filter-projects(); } }
             FilterChip { label: "Belegt"; count: Store.count-observed; selected: Store.filter == 1; activated => { Store.filter = 1; Actions.filter-projects(); } }
             FilterChip { label: "Prüfen"; count: Store.count-review; selected: Store.filter == 2; activated => { Store.filter = 2; Actions.filter-projects(); } }
-            Rectangle { horizontal-stretch: 1; }
-            Text { text: "Zeile öffnen für Herkunft & Schutz"; font-size: 8px; color: Theme.muted; vertical-alignment: center; }
+            FilterChip { label: "Unbekannt"; count: Store.count-unknown; selected: Store.filter == 3; activated => { Store.filter = 3; Actions.filter-projects(); } }
         }
-        HorizontalLayout {
-            padding-left: 12px; padding-right: 12px; vertical-stretch: 1;
-            ProjectTable { rows: Store.projects; selected(id) => { Actions.open-project(id); } }
-        }
-        Rectangle { height: 10px; }
+        ProjectTable { rows: Store.projects; compact: true; vertical-stretch: 1; selected(id) => { Actions.open-project(id); } }
     }
 }
 
-component AiCard inherits Card {
+export component OverviewPage inherits ScrollView {
+    min-width: 0px;
+    preferred-width: 0px;
+    content-width: self.visible-width;
+    property <bool> compact: Store.window-width < 1012px;
+    property <bool> two-tiles: Store.window-width < 1200px;
+    property <length> content-size: Store.window-width - 232px;
     VerticalLayout {
-        CardTitle { title: "KI-Konfiguration"; }
-        HorizontalLayout {
-            padding-left: 17px; padding-right: 17px;
-            VerticalLayout {
-                spacing: 6px;
-                Text { text: "STATISCH · GESCHÜTZT"; font-size: 7px; letter-spacing: 0.8px; color: Theme.muted; height: 18px; }
-                if Store.ai.length == 0 : Text {
-                    text: Store.demo ? "" : "Noch keine KI-Konfiguration erfasst. Lesefreigabe erteilen und erfassen.";
-                    wrap: word-wrap; font-size: 11px; color: Theme.muted;
+    padding-right: 16px; padding-bottom: 12px;
+    spacing: Theme.gap;
+    header := HorizontalLayout {
+        spacing: 12px;
+        PageHeader {
+            horizontal-stretch: 1;
+            title: "Übersicht";
+            description: "Offene Hinweise, Projekte und Speicher. Hinweise sind keine Löschfreigabe.";
+        }
+        Text { text: Store.last-scan; max-width: 180px; font-size: 11px; color: Theme.muted; vertical-alignment: bottom; wrap: word-wrap; }
+    }
+    attention := GridLayout {
+        spacing: Theme.gap;
+        if Store.attention.length == 0 : CalmTile { row: 0; col: 0; }
+        // The service exposes at most three priority cards. Explicit grid
+        // rows make wrapped text contribute its full height to the page.
+        if Store.attention.length > 0 : AttentionTile {
+            row: 0; col: 0; data: Store.attention[0];
+            width: root.two-tiles ? (root.content-size - Theme.gap) / 2 : (root.content-size - 2 * Theme.gap) / 3;
+        }
+        if Store.attention.length > 1 : AttentionTile {
+            row: 0; col: 1; data: Store.attention[1];
+            width: root.two-tiles ? (root.content-size - Theme.gap) / 2 : (root.content-size - 2 * Theme.gap) / 3;
+        }
+        if Store.attention.length > 2 : AttentionTile {
+            row: root.two-tiles ? 1 : 0; col: root.two-tiles ? 0 : 2;
+            colspan: root.two-tiles ? 2 : 1; data: Store.attention[2];
+            width: root.two-tiles ? root.content-size : (root.content-size - 2 * Theme.gap) / 3;
+        }
+    }
+    GridLayout {
+        spacing: Theme.gap;
+        ProjectsPane {
+            row: 0; col: 0;
+            horizontal-stretch: 1; min-width: 0px;
+            min-height: 260px;
+            preferred-height: 320px;
+        }
+        GridLayout {
+            row: root.compact ? 1 : 0; col: root.compact ? 0 : 1;
+            width: root.compact ? Store.window-width - 232px : 244px;
+            spacing: Theme.gap;
+            Card {
+                row: 0; col: 0;
+                width: root.compact ? (root.content-size - Theme.gap) / 2 : 244px;
+                VerticalLayout {
+                    CardTitle { title: "Abdeckung"; eyebrow: Store.coverage-caption; }
+                    VerticalLayout {
+                        padding-left: 14px; padding-right: 14px; padding-bottom: 12px; spacing: 8px;
+                        SegmentBar { rows: Store.coverage-rows; }
+                        Legend { rows: Store.coverage-rows; }
+                    }
                 }
             }
-        }
-        ListView {
-            vertical-stretch: 1;
-            for row[index] in Store.ai : ai-line := Activatable {
-                height: 46px;
-                border-radius: 6px;
-                selection-kind: "ai";
-                selection-key: row.path + "|" + row.client + "|" + row.kind;
-                label: row.client + ", " + row.detail;
-                activated => { Actions.open-ai(row.index); }
-                HorizontalLayout {
-                    padding-left: 15px; padding-right: 15px; spacing: 10px;
-                    Rectangle {
-                        width: 28px; height: 28px; y: (parent.height - self.height) / 2; border-radius: 7px;
-                        border-width: 1px;
-                        border-color: index == 0 ? #f4e5db : #e7ecf5;
-                        background: index == 0 ? #f9ede7 : index == 1 ? #e7efff : #eff2fa;
-                        Text { text: row.letter; font-size: 12px; font-weight: 650; color: index == 0 ? #9b6a4c : index == 1 ? #3479de : #5c70a0; }
-                    }
+            Card {
+                row: root.compact ? 0 : 1; col: root.compact ? 1 : 0;
+                width: root.compact ? (root.content-size - Theme.gap) / 2 : 244px;
+                VerticalLayout {
+                    CardTitle { title: "Speicher"; eyebrow: Store.donut-value; }
                     VerticalLayout {
-                        alignment: center; spacing: 2px; horizontal-stretch: 1;
-                        Text { text: row.client; font-size: 10px; font-weight: ai-line.selected ? 650 : 500; color: ai-line.selected ? Theme.selected-ink : Theme.ink; overflow: elide; }
-                        Text { text: row.detail; font-size: 8px; color: Theme.muted; overflow: elide; }
+                        padding-left: 14px; padding-right: 14px; padding-bottom: 12px; spacing: 8px; alignment: start;
+                        SegmentBar { rows: Store.legend; }
+                        Legend { rows: Store.legend; }
+                        Text { text: Store.storage-subtitle; wrap: word-wrap; font-size: 11px; color: Theme.muted; }
+                        HorizontalLayout {
+                            alignment: start;
+                            UiButton { small: true; quiet: true; label: "Laufwerke öffnen"; activated => { Store.page = 10; } }
+                        }
                     }
-                    Icon { source: Icons.lock; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: #8191a3; }
                 }
-                Rectangle { y: parent.height - 1px; x: 15px; width: parent.width - 30px; height: 1px; background: #eff3f7; }
             }
         }
     }
-}
-
-export component OverviewPage inherits Rectangle {
-    HorizontalLayout {
-        spacing: 14px;
-        VerticalLayout {
-            spacing: 14px; horizontal-stretch: 1;
-            HorizontalLayout {
-                spacing: 13px; height: 288px;
-                ActivityCard { horizontal-stretch: 0.92; }
-                StorageCard { horizontal-stretch: 1.2; }
-            }
-            ProjectsCard { vertical-stretch: 1; min-height: 240px; }
-        }
-        VerticalLayout {
-            spacing: 14px; width: 292px;
-            QuickCard { height: 288px; }
-            AiCard { vertical-stretch: 1; min-height: 240px; }
-        }
     }
 }
