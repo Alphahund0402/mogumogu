@@ -17,3 +17,5 @@ Dockerfile text eol=lf
 *.png binary
 *.jpg binary
 *.ico binary
+# Fonts and their licence are checked byte for byte (SOURCE.json): no EOL conversion.
+assets/fonts/** -text
