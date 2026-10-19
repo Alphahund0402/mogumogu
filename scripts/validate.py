@@ -6,6 +6,7 @@ Usage: python scripts/validate.py
 """
 from contextlib import contextmanager
 from pathlib import Path
+import hashlib
 import json
 import os
 import re
@@ -20,6 +21,12 @@ MIGRATIONS = sorted((ROOT / 'migrations').glob('*.sql'))
 
 def rust_sources():
     return {p: p.read_text(encoding='utf-8') for p in (ROOT / 'src').rglob('*.rs')}
+
+
+def production_rust(text):
+    """Lexical checks skip line comments and trailing unit-test modules."""
+    code = '\n'.join(line for line in text.splitlines() if not line.strip().startswith('//'))
+    return code.split('#[cfg(test)]', 1)[0]
 
 
 @contextmanager
@@ -104,12 +111,34 @@ class Contracts(unittest.TestCase):
         }
         for path, text in rust_sources().items():
             rel = path.relative_to(ROOT).as_posix()
-            code = '\n'.join(line for line in text.splitlines() if not line.strip().startswith('//'))
-            if '#[cfg(test)]' in code:
-                code = code[:code.index('#[cfg(test)]')]
+            code = production_rust(text)
             for needle, modules in allowed.items():
                 if needle in code:
                     self.assertIn(rel, modules, f'{needle} in {rel}')
+
+    def test_domain_and_presentation_stay_independent_of_io_and_storage(self):
+        # Dependency checks complement the destructive-API allowlist. They
+        # are deliberately lexical, not a Rust parser or a security proof.
+        io = r'\bstd::(?:\{[^}]*\b)?(?:fs|io|net|process)\b'
+        domain_io = r'\bcrate::(?:\{[^}]*\b)?(?:cleanup|config|fsread|inventory|ipc|owner|platform|profiles|service|sessions|storage|updates|watcher)\b'
+        presentation_io = r'\bmogumogu::(?:\{[^}]*\b)?(?:cleanup|fsread|inventory|sessions|storage|updates|watcher)\b'
+        for path, text in rust_sources().items():
+            rel = path.relative_to(ROOT).as_posix()
+            code = production_rust(text)
+            with self.subTest(module=rel):
+                if not rel.startswith('src/storage/'):
+                    sqlite = code
+                    if rel == 'src/domain/mod.rs':
+                        sqlite = re.sub(r'\brusqlite::(?:types::\w+|Result)\b', '', sqlite)
+                    elif rel == 'src/error.rs':
+                        sqlite = re.sub(r'\brusqlite::Error\b', '', sqlite)
+                    self.assertNotRegex(sqlite, r'\brusqlite\b', 'SQLite stays in storage')
+                if rel.startswith('src/domain/'):
+                    self.assertNotRegex(code, io, 'domain has no I/O')
+                    self.assertNotRegex(code, domain_io, 'domain cannot depend on application modules')
+                if rel.startswith('src/desktop/'):
+                    self.assertNotRegex(code, io, 'presentation has no direct I/O')
+                    self.assertNotRegex(code, presentation_io, 'presentation calls use cases through service')
 
     def test_every_unsafe_block_is_documented(self):
         text = (ROOT / 'src/platform/windows.rs').read_text(encoding='utf-8')
@@ -118,6 +147,16 @@ class Contracts(unittest.TestCase):
             if re.search(r'\bunsafe\s*\{', line) and 'fn ' not in line:
                 window = '\n'.join(lines[max(0, number - 6):number + 1])
                 self.assertIn('SAFETY:', window, f'line {number + 1}')
+
+    def test_package_analysis_stays_free_of_effects(self):
+        # The service facade loads records; this subtree only calculates.
+        forbidden = [r'\b(?:Core|Repository|Registry|HttpRegistry)\b',
+                     r'\bstd::(?:\{[^}]*\b)?(?:fs|io|net|process)\b',
+                     r'\bcrate::(?:\{[^}]*\b)?(?:cleanup|config|fsread|inventory|ipc|owner|platform|sessions|watcher)\b']
+        for path in (ROOT / 'src/service/packages').rglob('*.rs'):
+            code = production_rust(path.read_text(encoding='utf-8'))
+            for pattern in forbidden:
+                self.assertNotRegex(code, pattern, f'package analysis must use supplied metadata: {path.name}')
 
     def test_ui_assets_and_includes_resolve(self):
         for slint in (ROOT / 'ui').rglob('*.slint'):
@@ -147,15 +186,24 @@ class Contracts(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(json.loads(match.group(1)), FIXTURE)
 
-    def test_no_fonts_binaries_or_databases_in_the_tree(self):
+    def test_only_licensed_fonts_and_no_binaries_or_databases_in_the_tree(self):
         # Prune build output before descending: a warm Cargo cache can contain
         # thousands of files, none of which belong to this source contract.
         excluded = {'target', 'dist', '.git'}
         forbidden = {'.ttf', '.otf', '.woff', '.woff2', '.exe', '.dll', '.sqlite3', '.db'}
+        font_root = ROOT / 'assets/fonts/zen-maru-gothic'
+        source = json.loads((font_root / 'SOURCE.json').read_text(encoding='utf-8'))
+        self.assertEqual(source['license'], 'OFL-1.1')
+        allowed_fonts = {'ZenMaruGothic-Regular.ttf', 'ZenMaruGothic-Bold.ttf'}
+        self.assertEqual(set(source['files']), allowed_fonts | {'OFL.txt'})
+        for name, digest in source['files'].items():
+            self.assertEqual(hashlib.sha256((font_root / name).read_bytes()).hexdigest(), digest, name)
         for directory, subdirs, filenames in os.walk(ROOT):
             subdirs[:] = [name for name in subdirs if name not in excluded]
             for name in filenames:
                 path = Path(directory) / name
+                if path.parent == font_root and name in allowed_fonts:
+                    continue
                 self.assertNotIn(path.suffix.lower(), forbidden, str(path))
 
     def test_plan_ids_and_documents(self):
@@ -166,11 +214,11 @@ class Contracts(unittest.TestCase):
         for name in ['README.md', 'LICENSE', 'THIRD_PARTY.md', 'SECURITY.md', 'CONTRIBUTING.md', 'AGENTS.md', 'CLAUDE.md',
                      'docs/VALIDIERUNG.md', 'docs/WINDOWS-ABNAHME.md', 'docs/UNTERSTUETZUNGSMATRIX.md',
                      'docs/ANLEITUNG.md', 'build.ps1', 'start.ps1', 'build.cmd', 'scripts/measure.ps1',
-                     'scripts/release.ps1']:
+                     'scripts/release.ps1', 'docs/ARCHITEKTUR.md']:
             self.assertTrue((ROOT / name).is_file(), name)
-        for doc in ROOT.glob('*.md'):
+        for doc in [*ROOT.glob('*.md'), ROOT / 'docs/ARCHITEKTUR.md']:
             for target in re.findall(r'\]\(((?!https?://|#)[^)#]+)', doc.read_text(encoding='utf-8')):
-                self.assertTrue((ROOT / target).exists(), f'{doc.name}: {target}')
+                self.assertTrue((doc.parent / target).exists(), f'{doc.name}: {target}')
 
 
 if __name__ == '__main__':

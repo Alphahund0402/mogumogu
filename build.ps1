@@ -57,6 +57,7 @@ try {
     foreach ($File in @('LICENSE', 'README.md', 'THIRD_PARTY.md', 'Cargo.lock')) {
         Copy-Item -LiteralPath (Join-Path $Root $File) -Destination $OutDir -Force
     }
+    Copy-Item -LiteralPath (Join-Path $Root 'assets\fonts\zen-maru-gothic\OFL.txt') -Destination (Join-Path $OutDir 'FONT-LICENSE.txt') -Force
     Write-Host "Build bereit: $OutDir" -ForegroundColor Green
 
     if (-not $NoRun) {

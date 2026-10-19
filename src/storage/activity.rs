@@ -12,13 +12,8 @@ impl Repository {
     }
 
     pub fn activity(&mut self, limit: i64) -> Result<Vec<Activity>> {
-        self.read(|tx| {
-            let mut statement =
-                tx.prepare("SELECT title, detail, created_at, kind FROM activity ORDER BY id DESC LIMIT ?1")?;
-            let rows = statement.query_map([limit], |r| {
-                Ok(Activity { title: r.get(0)?, detail: r.get(1)?, created_at: r.get(2)?, kind: r.get(3)? })
-            })?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+        self.query("SELECT title, detail, created_at, kind FROM activity ORDER BY id DESC LIMIT ?1", [limit], |r| {
+            Ok(Activity { title: r.get(0)?, detail: r.get(1)?, created_at: r.get(2)?, kind: r.get(3)? })
         })
     }
 }

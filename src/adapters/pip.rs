@@ -58,16 +58,7 @@ impl Adapter for Pip {
         let mut packages = Vec::new();
         for site in site_packages(access) {
             let path: Vec<&str> = site.iter().map(String::as_str).collect();
-            for (entry, is_dir) in access.list(&path) {
-                let Some(stem) = entry.strip_suffix(".dist-info").filter(|_| is_dir) else { continue };
-                let Some((name, version)) = stem.split_once('-') else { continue };
-                packages.push(
-                    InventoryItem::new(ItemCategory::Package, ecosystem, normalize(name), rel_path)
-                        .version(version)
-                        .state(InstallState::Installed)
-                        .detail("installiert (dist-info); nicht importiert"),
-                );
-            }
+            packages.extend(installed_packages(access, &path, rel_path, ecosystem));
         }
         let mut items = vec![
             InventoryItem::new(ItemCategory::Environment, ecosystem, "Python-Umgebung", rel_path)
@@ -76,6 +67,51 @@ impl Adapter for Pip {
         items.extend(packages);
         bounded(items)
     }
+}
+
+/// Selected installed-distribution metadata only. RECORD contents are counted,
+/// never followed: they can name paths outside the approved environment.
+pub(super) fn installed_packages(
+    access: &mut dyn DirAccess,
+    site: &[&str],
+    rel: &str,
+    ecosystem: &str,
+) -> Vec<InventoryItem> {
+    let mut packages = Vec::new();
+    for (entry, is_dir) in access.list(site) {
+        let Some(stem) = entry.strip_suffix(".dist-info").filter(|_| is_dir) else { continue };
+        let Some((name, version)) = stem.split_once('-') else { continue };
+        let mut item = InventoryItem::new(ItemCategory::Package, ecosystem, normalize(name), rel)
+            .version(version)
+            .state(InstallState::Installed)
+            .detail("Installationsmetadaten (dist-info); nicht importiert");
+        let mut path = site.to_vec();
+        path.push(&entry);
+        path.push("METADATA");
+        if let Some(text) = access.read_text(&path, 1 << 20) {
+            // Metadata headers end at the first blank line. Description text
+            // and executable .pth content are never interpreted.
+            for line in text.lines().take_while(|l| !l.is_empty()).take(20_000) {
+                if let Some(raw) = line.strip_prefix("Requires-Dist:")
+                    && let Some((name, spec)) = requirement(raw.trim())
+                {
+                    item.evidence.dependencies.push(crate::domain::PackageDependency {
+                        name,
+                        requirement: spec,
+                        kind: "Requires-Dist (Bedingungen ungeprüft)".into(),
+                        exact: false,
+                    });
+                }
+            }
+        }
+        *path.last_mut().expect("RECORD filename") = "RECORD";
+        if let Some(text) = access.read_text(&path, 1 << 20) {
+            item.evidence.owned_files = Some(text.lines().filter(|l| !l.trim().is_empty()).count() as u64);
+        }
+        item.evidence.qualifier = site.iter().copied().chain([entry.as_str()]).collect::<Vec<_>>().join("/");
+        packages.push(item);
+    }
+    packages
 }
 
 /// Windows (`Lib/site-packages`) and POSIX (`lib/pythonX.Y/site-packages`).

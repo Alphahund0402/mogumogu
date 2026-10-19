@@ -3,6 +3,8 @@
 Die gemeinsame technische Grundlage steht in `AGENTS.md`. Bitte kleine PRs mit klarem
 beobachtbarem Verhalten, Grenzen und Tests erstellen. UI, Datenmodell und Sicherheitsregeln
 nicht in einem undurchsichtigen Großumbau ändern.
+Zum Einstieg: [Architektur und Datenfluss](docs/ARCHITEKTUR.md), danach die
+[Änderungswege](docs/ENTWICKLUNG.md) für das betroffene Fachmodul.
 
 Vor jedem PR: `python scripts/validate.py`, `cargo fmt --all -- --check`,
 `cargo clippy --locked --all-targets -- -D warnings` und
@@ -21,4 +23,6 @@ Review einer zweiten Person. Produktive Bereinigung bleibt deaktiviert, bis Gate
 (unabhängiger Review der Löschpfade) dokumentiert bestanden ist.
 
 Projektlizenz: GPL-3.0-only. Beiträge müssen damit vereinbar sein. Keine proprietären
-Assets, Kundendaten, Schlüssel, Fontdateien oder persönlichen Inventare einchecken.
+Assets, Kundendaten, Schlüssel oder persönlichen Inventare einchecken. Die beiden
+unveränderten Zen-Maru-Gothic-Fonts sind mit OFL-Lizenz und fester Quelle freigegeben;
+weitere Fontdateien brauchen dieselbe Herkunfts- und Lizenzdokumentation.

@@ -1,11 +1,19 @@
 import { Card, PageHeader } from "../components.slint";
+import { Theme } from "../theme.slint";
 
-export component PageCard inherits Card {
+// Title on the sky, content in one cloud card.
+export component PageCard inherits VerticalLayout {
+    min-width: 0px;
+    preferred-width: 0px;
     in property <string> title;
     in property <string> description;
-    VerticalLayout {
-        padding: 24px; spacing: 16px;
-        PageHeader { title: root.title; description: root.description; }
-        @children
+    spacing: Theme.gap;
+    PageHeader { title: root.title; description: root.description; }
+    Card {
+        vertical-stretch: 1;
+        VerticalLayout {
+            padding: 12px; spacing: 12px;
+            @children
+        }
     }
 }

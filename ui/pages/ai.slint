@@ -1,38 +1,48 @@
 import { ListView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { Callout, Pill, RowCard } from "../components.slint";
+import { FilterChip, RowCard } from "../components.slint";
 import { PageCard } from "page-card.slint";
+import { PlaceLine } from "system.slint";
 
 export component AiPage inherits PageCard {
     title: "KI-Konfiguration";
-    description: "Statisch erkannte Skills, Instruktionen, MCP- und Hook-Einträge. Inhalte sind Daten: nichts wird gestartet, geladen oder befolgt.";
-    Callout { text: "Datei vorhanden, Client installiert, Format verstanden und tatsächlich verwendet sind getrennte Aussagen. mogumogu zeigt nur, was statisch belegt ist."; }
+    description: "Skills, Instruktionen, MCP-Server und Hooks. mogumogu liest sie als Text und führt nichts davon aus.";
     HorizontalLayout {
         spacing: 6px; alignment: start;
-        for chip in Store.profiles : Pill { label: chip.name + " · " + chip.status; kind: "protected"; }
+        FilterChip { label: "Gefunden"; count: Store.ai-count; selected: Store.ai-tab == 0; activated => { Store.ai-tab = 0; } }
+        personal-tab := FilterChip { label: "Persönliche Ordner"; count: Store.system-ai.length; selected: Store.ai-tab == 1; activated => { Store.ai-tab = 1; } }
     }
-    if Store.ai.length == 0 : Text {
-        text: "Noch keine KI-Dateien erfasst. Für ein Projekt die Lesefreigabe erteilen und erfassen.";
-        font-size: 12px; color: Theme.muted;
+    if Store.ai-tab == 0 && Store.ai.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+        Text { text: "Noch keine KI-Dateien erfasst."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Sie erscheinen nach der Erfassung eines Projekts oder eines persönlichen Ordners wie .claude."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
     }
-    ListView {
+    if Store.ai-tab == 0 && Store.ai.length > 0 : ListView {
         vertical-stretch: 1;
-        for row in Store.ai : Rectangle {
-            height: 68px;
-            RowCard {
-                y: 3px; height: parent.height - 6px;
-                selection-kind: "ai";
-                selection-key: row.path + "|" + row.client + "|" + row.kind;
-                icon: Icons.spark;
-                title: row.client + " · " + row.kind;
-                subtitle: row.detail;
-                meta: row.references > 0 ? row.references + " Verweise" : "";
-                pill: "Geschützt";
-                pill-kind: "protected";
-                label: row.client;
-                activated => { Actions.open-ai(row.index); }
-            }
+        for row in Store.ai : RowCard {
+            selection-kind: "ai";
+            selection-key: row.path + "|" + row.client + "|" + row.kind;
+            icon: Icons.spark;
+            title: row.detail != "" ? row.detail : row.client + " · " + row.kind;
+            subtitle: row.detail != "" ? row.client + " · " + row.kind + (row.path != "" ? " · " + row.path : "") : row.path;
+            meta: row.references > 0 ? row.references + " Verweise" : "";
+            pill: row.scope;
+            pill-kind: row.scope == "Benutzer" ? "next" : "protected";
+            label: row.client + ", " + row.kind + ", " + row.scope;
+            activated => { Actions.open-ai(row.index); }
         }
+    }
+    if Store.ai-tab == 1 : Text {
+        text: "Persönliche Konfiguration gilt oft für alle Projekte. Zugangsdaten, Sitzungen und Chatverläufe werden nie gelesen.";
+        font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+    }
+    if Store.ai-tab == 1 && Store.system-ai.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; padding: 16px;
+        Text { text: Store.demo ? "Im Demomodus wird das System nicht geprüft." : "Keine bekannten persönlichen KI-Ordner gefunden."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.ai-tab == 1 && Store.system-ai.length > 0 : ListView {
+        vertical-stretch: 1;
+        for row in Store.system-ai : PlaceLine { data: row; }
     }
 }

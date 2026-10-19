@@ -13,6 +13,14 @@ fn unsupported<T>() -> io::Result<T> {
     Err(io::Error::new(io::ErrorKind::Unsupported, "nur unter Windows verfügbar"))
 }
 
+pub fn spawn_owner(_: &Path, _: Option<&Path>, _: bool) -> io::Result<()> {
+    unsupported()
+}
+
+pub fn logical_drives() -> io::Result<Vec<crate::domain::DriveUsage>> {
+    unsupported()
+}
+
 #[derive(Debug)]
 pub struct DirHandle;
 
@@ -129,6 +137,9 @@ impl io::Write for PipeConnection<'_> {
 pub fn pipe_connect(_: &str, _: Duration) -> io::Result<Option<File>> {
     unsupported()
 }
+pub fn pipe_busy(_: &io::Error) -> bool {
+    false
+}
 pub fn uninstall_entries(_: usize) -> io::Result<(Vec<UninstallEntry>, bool)> {
     unsupported()
 }
@@ -137,4 +148,20 @@ pub fn local_utc_offset_seconds() -> i64 {
 }
 pub fn show_error(title: &str, message: &str) {
     eprintln!("{title}: {message}");
+}
+/// Portable core tests only check absolute local paths.
+pub fn local_fixed_path(path: &Path) -> bool {
+    path.is_absolute()
+}
+pub fn autostart_entry() -> io::Result<Option<String>> {
+    Ok(None)
+}
+pub fn autostart_command(_: &Path, _: Option<&Path>, _: bool) -> io::Result<String> {
+    unsupported()
+}
+pub fn set_autostart(_: &Path, _: Option<&Path>, _: bool, _: bool) -> io::Result<()> {
+    unsupported()
+}
+pub fn pick_folder(_: &str) -> io::Result<Option<String>> {
+    Ok(None)
 }

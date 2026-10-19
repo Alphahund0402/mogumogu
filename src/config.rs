@@ -1,7 +1,8 @@
 //! Where mogumogu keeps its own data. Project files are never stored here.
 use crate::{Error, Result};
 use sha2::{Digest, Sha256};
-use std::{env, path::PathBuf};
+use std::env;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -17,6 +18,13 @@ impl Config {
             None => default_directory()?,
         };
         Ok(Self { directory, demo })
+    }
+
+    /// The data directory when it differs from the default. A start entry
+    /// then carries it, so the started owner opens the same inventory.
+    pub fn custom_directory(&self) -> Option<&Path> {
+        let default = default_directory().ok();
+        (default.as_deref() != Some(self.directory.as_path())).then_some(self.directory.as_path())
     }
 
     /// Demo and local inventories are separate files and never mixed.

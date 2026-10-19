@@ -4,7 +4,7 @@ use super::Repository;
 use super::activity::log_in;
 use super::projects::refresh_inferred_owners;
 use crate::clock::{DAY, Timestamp};
-use crate::domain::{Acquisition, OwnerKind, OwnerLink, Resource, ResourceKind};
+use crate::domain::{Acquisition, DiscoveryKind, InventoryItem, OwnerKind, OwnerLink, Resource, ResourceKind};
 use crate::platform::FileIdentity;
 use crate::{Error, Result, limits, privacy, validation};
 use rusqlite::{OptionalExtension, Row, Transaction, params};
@@ -60,6 +60,58 @@ fn check_capacity(tx: &Transaction<'_>, adding: i64) -> Result<()> {
 }
 
 impl Repository {
+    /// Adopts a published development finding as metadata. An explicitly
+    /// chosen owner never turns discovery into read or cleanup approval.
+    pub fn adopt_discovered_resource(
+        &mut self,
+        project_id: i64,
+        name: &str,
+        path: &str,
+        purpose: Option<&str>,
+        item: &InventoryItem,
+    ) -> Result<i64> {
+        self.require_local()?;
+        let name = validation::name(name)?;
+        let path = validation::windows_path(path)?;
+        let purpose = purpose.map(privacy::label);
+        let kind = item.evidence.discovery.as_ref().map_or(DiscoveryKind::Project, |d| d.kind).resource_kind();
+        let evidence = privacy::label(&format!("Gefunden und ausdrücklich zugeordnet. {}", item.detail));
+        let bytes = item.bytes.filter(|b| *b >= 0);
+        let now = self.now();
+        self.write(|tx| {
+            require_project(tx, project_id)?;
+            let existing: Option<(i64, Option<i64>, ResourceKind)> = tx
+                .query_row("SELECT id, project_id, kind FROM resources WHERE path = ?1", [&path], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })
+                .optional()?;
+            if let Some((id, owner, existing_kind)) = existing {
+                if owner != Some(project_id) || kind != existing_kind {
+                    return Err(Error::conflict("Dieser Pfad hat bereits einen anderen Besitzer oder Ressourcentyp."));
+                }
+                return Ok(id);
+            }
+            check_capacity(tx, 1)?;
+            tx.execute(
+                "INSERT INTO resources(project_id, name, path, kind, bytes, evidence, origin, acquisition,
+                                       purpose, created_at, protected)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, 'registered', 'adopted', ?7, ?8, 1)",
+                params![project_id, name, path, kind, bytes, evidence, purpose, now],
+            )?;
+            let id = tx.last_insert_rowid();
+            add_owner(
+                tx,
+                id,
+                project_id,
+                OwnerKind::Explicit,
+                "Entwicklungsfund vom Benutzer ausdrücklich zugeordnet.",
+            )?;
+            refresh_inferred_owners(tx)?;
+            log_in(tx, now, "registration", "Entwicklungsfund zugeordnet", "Besitzer gespeichert; Schutz aktiv.")?;
+            Ok(id)
+        })
+    }
+
     /// Registers an existing scratchpad path for a known owner. Idempotent
     /// for the same owner; a different owner is rejected, never reassigned.
     pub fn register_scratch(&mut self, project_id: i64, name: &str, path: &str) -> Result<i64> {
@@ -198,11 +250,7 @@ impl Repository {
 
     pub fn resources(&mut self) -> Result<Vec<Resource>> {
         let sql = format!("SELECT {COLUMNS} FROM resources ORDER BY id LIMIT {}", limits::MAX_RESOURCES);
-        self.read(|tx| {
-            let mut statement = tx.prepare(&sql)?;
-            let rows = statement.query_map([], map_resource)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(&sql, [], map_resource)
     }
 
     pub fn resource(&mut self, id: i64) -> Result<Resource> {
@@ -216,11 +264,7 @@ impl Repository {
 
     pub fn children(&mut self, parent_id: i64) -> Result<Vec<Resource>> {
         let sql = format!("SELECT {COLUMNS} FROM resources WHERE parent_id = ?1 ORDER BY id");
-        self.read(|tx| {
-            let mut statement = tx.prepare(&sql)?;
-            let rows = statement.query_map([parent_id], map_resource)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(&sql, [parent_id], map_resource)
     }
 
     /// Stored identity of a folder mogumogu created.
@@ -346,13 +390,12 @@ impl Repository {
     }
 
     pub fn owners(&mut self) -> Result<Vec<OwnerLink>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(
-                "SELECT o.resource_id, o.project_id, p.name, o.kind, o.evidence
+        self.query(
+            "SELECT o.resource_id, o.project_id, p.name, o.kind, o.evidence
                  FROM owner_links o JOIN projects p ON p.id = o.project_id
                  ORDER BY o.resource_id, o.kind, p.name LIMIT 20000",
-            )?;
-            let rows = statement.query_map([], |r| {
+            [],
+            |r| {
                 Ok(OwnerLink {
                     resource_id: r.get(0)?,
                     project_id: r.get(1)?,
@@ -360,9 +403,8 @@ impl Repository {
                     kind: r.get(3)?,
                     evidence: r.get(4)?,
                 })
-            })?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+            },
+        )
     }
 }
 

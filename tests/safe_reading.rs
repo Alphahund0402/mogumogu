@@ -17,6 +17,7 @@ fn request(path: &std::path::Path) -> ScanRequest {
         path: path.to_path_buf(),
         identity: Some(platform::path_identity(path).unwrap()),
         limits: ScanLimits::default(),
+        control: None,
     }
 }
 
@@ -48,6 +49,40 @@ fn project_scan_finds_states_without_executing_anything() {
     }
     // node_modules is inspected shallowly, never descended into.
     assert!(!result.items.iter().any(|i| i.rel_path.contains("left-pad/index.js")));
+}
+
+#[test]
+fn user_ai_folder_is_read_only_along_catalog_routes() {
+    let temp = tempfile::tempdir().unwrap();
+    let claude = temp.path().join(".claude");
+    write(&claude, "settings.json", r#"{"permissions":{"allow":["Bash(ls)"]},"env":{"TOKEN":"ghp_secret"}}"#);
+    write(&claude, "CLAUDE.md", "# Persönliche Regeln\n");
+    write(&claude, "skills/review/SKILL.md", "---\nname: review\ndescription: Prüft Änderungen\n---\n");
+    write(&claude, "commands/deploy.md", "# Deploy\n");
+    write(&claude, ".credentials.json", r#"{"token":"ghp_never"}"#);
+    for i in 0..40 {
+        write(&claude, &format!("projects/C--work-secret/{i}.jsonl"), r#"{"message":"vertraulich"}"#);
+    }
+    write(&claude, "projects/C--work-secret/CLAUDE.md", "# im Verlauf\n");
+    let outcome = inventory::scan(&ScanRequest {
+        kind: ScopeKind::UserAi,
+        path: claude.clone(),
+        identity: Some(platform::path_identity(&claude).unwrap()),
+        limits: ScanLimits::default(),
+        control: None,
+    });
+    assert!(outcome.failure.is_none(), "{:?}", outcome.result.errors);
+    let result = outcome.result;
+    let names: Vec<&str> = result.items.iter().map(|i| i.name.as_str()).collect();
+    assert!(names.contains(&"Projekteinstellungen"), "{names:?}");
+    assert!(names.contains(&"Skill: review"), "{names:?}");
+    assert!(names.iter().any(|n| n.starts_with("Befehl")), "{names:?}");
+    assert!(result.items.iter().all(|i| !i.rel_path.starts_with("projects/")), "history is never entered");
+    assert!(result.entries_seen < 40, "history folder not listed: {}", result.entries_seen);
+    let dump = format!("{:?}", result.items);
+    for forbidden in ["ghp_", "vertraulich", "credentials"] {
+        assert!(!dump.contains(forbidden), "{forbidden} must not be stored");
+    }
 }
 
 #[test]
@@ -99,6 +134,7 @@ fn missing_root_is_unavailable_not_empty() {
         path: temp.path().join("missing"),
         identity: None,
         limits: ScanLimits::default(),
+        control: None,
     });
     assert!(matches!(outcome.failure, Some(ScanFailure::Unavailable(_))));
     assert!(outcome.result.failed);

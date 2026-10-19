@@ -2,7 +2,7 @@
 
 **Ziel:** Lokale, performante Windows-10/11-Tray-Anwendung für Entwicklungsressourcen.
 **Stack:** Rust, Slint und SQLite. **Lizenz:** GPL-3.0-only.
-**Stand:** 5. Oktober 2026. Alle Arbeitspakete F-01 bis F-28 sind im Code umgesetzt und automatisiert getestet. Offen sind ausschließlich Abnahmen, die eine zweite Person oder eine weitere Plattform erfordern (Windows 11, unabhängiger Löschpfad-Review G5, manuelle Desktopprüfungen). Die Spalte „Stand“ trennt beides ausdrücklich.
+**Stand:** 18. Oktober 2026. Die Basis F-01 bis F-28 ist innerhalb der veröffentlichten Unterstützungsmatrix implementiert. Hinzu kommen Systembefund, persönliche KI-Konfiguration und [Entwicklungsfunde mit Zuordnung, Laufwerksdashboard, Ordnerstruktur und Skill-Inhaltsansicht](ENTWICKLUNGSFUNDE.md). Automatische Zweckbestimmung, vollständige Manager-/Override-Erkennung, Windows-11-Abnahme, unabhängiger Löschpfad-Review G5 und manuelle Desktopprüfungen bleiben offen.
 
 ## 1. Produkt und Grenze
 
@@ -16,6 +16,7 @@ Die Zielmatrix bleibt npm, pnpm, pip, uv, Cargo, NuGet, WinGet, Scoop und Chocol
 
 Ein Cargo-Paket mit klar getrennten Modulen, ein Besitzerprozess mit genau einem Datenbank-Worker, eine Tray-Ereignisschleife. Module werden erst zu eigenen Crates, wenn eine echte unabhängige Schnittstelle oder Wiederverwendung existiert. Keine Plugin-DLLs, Microservices, WebView, Graphdatenbank, Async-Runtime oder eigene Regelsprache.
 
+Einstieg: [Architektur und Datenfluss](ARCHITEKTUR.md).
 Entwicklung und Prüfungen: [gemeinsamer Runner und Modulaufbau](ENTWICKLUNG.md),
 [Linux-Container für portable Kernprüfungen](DOCKER.md). Windows-Laufzeit und
 Sicherheitsabnahme bleiben nativ. Der Desktop trennt Lebenszyklus, Callback-Verdrahtung,
@@ -23,7 +24,7 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 
 | Entscheidung | Baseline und Grund |
 |---|---|
-| Rust + Slint | Native UI ohne Browserfrontend; Software-Renderer, Bilder eingebettet, Systemschriften |
+| Rust + Slint | Native UI ohne Browserfrontend; Software-Renderer, Bilder und japanischfähige Zen-Maru-Gothic-Fonts eingebettet |
 | SQLite lokal | Kein Server; WAL/FULL, Fremdschlüssel, parametrisierte SQL-Abfragen, kurze Transaktionen, Migration mit Sicherung |
 | Ein Besitzerfenster bei Bedarf | Dashboard schließen gibt die Komponente frei; Tray und Kern laufen weiter |
 | Ein Besitzerprozess, eine Schreibstelle | Desktop oder `--headless`; CLI spricht über eine benutzergebundene Named Pipe |
@@ -32,44 +33,43 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 | Eingebaute Paketadapter | Pro Fähigkeit getrennt (Inventar/Updates/Bereinigung), keine Fremdcodeausführung |
 | Deklarativer KI-Katalog | `profiles/ai-catalog.toml`, beim Build eingebettet und validiert; keine Skript- oder Netzwerkfelder |
 | Bereinigung nur als Testexecutor | Verwaltete Temp-Ausgabe in registrierten Wegwerf-Testwurzeln; produktiv gesperrt bis G5 |
-| Manueller Build und Start | Kein Autostart, Dienst oder Self-Updater |
+| Manueller Build und Start | Kein Dienst oder Self-Updater; Autostart nur auf ausdrücklichen Wunsch als Run-Eintrag des aktuellen Benutzers |
 
 ## 3. Umgesetzte Basis
 
 | Bereich | Quelle | Stand |
 |---|---|---|
-| Tray, Fensterlebenszyklus, Dashboard | `src/main.rs`, `src/desktop/`, `ui/` | Acht Ansichten nach Design, Dialoge, Tastaturnavigation, gemeinsame Auswahl-/Hover-/Druck-/Fokuszustände; Lokalmodus als Startstandard |
+| Tray, Fensterlebenszyklus, Dashboard | `src/main.rs`, `src/desktop/`, `ui/` | Zehn Ansichten im Mochi-Wolke-Design, geführter Einstieg, Suche über alle Bereiche, Erfassungsfortschritt mit Abbruch, Tray mit Statuszeile und Pause; Dialoge, Tastaturnavigation, gemeinsame Auswahl-/Hover-/Druck-/Fokuszustände; Lokalmodus als Startstandard |
 | Besitzerprozess und IPC | `src/owner.rs`, `src/ipc/`, `src/platform/windows.rs` | Ein Worker, Named Pipe (nur aktueller Benutzer, nur lokal, erste Instanz), Protokollversion, 1-MiB-Limit |
 | Kern und Anwendungsfälle | `src/service/`, `src/domain/` | Typisierte Zustände und Zustandsautomaten; gemeinsame Anwendungsfälle für UI und CLI |
-| SQLite | `src/storage/`, `migrations/` | Schema v2, Migration mit konsistenter Sicherung, Generationen, Aktionsjournal, Wiederanlauf |
+| SQLite | `src/storage/`, `migrations/` | Schema v4 (Benutzer-Freigaben), Sicherung vor Migration; ausgewählte Paketkanten und versions-/quellengebundener Cache; bestehendes Journal unverändert |
 | Sichere Lesegrenze | `src/fsread.rs`, `src/platform/` | Identitätsgebundene Freigaben, `NtCreateFile` relativ zum Elternhandle, keine Reparse Points/Platzhalter |
 | Inventar | `src/inventory/`, `src/adapters/`, `src/parsers/`, `src/profiles/` | Neun statische Adapter, zwölf KI-Profile, begrenzte Parser, Datenminimierung |
 | Sessions und Scratchpads | `src/sessions/` | Verwaltete Struktur, Läufe in benannten Job-Objekten, Zustandsabgleich |
 | Prüfregeln und Bereinigung | `src/review.rs`, `src/cleanup/` | Hinweise mit Evidenz, Planbindung per Fingerabdruck, Journal, Abgleich nach Absturz |
 | Updatehinweise | `src/updates/` | Opt-in pro öffentlicher Quelle, private Quellen nie, Backoff und Cache |
 | CLI | `src/bin/cli/` | Client des Besitzerprozesses, startet ihn bei Bedarf, versioniertes JSON, Exitcodes |
-| Qualität | `tests/`, `scripts/validate.py`, `.github/workflows/windows.yml` | 109 automatisierte Rust-Tests + Lastreferenz, statische Verträge, Clippy ohne Warnungen |
+| Qualität | `tests/`, `scripts/validate.py`, `.github/workflows/windows.yml` | Automatisierte Rust-Prüfungen mit/ohne Netzwerk, Lastreferenz, statische Verträge, Clippy ohne Warnungen |
 | Build/Start/Release/Messung | `build.ps1`, `start.ps1`, `scripts/` | Release-Build, ZIP mit Prüfsummen und Abhängigkeitsinventar, Messskript |
-| Designvorschau | `design/dashboard.html` | Unabhängiger Browserprototyp; kein Ersatz für native Tests |
+| Designvorschau | `design/dashboard.html`, `design/screens/` | Browserprototyp zur Abstimmung; native Renderings mit synthetischen Daten über den echten Slint-Software-Renderer (`design/screens/render.ps1`) |
 
 ## 4. Dashboardgestaltung
 
-Das ausgewählte Dashboard ist die visuelle Basis: statischer Berg-/Waldkopf, helles Blau/Grau, schmale linke Navigation und großzügige weiße Karten. Kein animierter Hintergrund, keine permanenten Diagrammanimationen und keine externe Bildabfrage.
+Visuelle Basis ist die **Mochi-Wolke**: cremeweiße Karten auf hellem Himmelblau, 1,5-px-Konturen, Radien 16/12 px, Pillenschaltflächen und eine schmale linke Navigation mit Mochi. Statuschips verbinden immer Farbe, Symbol und Wort. Mochis Pose folgt dem Zustand (fröhlich, mampft beim Erfassen, schläft bei Pause, besorgt bei teilweiser Erfassung oder hängendem Experiment) und ist nie die einzige Information. Kein animierter Hintergrund, keine permanenten Diagrammanimationen und keine externe Bildabfrage.
 
 Navigation, Filter, Schaltflächen und Listenzeilen teilen zentrale Zustandsfarben. Ausgewählte Zeilen behalten ihre Markierung über stabile Schlüssel; Fokusrahmen liegen innerhalb der jeweiligen Komponente, auch in virtualisierten Listen. Der normale Build-/Startweg verwendet die lokale Datenbank; fehlende Messungen bleiben unbekannt.
 
 | Bereich | Verhalten |
 |---|---|
-| Übersicht | Projektanzahl, Paketanzahl, erfasster Speicher, KI-Konfiguration; immer Demo-/Lokalstatus zeigen |
-| Projekte | Tabelle, Suche, Zustandsfilter und Detailansicht mit Herkunft, Schutz, Lesefreigabe und Abdeckung |
-| Paketmanager | Unterstützungsgrad und konkrete Fähigkeiten statt irreführendem „aktiv“-Schalter |
-| KI-Konfiguration | Quellen, Scope, Client und Referenzen; niemals Skill/MCP durch Betrachtung starten |
-| Ressourcen | Besitzer, Typ, bekannte oder unbekannte Größe, Scratchpads und Sessions |
-| Prüfliste | Kandidaten begründen, Plan-Vorschau und Bestätigung per Fingerabdruck; kein „Alles löschen“ |
-| Aktivität | Erfassungsabdeckung je Lesefreigabe, Ereignisse und gruppierte Änderungen |
-| Einstellungen | Datenorte, Überwachung, Tray-Hinweise, Netzwerkquellen, Scratchpad-Wurzel |
+| Übersicht | Kennzahlen mit Sprung zur Seite; Entscheidungen auf anderen Seiten (hängendes Experiment ohne Hinweis, Abkündigungen, teilweise Erfassung, neu gefundene Orte); Prüfhinweise mit Auslöser und Beleg, letzte Änderungen und Bereinigungspläne mit Plan-Vorschau und Bestätigung per Fingerabdruck; kein „Alles löschen“; immer Demo-/Lokalstatus zeigen |
+| Projekte | Tabelle und Detailansicht mit Lesefreigabe und Abdeckung; Reiter Ressourcen (Besitzer, Typ, bekannte oder unbekannte Größe) und Funde (Namenssuche und erfasste Umgebungen/Ausgaben mit Filtern und expliziter Projektzuordnung) |
+| Pakete | Versionen und Quellen mit Projektbelegen, Abdeckung, Quellenstatus und Behalten-Vormerkung; Suche und Filterchips vor dem Blättern; Belegkette im Erklärpanel; Reiter Werkzeuge im Suchpfad und globale Bestände mit Nachweis und Freigabe je Ort |
+| KI-Konfiguration | Quellen, Scope, Client und Referenzen; Skill-/Instruktionstexte auf Anfrage schreibgeschützt, flüchtig und redigiert anzeigen; Reiter persönliche Ordner mit Freigabe je Ort |
+| Speicher | Laufwerkskapazitäten, gemessene logische Projektanteile und begrenzte navigierbare Ordnerstruktur innerhalb freigegebener Bereiche |
+| Experimente | Scratchpads mit Sessions und Ordnern, hängende Sessions mit Auslöser und begründeter Freigabe; Aufräumplan nur, wenn verwaltete Temp-Ausgabe als entbehrlich markiert ist |
+| Einstellungen | Überwachung mit Pause, Tray-Hinweise mit Ruhezeiten und Tageszusammenfassung, Autostart, geführter Einstieg, Netzwerkquellen, Scratchpad-Wurzel, Sicherung und Export, Datenort; Reiter Lesefreigaben mit Erfassungsabdeckung je Freigabe |
 
-Im Demomodus ist die Speicherverteilung ein festes, korrekt summiertes Beispieldiagramm. Im echten Inventar bleibt sie ohne Messung unbekannt; gemessen werden nur von mogumogu verwaltete Ordner und freigegebene Bereiche. Eine Prüfung heißt nie „sicher bereinigbar“.
+Die Projektgröße der Übersicht summiert nur gemessene Projekte und nennt die Zahl der ungemessenen; gemessen werden nur von mogumogu verwaltete Ordner und freigegebene Bereiche. Eine Prüfung heißt nie „sicher bereinigbar“.
 
 Die HTML-Vorschau erlaubt schnelle Abstimmung. Slint ist die Produktionsoberfläche. Beide verwenden dieselbe JSON-Fixture, aber kein gemeinsames Web-Laufzeitsystem.
 
@@ -106,7 +106,7 @@ Jeder Meilenstein endet mit einer prüfbaren Freigabe. „Umgesetzt“ bedeutet:
 | F-09 | npm/pnpm-Basis und statische Python-Metadaten | Deklariert/aufgelöst/installiert getrennt; keine fremden Interpreter automatisch starten | Umgesetzt: `adapters/{npm,pnpm,pip}.rs`; venv über `pyvenv.cfg` + `*.dist-info` |
 | F-10 | Generisches Skill-/Instruktionsprofil | SKILL.md/AGENTS.md und erlaubte Referenzen lesen; geschützte Ressourcen; kein Ausführen | Umgesetzt: `profiles/parse.rs`; Verweise nur innerhalb der Freigabe geprüft |
 | F-11 | Besitzer und „Warum hier?“ | Explizite und vermutete Besitzer mit Evidenz unterscheiden; unbekannt darstellbar | Umgesetzt: `owner_links`, `why`-Befehl, Detaildialog |
-| F-12 | Ereignisse und UI anbinden | Ein begrenzter Watcherpfad mit Debounce, Fehlerabgleich und sichtbarer Abdeckung | Umgesetzt: `watcher.rs` (Dirty-Set, 2 s Ruhe, 30 s Mindestabstand), Abdeckung in „Aktivität“ |
+| F-12 | Ereignisse und UI anbinden | Ein begrenzter Watcherpfad mit Debounce, Fehlerabgleich und sichtbarer Abdeckung | Umgesetzt: `watcher.rs` (Dirty-Set, 2 s Ruhe, 30 s Mindestabstand), Abdeckung in „Aktivität“; Pause mit Ablaufzeit, gesammelte Tray-Hinweise (Symbolpunkt und Tooltip, Ruhezeiten, Tageszusammenfassung); Test `new_settings_are_validated_and_a_pause_keeps_the_choice` |
 
 **Freigabe G2:** Dieses Repository (Cargo, Skills) sowie Fixtures für JavaScript- und Python-Projekte werden nachvollziehbar dargestellt.
 
@@ -115,9 +115,9 @@ Jeder Meilenstein endet mit einer prüfbaren Freigabe. „Umgesetzt“ bedeutet:
 | ID | Aufgabe | Fertigkriterium | Stand |
 |---|---|---|---|
 | F-13 | Befehle in Besitzerprozess bündeln | Abgesicherte Named Pipe, normaler Benutzer, Protokoll-/Größenlimits; CLI nicht mehr unabhängiger Writer | Umgesetzt: `ipc/`, Besitzerprüfung beider Seiten; Test `second_owner_and_foreign_protocols_are_refused` |
-| F-14 | Scratchpad-Lebenszyklus | Quelle, temporäre Ausgabe und Ergebnis trennen; Übernehmen/Schützen/Prüfdatum/Promote | Umgesetzt: `scratch create/adopt/protect/extend/promote` |
+| F-14 | Scratchpad-Lebenszyklus | Quelle, temporäre Ausgabe und Ergebnis trennen; Übernehmen/Schützen/Prüfdatum/Promote | Anlegen/Übernehmen sowie Kandidatensuche in freigegebenen Wurzeln umgesetzt; Skripte/Notebooks, Testdaten und Ausgaben mit Belegen, ausdrücklich bestätigtem Besitzer/Zweck; keine automatische Zweckbestimmung |
 | F-15 | Verwaltete Läufe | Expliziter Start, eigenes Temp, Prozessidentität und geprüfte Kindprozessbehandlung | Umgesetzt: benanntes Job-Objekt ohne KILL_ON_JOB_CLOSE, PID + Startzeit |
-| F-16 | Sessionzustände und Wiederanlauf | Starterende/fehlender Heartbeat ist kein Abschlussbeweis; unklar bleibt geschützt | Umgesetzt: Entscheidungstabelle; Test `starter_ends_but_worker_continues_keeps_the_lock` |
+| F-16 | Sessionzustände und Wiederanlauf | Starterende/fehlender Heartbeat ist kein Abschlussbeweis; unklar bleibt geschützt | Umgesetzt: Entscheidungstabelle; hängende Sessions benannt (unklar, kein Lebenszeichen, Abschluss ungeprüft, sehr lange) und nur ohne lebende Prozesse begründet freigebbar; Tests `starter_ends_but_worker_continues_keeps_the_lock`, `stuck_sessions_are_named_and_released_only_without_live_processes` |
 
 **Freigabe G3:** Beliebige Programme laufen als verwaltete Session; Diagnose in `results/` bleibt, Starterabbruch ergibt „unklar“.
 
@@ -125,10 +125,10 @@ Jeder Meilenstein endet mit einer prüfbaren Freigabe. „Umgesetzt“ bedeutet:
 
 | ID | Aufgabe | Fertigkriterium | Stand |
 |---|---|---|---|
-| F-17 | uv, Cargo, NuGet ergänzen | Lock-/Workspace-/Framework-/Storesemantik mit Versionen und negativen Fixtures | Umgesetzt mit Fixtures; Abgleich gegen reale Toolversionen offen |
+| F-17 | uv, Cargo, NuGet ergänzen | Lock-/Workspace-/Framework-/Storesemantik mit Versionen und negativen Fixtures | Projektformate, separate globale Paketbereiche und statische Kanten umgesetzt; reale Toolversionen und vollständige Resolversemantik offen |
 | F-18 | WinGet, Scoop, Chocolatey ergänzen | Nur kontrollierte schreibgeschützte Erfassung; Verwaltungsbesitz nicht aus ähnlichen Namen ableiten | Umgesetzt: Registry-Softwareliste (WinGet „eingeschränkt“), Scoop/Chocolatey statisch |
-| F-19 | KI-Profilkatalog erweitern | Alle zugesagten Clientfamilien statisch klassifiziert; Wirksamkeit und fehlende Overrides transparent | Umgesetzt: zwölf Profile im deklarativen Katalog; Erweiterungstest ohne Kernumbau |
-| F-20 | Quellenbezogene Updatehinweise | Explizite Netzwerkfreigabe, private Registries wahren, Timeout/Backoff; keine Installation | Umgesetzt: `updates/`; Netzwerk nur nach Freigabe je Host |
+| F-19 | KI-Profilkatalog erweitern | Alle zugesagten Clientfamilien statisch klassifiziert; Wirksamkeit und fehlende Overrides transparent | Zwölf projektbezogene Profile umgesetzt, Erweiterungstest ohne Kernumbau; persönliche KI-Konfiguration bekannter Clients über den Freigabetyp `user-ai`, nur entlang der Katalogmuster (Test `user_ai_folder_is_read_only_along_catalog_routes`); Vorrangauflösung Benutzer/Projekt offen |
+| F-20 | Quellenbezogene Updatehinweise | Explizite Netzwerkfreigabe, private Registries wahren, Timeout/Backoff; keine Installation | Version/Quelle getrennt; SemVer/PEP-440/NuGet-Vergleich, Abkündigung/Yanks/Projektstatus und NuGet-Alternative; nur freigegebene öffentliche Hosts |
 
 **Freigabe G4:** Alle neun Paketmanager innerhalb der dokumentierten Fixtures getestet. Reale Toolversionen auf Windows 10/11 sind noch abzunehmen; bis dahin bleibt der Status „experimentell“.
 
@@ -149,14 +149,14 @@ Jeder Meilenstein endet mit einer prüfbaren Freigabe. „Umgesetzt“ bedeutet:
 |---|---|---|---|
 | F-25 | Performance und Skalierung | Dokumentierte Referenzfixture, begrenzte Queues/Verläufe; kein fortlaufendes Speicherwachstum | Umgesetzt: `tests/performance.rs` (10 000 Pakete), `scripts/measure.ps1`, Ergebnisse im Messbericht |
 | F-26 | Native Bedienung härten | Tastatur, Fokus, Screenreader, DPI, Explorer-Neustart und Schlafmodus | Umgesetzt: Tastaturnavigation, Fokusfalle in Dialogen, Accessibility-Rollen, Tray-Neuanmeldung; DPI/Screenreader/Schlaf manuell offen |
-| F-27 | Migration/Backup/Veröffentlichung | Konsistente Sicherung, Upgradefehler, source-passender Build, GPL-Abhängigkeiten und sichere CI | Umgesetzt: Backup-API, Migrationstests, `scripts/release.ps1`, CI mit minimalen Rechten |
+| F-27 | Migration/Backup/Veröffentlichung | Konsistente Sicherung, Upgradefehler, source-passender Build, GPL-Abhängigkeiten und sichere CI | Umgesetzt: Backup-API, Migrationstests (v3→v4: `v3_scopes_keep_their_meaning_and_user_folders_get_their_own_realm`), Sicherung und Export mit Vorschau im Dashboard, `scripts/release.ps1`, CI mit minimalen Rechten |
 | F-28 | Unterstützungsmatrix und Anleitung | Inventar/Update/Plan/Ausführung je Version; bekannte Grenzen; Windows-10/11-Nachweise | Umgesetzt: [UNTERSTUETZUNGSMATRIX](UNTERSTUETZUNGSMATRIX.md), [ANLEITUNG](ANLEITUNG.md); Windows-11-Nachweis offen |
 
-**Freigabe G6:** Offen, bis G5, die Windows-11-Abnahme und ein Messbericht auf zweiter Hardware vorliegen.
+**Freigabe G6:** Offen, bis G5, der zweite Review der erweiterten Lesegrenze (Systembefund, `user-ai`-Freigaben), die Windows-11-Abnahme und ein Messbericht auf zweiter Hardware vorliegen.
 
 ## 6. Datenmodell
 
-Schema v2 speichert Projekte, Ressourcen (mit Herkunft, Elternbezug, Prüftermin, Entbehrlichkeit, Identität), Lesefreigaben, Erfassungsgenerationen mit Inventareinträgen, gruppierte Ereignisse, Besitzerkanten, Sessions, Wegwerf-Testwurzeln, Pläne mit Identitätsmanifest, das Aktionsjournal, Einstellungen und Updatehinweise. Paketgraphen und Kanten zwischen Paketen werden erst mit ihrem Anwendungsfall ergänzt.
+Schema v3 ergänzt ausgewählte statische Paketkanten, Kontext und Dateibeleg-Zähler in Inventareinträgen, separate Lesebereichsprofile, lokale Behalten-Vormerkungen sowie einen nach Ökosystem/Name/Version/Quelle/Host getrennten Quellen-Cache. Der alte Latest-only-Cache wird nach konsistenter Sicherung verworfen und neu abgefragt. Ressourcen, Sessions, Aktionsjournal und Bereinigungsfreigaben bleiben unabhängig. Der Referenzgraph ist eine begrenzte Auswertung der veröffentlichten Inventargenerationen, kein neuer Dienst und keine Graphdatenbank.
 
 Pfade sind Orte, nicht dauerhaft sichere Identitäten. Besitzer, Nutzung, Verfügbarkeit, Schutz und Bereinigungsfähigkeit bleiben unabhängige Felder. Ein neu angelegtes Verzeichnis an einem alten Ort erbt niemals eine frühere Freigabe (Test `replaced_root_does_not_inherit_the_approval`, `replaced_temp_folder_does_not_inherit_the_decision`).
 
@@ -191,8 +191,10 @@ Projektvorschläge dürfen in Git geteilt werden, lokale Datenbank, absolute Pfa
 
 ## 10. Nächste Schritte
 
-1. Windows-11-Abnahme nach [WINDOWS-ABNAHME](WINDOWS-ABNAHME.md) und Messbericht auf zweiter Hardware.
-2. Unabhängiger Review der Löschpfade (`src/cleanup/`, `src/platform/windows.rs`) als Voraussetzung für G5; erst danach eine produktive Ressourcenart freischalten.
-3. Adapter gegen reale Toolversionen abnehmen und den Status in der Unterstützungsmatrix von „experimentell“ auf „getestet“ heben.
+1. Zweiter Review der erweiterten Lesegrenze: Metadatenprüfung des Systembefunds (`src/inventory/system.rs`, `platform::local_fixed_path`) und routengeführte Erfassung persönlicher KI-Ordner (`scan_user_ai`, `Catalog::user_routes`, Migration 004).
+2. Systemerkennung ergänzen, wo bisher nur ein Ortsnachweis besteht: uv-Python, rustup, .NET-Tools, pyenv; wirksame Datenorte und Konfigurations-Overrides; Git-Konfiguration. Die Scratchpad-/Entwicklungsfundsuche mit unbekanntem Zweck ist implementiert, vollständige Worktree-/Editor-Erkennung bleibt offen. Stand und Grenzen: [Systemerkennung](SYSTEMERKENNUNG.md), [Entwicklungsfunde](ENTWICKLUNGSFUNDE.md). Vollständige Resolver-, Feature-, Peer- und Frameworkanalyse ist noch offen.
+3. Windows-11-Abnahme nach [WINDOWS-ABNAHME](WINDOWS-ABNAHME.md) und Messbericht auf zweiter Hardware.
+4. Unabhängiger Review der Löschpfade (`src/cleanup/`, `src/platform/windows.rs`) als Voraussetzung für G5; erst danach eine produktive Ressourcenart freischalten.
+5. Adapter gegen reale Toolversionen abnehmen und den Status in der Unterstützungsmatrix von „experimentell“ auf „getestet“ heben.
 
 Der ausführliche [PROJEKTPLAN](PROJEKTPLAN.md) bleibt das Produktziel; dieses Dokument hält die überprüfbare Umsetzungsreihenfolge und ihren Stand fest.

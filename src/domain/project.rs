@@ -81,6 +81,13 @@ pub struct AiEntry {
     pub scope: String,
     #[serde(default)]
     pub references: Vec<String>,
+    /// Source selector for a fresh content read; absent for built-in demo rows.
+    #[serde(default)]
+    pub scope_id: Option<i64>,
+    #[serde(default)]
+    pub rel_path: String,
+    #[serde(default)]
+    pub viewable: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

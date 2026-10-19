@@ -62,21 +62,29 @@ macro_rules! string_enum {
 }
 
 mod cleanup;
+mod disk;
 mod inventory;
+mod package;
 mod project;
 mod review;
 mod scope;
+mod search;
 mod session;
 mod settings;
 mod snapshot;
 mod state;
+mod system;
 
 pub use cleanup::*;
+pub use disk::*;
 pub use inventory::*;
+pub use package::*;
 pub use project::*;
 pub use review::*;
 pub use scope::*;
+pub use search::*;
 pub use session::*;
 pub use settings::*;
 pub use snapshot::*;
 pub use state::*;
+pub use system::*;

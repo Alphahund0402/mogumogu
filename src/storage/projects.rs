@@ -8,19 +8,21 @@ use rusqlite::{OptionalExtension, Row, Transaction, params};
 
 /// One grouped pass over the published generations instead of correlated
 /// sub-queries per project (which grow with projects × inventory size).
+/// `CROSS JOIN` fixes SQLite's loop order: complete generations first, then
+/// their items by primary key, never a scan over superseded generations.
 const PROJECT_QUERY: &str = "
     WITH complete AS (
         SELECT g.id AS gid, s.project_id AS pid FROM generations g JOIN scopes s ON s.id = g.scope_id
         WHERE g.state = 'complete' AND s.project_id IS NOT NULL),
     packages AS (
         SELECT c.pid, COUNT(DISTINCT i.ecosystem || '|' || i.name || '|' || IFNULL(i.version, '')) AS n
-        FROM complete c JOIN inventory_items i ON i.generation_id = c.gid
+        FROM complete c CROSS JOIN inventory_items i ON i.generation_id = c.gid
         WHERE i.category = 'package' AND i.install_state IN ('resolved','installed') GROUP BY c.pid),
     ecosystems AS (
         SELECT pid, group_concat(e, ' · ') AS e FROM (
             SELECT DISTINCT c.pid AS pid, i.ecosystem AS e
-            FROM complete c JOIN inventory_items i ON i.generation_id = c.gid
-            WHERE i.category = 'manifest' ORDER BY c.pid, e)
+            FROM complete c CROSS JOIN inventory_items i ON i.generation_id = c.gid
+            WHERE i.category = 'manifest' AND i.ecosystem <> 'discovery' ORDER BY c.pid, e)
         GROUP BY pid)
     SELECT p.id, p.name, p.path, p.ecosystem, p.state, p.evidence, p.bytes, p.packages, p.protected, p.origin,
       IFNULL(packages.n, 0) AS inventory_packages,
@@ -91,11 +93,7 @@ impl Repository {
 
     pub fn projects(&mut self) -> Result<Vec<Project>> {
         let sql = format!("{PROJECT_QUERY} ORDER BY p.id LIMIT {}", limits::MAX_PROJECTS);
-        self.read(|tx| {
-            let mut statement = tx.prepare(&sql)?;
-            let rows = statement.query_map([], map_project)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(&sql, [], map_project)
     }
 
     /// Stores a measured size (`None` = measurement incomplete, unknown).

@@ -3,6 +3,9 @@
 //!
 //! The repository is split by area; each submodule adds an `impl Repository`
 //! block. SQL never leaves this module and never runs in UI callbacks.
+//! `summary` reads status totals; `generations` publishes inventory;
+//! `cleanup` persists plans and the durable action journal. All mutations
+//! share `Repository::write`, including the revision used by report caches.
 mod activity;
 mod cleanup;
 mod demo;
@@ -13,6 +16,7 @@ mod resources;
 mod scopes;
 mod sessions;
 mod settings;
+mod summary;
 mod updates;
 
 pub use cleanup::{JournalEntry, ManifestEntry, NewTarget, StoredPlan, StoredTarget};
@@ -36,6 +40,7 @@ pub struct Repository {
     connection: Connection,
     demo: bool,
     clock: Arc<dyn Clock>,
+    revision: u64,
 }
 
 impl Repository {
@@ -81,7 +86,7 @@ impl Repository {
         connection.pragma_update(None, "cache_size", -limits::SQLITE_CACHE_KIB)?;
         connection.pragma_update(None, "journal_size_limit", 32 * 1024 * 1024)?;
         migrations::migrate(&mut connection, version, backups.as_deref(), clock.now())?;
-        let mut repo = Self { connection, demo, clock };
+        let mut repo = Self { connection, demo, clock, revision: 0 };
         repo.guard_mode()?;
         if demo {
             repo.seed_demo()?;
@@ -110,6 +115,10 @@ impl Repository {
         self.clock.now()
     }
 
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn clock(&self) -> Arc<dyn Clock> {
         Arc::clone(&self.clock)
     }
@@ -133,6 +142,7 @@ impl Repository {
         let tx = self.connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let value = f(&tx)?;
         tx.commit()?;
+        self.revision = self.revision.wrapping_add(1);
         Ok(value)
     }
 
@@ -142,6 +152,21 @@ impl Repository {
         let value = f(&tx)?;
         tx.commit()?;
         Ok(value)
+    }
+
+    /// Collects mapped rows inside one read transaction. Statements and row
+    /// iterators are released before committing, and mapping errors propagate.
+    fn query<T>(
+        &mut self,
+        sql: &str,
+        params: impl rusqlite::Params,
+        map: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+    ) -> Result<Vec<T>> {
+        self.read(|tx| {
+            let mut statement = tx.prepare(sql)?;
+            let rows = statement.query_map(params, map)?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })
     }
 
     /// Consistent online copy via the SQLite backup API (never a raw file

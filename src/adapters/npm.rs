@@ -19,7 +19,7 @@ static DESCRIPTOR: Descriptor = Descriptor {
     updates: Support::Experimental,
     cleanup: Support::Unsupported,
     formats: &["package.json", "package-lock.json v1–v3", "node_modules/.package-lock.json"],
-    limits: "Keine Skripte oder Lifecycle-Hooks; globale npm-Installationen und Benutzer-.npmrc werden nicht gelesen.",
+    limits: "Keine Skripte oder Hooks; globaler Paketbestand nur mit eigener npm-global-Freigabe; Benutzer-.npmrc wird nicht gelesen.",
 };
 
 impl Adapter for Npm {
@@ -39,6 +39,7 @@ impl Adapter for Npm {
                     file,
                     format!("Lockfile v{}", value["lockfileVersion"].as_i64().unwrap_or(1)),
                 )];
+                items[0].evidence.dependencies = dependencies(&value["packages"][""]);
                 items.extend(lock_packages(&value, &file.rel_path(), InstallState::Resolved));
                 bounded(items)
             }
@@ -126,6 +127,14 @@ pub(super) fn package_json(file: &FoundFile<'_>, ecosystem: &str) -> AdapterResu
         detail.push_str(" · Skripte vorhanden (nicht ausgeführt)");
     }
     let mut items = vec![manifest(ecosystem, file, detail)];
+    items[0].evidence.dependencies = dependencies(&value);
+    items[0].evidence.commands = value["scripts"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, v)| v.as_str())
+        .flat_map(super::commands::names)
+        .collect();
     for (section, label) in [
         ("dependencies", ""),
         ("devDependencies", " · dev"),
@@ -136,15 +145,30 @@ pub(super) fn package_json(file: &FoundFile<'_>, ecosystem: &str) -> AdapterResu
         for (name, spec) in deps {
             let spec = spec.as_str().unwrap_or("?");
             let (source, host) = spec_source(spec);
-            items.push(
-                InventoryItem::new(ItemCategory::Package, ecosystem, name.as_str(), file.rel_path())
-                    .state(InstallState::Declared)
-                    .source(source, host)
-                    .detail(format!("Spezifikation {spec}{label}")),
-            );
+            let mut item = InventoryItem::new(ItemCategory::Package, ecosystem, name.as_str(), file.rel_path())
+                .state(InstallState::Declared)
+                .source(source, host)
+                .detail(format!("Spezifikation {spec}{label}"));
+            item.evidence.context = section.into();
+            items.push(item);
         }
     }
     Ok(items)
+}
+
+pub(super) fn dependencies(value: &Value) -> Vec<crate::domain::PackageDependency> {
+    let mut refs = Vec::new();
+    for section in ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "requires"] {
+        for (name, spec) in value[section].as_object().into_iter().flatten() {
+            refs.push(crate::domain::PackageDependency {
+                name: name.clone(),
+                requirement: spec.as_str().unwrap_or("").into(),
+                kind: section.into(),
+                exact: false,
+            });
+        }
+    }
+    refs
 }
 
 /// Packages of a lockfile (`packages` map of v2/v3, nested `dependencies` of v1).
@@ -154,10 +178,12 @@ pub(super) fn lock_packages(value: &Value, rel_path: &str, state: InstallState) 
         for (key, entry) in packages {
             let Some(index) = key.rfind("node_modules/") else { continue };
             let name = &key[index + "node_modules/".len()..];
-            items.push(lock_item(name, entry, rel_path, state));
+            let mut item = lock_item(name, entry, rel_path, state);
+            item.evidence.qualifier = key.clone();
+            items.push(item);
         }
     } else if let Some(dependencies) = value["dependencies"].as_object() {
-        collect_v1(dependencies, rel_path, state, 0, &mut items);
+        collect_v1(dependencies, rel_path, state, 0, "", &mut items);
     }
     items
 }
@@ -167,15 +193,19 @@ fn collect_v1(
     rel_path: &str,
     state: InstallState,
     depth: usize,
+    prefix: &str,
     out: &mut Vec<InventoryItem>,
 ) {
     if depth > REFERENCE_MAX_DEPTH {
         return;
     }
     for (name, entry) in deps {
-        out.push(lock_item(name, entry, rel_path, state));
+        let qualifier = format!("{prefix}/node_modules/{name}");
+        let mut item = lock_item(name, entry, rel_path, state);
+        item.evidence.qualifier = qualifier.clone();
+        out.push(item);
         if let Some(nested) = entry["dependencies"].as_object() {
-            collect_v1(nested, rel_path, state, depth + 1, out);
+            collect_v1(nested, rel_path, state, depth + 1, &qualifier, out);
         }
     }
 }
@@ -195,11 +225,14 @@ fn lock_item(name: &str, entry: &Value, rel_path: &str, state: InstallState) -> 
     }
     let detail =
         if flags.is_empty() { state.label().to_string() } else { format!("{} · {}", state.label(), flags.join(", ")) };
-    InventoryItem::new(ItemCategory::Package, "npm", name, rel_path)
+    let mut item = InventoryItem::new(ItemCategory::Package, "npm", name, rel_path)
         .version(entry["version"].as_str().unwrap_or_default())
         .state(state)
         .source(source, host)
-        .detail(detail)
+        .detail(detail);
+    item.evidence.dependencies = dependencies(entry);
+    item.evidence.deprecated = entry["deprecated"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
+    item
 }
 
 #[cfg(test)]

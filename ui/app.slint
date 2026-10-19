@@ -1,192 +1,288 @@
-import { LineEdit } from "std-widgets.slint";
+import { ListView } from "std-widgets.slint";
+import "../assets/fonts/zen-maru-gothic/ZenMaruGothic-Regular.ttf";
+import "../assets/fonts/zen-maru-gothic/ZenMaruGothic-Bold.ttf";
 import { Theme, Icons } from "theme.slint";
-import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, AdapterRow, HintRow, ScopeRow, SessionRow, PlanRow,
-         DonutSegment, LegendRow, ProfileChip, DetailRow, DetailAction, SourceToggle } from "store.slint";
-import { Card, Icon, NavItem, Metric } from "components.slint";
+import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, SessionRow, PlanRow,
+         DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
+         ExperimentRow, FolderRow, ChainStep } from "store.slint";
+import { Icon, NavItem, UiButton, Mascot, MascotPlate, SpeechBubble, PillField, Card, StatusChip, Activatable } from "components.slint";
 import { OverviewPage } from "pages/overview.slint";
-import { ProjectsPage, PackagesPage, AiPage, ResourcesPage, ReviewPage, ActivityPage, SettingsPage } from "pages/pages.slint";
+import { StoragePage } from "pages/storage.slint";
+import { ProjectsPage, PackagesPage, AiPage, ExperimentsPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
 import { DialogLayer } from "dialogs.slint";
 
-export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, AdapterRow, HintRow, ScopeRow, SessionRow, PlanRow,
-         DonutSegment, LegendRow, ProfileChip, DetailRow, DetailAction, SourceToggle }
+export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, SessionRow, PlanRow,
+         DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
+         ExperimentRow, FolderRow, ChainStep }
 
 component Sidebar inherits Rectangle {
-    width: 196px;
-    background: #fafcfe;
-    Rectangle { x: parent.width - 1px; width: 1px; background: Theme.line; }
+    width: 188px;
+    background: Theme.creme;
+    Rectangle { x: parent.width - 1.5px; width: 1.5px; background: Theme.edge; }
     VerticalLayout {
-        padding-left: 12px; padding-right: 12px; padding-top: 22px; padding-bottom: 17px; spacing: 5px;
-        VerticalLayout {
-            spacing: 2px; padding-bottom: 24px;
-            Image { source: Icons.logo; height: 72px; image-fit: contain; accessible-role: none; }
-            Text { text: "mogumogu"; font-size: 24px; font-weight: 760; color: Theme.ink; horizontal-alignment: center; accessible-role: AccessibleRole.text; }
-            Text { text: "Weniger Ballast. Mehr Fokus."; font-size: 9px; color: Theme.muted; horizontal-alignment: center; }
+        padding: 10px; padding-top: 8px; padding-right: 11.5px; spacing: 2px;
+        HorizontalLayout {
+            height: 42px; padding-left: 4px; spacing: 6px;
+            Image { source: Icons.logo; width: 28px; height: 28px; y: (parent.height - self.height) / 2; image-fit: contain; accessible-role: none; }
+            Image { source: Icons.wordmark; width: 112px; height: 25px; y: (parent.height - self.height) / 2; image-fit: contain; accessible-role: image; accessible-label: "mogumogu"; }
         }
-        NavItem { label: "Übersicht"; icon: Icons.home; selected: Store.page == 0; activated => { Store.page = 0; } }
+        NavItem { label: "Übersicht"; icon: Icons.overview; badge: Store.review-count > 0 ? Store.review-count : ""; selected: Store.page == 0; activated => { Store.page = 0; } }
         NavItem { label: "Projekte"; icon: Icons.folder; selected: Store.page == 1; activated => { Store.page = 1; } }
-        NavItem { label: "Paketmanager"; icon: Icons.package; selected: Store.page == 2; activated => { Store.page = 2; } }
+        NavItem { label: "Pakete"; icon: Icons.package; selected: Store.page == 2; activated => { Store.page = 2; } }
         NavItem { label: "KI-Konfiguration"; icon: Icons.spark; selected: Store.page == 3; activated => { Store.page = 3; } }
-        NavItem { label: "Ressourcen"; icon: Icons.database; selected: Store.page == 4; activated => { Store.page = 4; } }
-        NavItem { label: "Prüfliste"; icon: Icons.leaf; selected: Store.page == 5; activated => { Store.page = 5; } }
-        NavItem { label: "Aktivität"; icon: Icons.monitor; selected: Store.page == 6; activated => { Store.page = 6; } }
-        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 7; activated => { Store.page = 7; } }
-        Rectangle { vertical-stretch: 1; }
-        Rectangle {
-            height: 88px; border-radius: 10px; border-width: 1px; border-color: #e2ecf6; background: #f0f6fc;
-            VerticalLayout {
-                padding: 12px; spacing: 7px;
-                HorizontalLayout {
-                    spacing: 7px;
-                    Icon { source: Icons.shield; width: 15px; height: 15px; tone: Theme.blue; }
-                    Text { text: "Deine Arbeit bleibt."; font-size: 10px; font-weight: 600; color: Theme.ink; vertical-alignment: center; }
-                }
-                Text {
-                    text: Store.demo ? "Demodaten sind schreibgeschützt. Alles bleibt lokal." : "Bereinigung nur nach bestätigtem Plan. Alles bleibt lokal.";
-                    font-size: 10px; color: Theme.muted; wrap: word-wrap;
-                }
+        NavItem { label: "Experimente"; icon: Icons.flask; badge: Store.stalled-count > 0 ? Store.stalled-count : ""; selected: Store.page == 4; activated => { Store.page = 4; } }
+        NavItem { label: "Speicher"; icon: Icons.drive; selected: Store.page == 5; activated => { Store.page = 5; } }
+        // Mochi takes the space that is left. Fixed layout constants keep the
+        // area's size independent of its absolutely placed contents.
+        mochi-area := Rectangle {
+            vertical-stretch: 1;
+            min-height: 58px;
+            preferred-height: 58px;
+            property <length> bubble-space: bubble.preferred-height + 6px;
+            property <bool> talk: Store.mascot-line != "" && self.height >= 84px + self.bubble-space;
+            property <length> figure: clamp(self.height - (self.talk ? self.bubble-space : 0px), 52px, 92px);
+            bubble := SpeechBubble {
+                x: 0px; width: parent.width; height: self.preferred-height;
+                y: parent.height - parent.figure - self.height - 6px;
+                visible: parent.talk;
+                text: Store.mascot-line;
+            }
+            Mascot { x: 4px; y: parent.height - parent.figure; width: parent.figure; height: parent.figure; pose: Store.mascot-pose; }
+        }
+        Rectangle { height: 1.5px; background: Theme.edge; }
+        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 6; activated => { Store.page = 6; } }
+        HorizontalLayout {
+            height: 24px; padding-left: 10px; padding-right: 4px;
+            Text { text: "v" + Store.version; font-size: 10.5px; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; }
+            help := Activatable {
+                width: 72px; height: 24px; border-radius: 8px;
+                label: "Hilfe, Tastenkürzel und CLI, F1";
+                activated => { Actions.show-help(); }
+                Text { text: "F1 Hilfe"; font-size: 10.5px; color: Theme.muted; horizontal-alignment: right; vertical-alignment: center; }
             }
         }
-        Rectangle { height: 12px; }
-        HorizontalLayout {
-            spacing: 7px; padding-left: 4px;
-            Rectangle { width: 7px; height: 7px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Store.busy ? #d5a55e : Theme.green; }
-            Text { text: Store.busy ? "Wird aktualisiert" : (Store.demo ? "Demo · bereit" : "Lokal · bereit"); font-size: 10px; color: Theme.ink; }
-        }
-        Text { text: "v" + Store.version + " · Prototyp"; font-size: 9px; color: Theme.muted; x: 4px; }
     }
 }
 
-component Hero inherits Rectangle {
-    callback focus-search();
-    in-out property <bool> search-focused;
-    height: 242px;
-    clip: true;
-    Image { width: parent.width; height: parent.height; source: Icons.mountains; image-fit: cover; accessible-role: none; }
-    Rectangle { background: @linear-gradient(180deg, #1d36560d 0%, #1333485c 55%, #f3f6f9 100%); }
-    Rectangle {
-        x: 27px; y: 23px; height: 25px; width: badge.preferred-width + 22px; border-radius: 13px; background: #ffffffdf;
-        badge := Text { text: Store.demo ? "DEMODATEN  /  VORSCHAU" : "LOKALES INVENTAR  /  V0.1"; font-size: 8px; font-weight: 650; letter-spacing: 0.65px; color: #273c55; }
-    }
+component Toolbar inherits Rectangle {
+    height: 52px;
     HorizontalLayout {
-        x: parent.width - self.preferred-width - 27px; y: 26px; spacing: 7px;
-        Icon { source: Icons.shield; width: 15px; height: 15px; tone: white; }
-        Text { text: "Kein Konto. Keine Cloud."; font-size: 10px; color: white; }
-    }
-    Text { x: 27px; y: 68px; text: "Willkommen zurück!"; font-size: 29px; font-weight: 690; color: white; accessible-role: AccessibleRole.text; }
-    Text { x: 28px; y: 112px; text: "Deine Entwicklungswelt. Ein bisschen aufgeräumter."; font-size: 12px; color: #eef5fb; }
-    Rectangle {
-        x: parent.width - self.width - 27px; y: 76px; width: min(363px, parent.width * 0.42); height: 40px;
-        border-radius: 8px; background: #ffffffed; border-width: search.has-focus ? 2px : 1px; border-color: search.has-focus ? Theme.focus : #e3eaf166;
-        HorizontalLayout {
-            padding-left: 12px; padding-right: 10px; spacing: 8px;
-            Icon { source: Icons.search; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: #63758a; }
-            search := LineEdit {
-                font-size: 11px;
-                horizontal-stretch: 1;
-                placeholder-text: "Projekte durchsuchen …";
-                text <=> Store.query;
-                enabled: Store.modal == 0;
-                accessible-label: "Projekte durchsuchen";
-                edited(value) => { Store.page = 1; Actions.search(value); }
-            }
-            Rectangle {
-                width: 38px; height: 18px; y: (parent.height - self.height) / 2; border-radius: 4px; border-width: 1px; border-color: #dfe6ed; background: #f6f8fb;
-                Text { text: "Strg K"; font-size: 8px; color: #738296; }
-            }
+        padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 8px;
+        UiButton { y: (parent.height - self.height) / 2; primary: true; label: "Projekt hinzufügen"; has-icon: true; icon: Icons.plus; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } }
+        UiButton { y: (parent.height - self.height) / 2; label: "Jetzt erfassen"; has-icon: true; icon: Icons.scan; available: !Store.demo && !Store.busy; activated => { Actions.scan-all(); } }
+        Rectangle { horizontal-stretch: 1; }
+        search := PillField {
+            min-width: 160px; preferred-width: 286px; max-width: 360px; horizontal-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            placeholder: "Inventar durchsuchen …  Strg+K";
+            label: "Alles durchsuchen";
+            text <=> Store.query;
+            enabled: Store.modal == 0;
+            edited(value) => { Store.search-open = value != ""; Actions.search(value); }
+            accepted(value) => { if Store.search-results.length > 0 { Actions.open-search-hit(0); } }
         }
     }
-    public function focus-search-field() { search.focus(); }
+    public function focus-search-field() { search.focus-input(); }
+}
+
+component SearchLine inherits Activatable {
+    in property <SearchRow> data;
+    in property <int> index;
+    height: Theme.detail-row-height;
+    border-radius: 12px;
+    border-color: transparent;
+    label: root.data.area-label + ": " + root.data.title + ". " + root.data.detail;
+    activated => { Actions.open-search-hit(root.index); }
+    HorizontalLayout {
+        padding-left: 10px; padding-right: 10px; spacing: 10px;
+        HorizontalLayout { width: 104px; alignment: start; StatusChip { width: 104px; constrained: true; y: (parent.height - self.height) / 2; label: root.data.area-label; kind: "neutral"; } }
+        VerticalLayout {
+            alignment: center; spacing: 1px; horizontal-stretch: 1; min-width: 0px;
+            Text { text: root.data.title; font-size: 12.5px; font-weight: 700; color: Theme.ink; overflow: elide; }
+            Text { text: root.data.detail; font-size: 10.5px; color: Theme.muted; overflow: elide; }
+        }
+    }
+}
+
+component SearchPopup inherits Card {
+    width: 420px;
+    // ListView reports no useful preferred height; rows have a fixed height.
+    height: Store.search-results.length == 0 ? 78px : min(380px, Store.search-results.length * Theme.detail-row-height + 54px);
+    border-color: Theme.edge-strong;
+    VerticalLayout {
+        padding: 8px; spacing: 4px;
+        HorizontalLayout {
+            padding-left: 6px; height: Store.search-results.length == 0 ? 48px : 26px; spacing: 8px;
+            Text { text: Store.search-results.length == 0 ? "Keine Treffer. Gesucht wird ab zwei Zeichen im erfassten Inventar." : "Treffer · Enter öffnet den ersten"; font-size: 11px; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
+            UiButton { quiet: true; small: true; has-icon: true; icon: Icons.close; label: ""; available: true; accessible-label: "Suche schließen"; activated => { Store.search-open = false; } }
+        }
+        if Store.search-results.length > 0 : ListView {
+            vertical-stretch: 1;
+            for hit[index] in Store.search-results : SearchLine { data: hit; index: index; }
+        }
+    }
+}
+
+// Visible while a pass runs outside the guide: progress and a safe stop.
+// Afterwards it states the result of the last action the user started
+// (pass, source check, system check, storage, backup, export).
+component ScanStrip inherits Rectangle {
+    property <bool> done: !Store.scan-running;
+    property <bool> warn: Store.scan-notice-kind == "warn";
+    height: 46px;
+    background: !root.done ? Theme.sky-soft : root.warn ? Theme.amber-soft : Theme.sage-soft;
+    HorizontalLayout {
+        padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 10px;
+        MascotPlate { pose: !root.done ? 4 : root.warn ? 6 : 1; width: 40px; height: 40px; y: 3px; }
+        Text {
+            text: root.done ? Store.scan-notice : Store.scan-text;
+            font-size: 11.5px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+            color: !root.done ? Theme.protected-ink : root.warn ? Theme.review-ink : Theme.ok-ink;
+            accessible-role: text;
+        }
+        if !root.done : Rectangle {
+            width: 160px; height: 8px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Theme.surface; clip: true;
+            Rectangle { x: 0; width: parent.width * clamp(Store.scan-progress, 0.04, 1.0); background: Theme.chart-blue; border-radius: 4px; }
+        }
+        if !root.done : UiButton { y: (parent.height - self.height) / 2; small: true; label: Store.scan-cancelling ? "Wird angehalten …" : "Abbrechen"; available: !Store.scan-cancelling; activated => { Actions.cancel-scan(); } }
+        if root.done : UiButton { y: (parent.height - self.height) / 2; small: true; label: "Schließen"; available: true; activated => { Store.scan-notice = ""; } }
+    }
+}
+
+component StatusBar inherits Rectangle {
+    height: 28px;
+    background: Theme.creme;
+    Rectangle { height: 1.5px; background: Theme.edge; }
+    HorizontalLayout {
+        padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 12px;
+        Rectangle { width: 8px; height: 8px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Store.busy ? Theme.chart-amber : Store.monitoring && Store.pause-text == "" ? #3e8e5e : Theme.chart-fog; }
+        Text { text: Store.monitoring-text; max-width: 200px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+        Text { text: Store.status; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; accessible-role: text; }
+        Text { text: Store.demo ? "Demo · schreibgeschützt" : Store.updates ? "Lokal · Updatehinweise an" : "Lokal · Netzwerk aus"; max-width: 200px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+    }
 }
 
 export component Dashboard inherits Window {
-    title: "mogumogu — Entwicklungsressourcen";
-    preferred-width: 1460px;
-    preferred-height: 930px;
-    min-width: 1180px;
-    min-height: 830px;
-    default-font-family: "Segoe UI";
-    default-font-size: 13px;
+    title: Store.demo ? "mogumogu — Demo" : "mogumogu — Lokales Inventar";
+    preferred-width: 1080px;
+    preferred-height: 680px;
+    min-width: 900px;
+    min-height: 560px;
+    default-font-family: Theme.font-family;
+    default-font-size: 12px;
     background: Theme.canvas;
-    icon: @image-url("../assets/tray.png");
+    icon: Icons.logo;
 
     forward-focus: keys;
-    public function focus-search() { hero.focus-search-field(); }
+    init => { Store.window-width = self.width; }
+    changed width => { Store.window-width = self.width; }
+    public function focus-search() { toolbar.focus-search-field(); }
     public function focus-dialog() { dialog.focus-first(); }
+    // Button, Escape and completed requests all restore the keyboard target.
+    public function dismiss-dialog() { Store.modal = 0; Store.content-text = ""; keys.focus(); }
 
     keys := FocusScope {
-        key-pressed(event) => {
-            if Store.modal == 0 && event.modifiers.control && (event.text == "k" || event.text == "K") { root.focus-search(); return accept; }
-            if event.text == Key.Escape && Store.modal != 0 { Store.modal = 0; return accept; }
-            if event.modifiers.alt && Store.modal == 0 {
-                if event.text == "1" { Store.page = 0; return accept; }
-                if event.text == "2" { Store.page = 1; return accept; }
-                if event.text == "3" { Store.page = 2; return accept; }
-                if event.text == "4" { Store.page = 3; return accept; }
-                if event.text == "5" { Store.page = 4; return accept; }
-                if event.text == "6" { Store.page = 5; return accept; }
-                if event.text == "7" { Store.page = 6; return accept; }
-                if event.text == "8" { Store.page = 7; return accept; }
+        capture-key-pressed(event) => {
+            if event.text == Key.Escape {
+                if Store.modal != 0 { root.dismiss-dialog(); return accept; }
+                if Store.search-open { Store.search-open = false; keys.focus(); return accept; }
+                if Store.guide-open { Actions.guide-skip(); return accept; }
+                return reject;
+            }
+            if Store.modal == 0 {
+                if event.modifiers.control && (event.text == "f" || event.text == "F" || event.text == "k" || event.text == "K") { root.focus-search(); return accept; }
+                if event.text == Key.F5 { if !Store.busy { Actions.refresh(); } return accept; }
+                if event.text == Key.F1 { Actions.show-help(); return accept; }
+                if event.modifiers.control && (event.text == "n" || event.text == "N") && !Store.demo && !Store.busy { Actions.guide-start(); return accept; }
+                if event.modifiers.alt {
+                    if event.text == "1" { Store.page = 0; return accept; }
+                    if event.text == "2" { Store.page = 1; return accept; }
+                    if event.text == "3" { Store.page = 2; return accept; }
+                    if event.text == "4" { Store.page = 3; return accept; }
+                    if event.text == "5" { Store.page = 4; return accept; }
+                    if event.text == "6" { Store.page = 5; return accept; }
+                    if event.text == "7" { Store.page = 6; return accept; }
+                }
             }
             return reject;
         }
         HorizontalLayout {
             Sidebar { }
-            main := Rectangle {
-                horizontal-stretch: 1;
-                background: Theme.canvas;
-                hero := Hero { y: 0; width: parent.width; }
-                VerticalLayout {
-                    y: 190px; height: parent.height - 190px;
-                    padding-left: 26px; padding-right: 26px; spacing: 14px;
-                    HorizontalLayout {
-                        spacing: 13px; height: 100px;
-                        Metric { label: "Projekte"; value: Store.project-count; caption: "Projekte"; note: Store.project-note; icon: Icons.folder; activated => { Store.page = 1; } }
-                        Metric { label: "Erfasste Pakete"; value: Store.package-count; caption: "Erfasste Pakete"; note: Store.package-note; icon: Icons.package; tint: #fff5e6; tone: #b67b27; activated => { Store.page = 2; } }
-                        Metric { label: "Erfasster Umfang"; value: Store.footprint; caption: "Erfasster Umfang"; note: Store.footprint-note; icon: Icons.database; tint: #eaf8f4; tone: #159875; activated => { Store.page = 4; } }
-                        Metric { label: "KI-Konfigurationen"; value: Store.ai-count; caption: "KI-Konfigurationen"; note: Store.ai-note; icon: Icons.spark; tint: #f3effc; tone: #8763ce; activated => { Store.page = 3; } }
-                    }
-                    Rectangle {
-                        vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 0px;
+                toolbar := Toolbar { }
+                Rectangle {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: Theme.page-padding; padding-top: 0px;
                         if Store.page == 0 : OverviewPage { }
                         if Store.page == 1 : ProjectsPage { }
                         if Store.page == 2 : PackagesPage { }
                         if Store.page == 3 : AiPage { }
-                        if Store.page == 4 : ResourcesPage { }
-                        if Store.page == 5 : ReviewPage { }
-                        if Store.page == 6 : ActivityPage { }
-                        if Store.page == 7 : SettingsPage { }
+                        if Store.page == 4 : ExperimentsPage { }
+                        if Store.page == 5 : StoragePage { }
+                        if Store.page == 6 : SettingsPage { }
                     }
-                    HorizontalLayout {
-                        height: 34px;
-                        Text { text: Store.status; font-size: 10px; color: Theme.muted; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; accessible-role: AccessibleRole.text; }
-                        Text { text: "Arbeit behalten. Überblick gewinnen."; font-size: 9px; color: #54768d; vertical-alignment: center; }
-                    }
+                    if Store.guide-open : GuideOverlay { width: parent.width; height: parent.height; }
                 }
+                if (Store.scan-running || Store.scan-notice != "") && !Store.guide-open : ScanStrip { }
+                StatusBar { }
             }
         }
-        dialog := DialogLayer { visible: Store.modal != 0; width: parent.width; height: parent.height; }
+        if Store.search-open && Store.query != "" : SearchPopup {
+            x: parent.width - self.width - Theme.page-padding;
+            y: 46px;
+        }
+        dialog := DialogLayer {
+            visible: Store.modal != 0; width: parent.width; height: parent.height;
+            dismissed => { root.dismiss-dialog(); }
+        }
     }
 }
 
 export component MoguTray inherits SystemTrayIcon {
     in property <string> hint: "mogumogu · lokales Entwicklungsinventar";
+    in property <string> status-line: "mogumogu";
+    in property <int> hint-count: 0;
+    in property <bool> alert: false;
     in property <bool> local: false;
     in property <bool> monitoring: false;
+    in property <bool> paused: false;
     in property <bool> busy: false;
-    icon: @image-url("../assets/tray.png");
+    icon: root.busy ? @image-url("../assets/tray-busy.png")
+        : root.paused ? @image-url("../assets/tray-paused.png")
+        : root.alert ? @image-url("../assets/tray-alert.png")
+        : @image-url("../assets/tray.png");
     tooltip: root.hint;
     callback show-dashboard();
-    callback refresh-inventory();
+    callback show-page(int);
     callback scan-all();
-    callback toggle-monitoring();
+    callback pause(int);
+    callback resume();
+    callback set-monitoring(bool);
     callback exit-app();
     clicked => { root.show-dashboard(); }
     Menu {
-        MenuItem { title: "Dashboard öffnen"; activated => { root.show-dashboard(); } }
-        MenuItem { title: "Ansicht aktualisieren"; activated => { root.refresh-inventory(); } }
-        MenuItem { title: "Freigegebene Bereiche erfassen"; enabled: root.local && !root.busy; activated => { root.scan-all(); } }
-        MenuItem { title: root.monitoring ? "Überwachung pausieren" : "Überwachung fortsetzen"; enabled: root.local && !root.busy; activated => { root.toggle-monitoring(); } }
+        MenuItem { title: root.status-line; enabled: false; }
+        MenuItem {
+            title: root.hint-count > 0 ? root.hint-count + " Prüfhinweise ansehen" : "Keine offenen Prüfhinweise";
+            enabled: root.hint-count > 0;
+            activated => { root.show-page(0); }
+        }
         MenuSeparator { }
-        MenuItem { title: "Beenden"; activated => { root.exit-app(); } }
+        MenuItem { title: "Dashboard öffnen"; activated => { root.show-dashboard(); } }
+        MenuItem { title: "Jetzt erfassen"; enabled: root.local && !root.busy; activated => { root.scan-all(); } }
+        Menu {
+            title: root.paused ? "Überwachung: pausiert" : root.monitoring ? "Überwachung: an" : "Überwachung: aus";
+            enabled: root.local;
+            MenuItem { title: "Für 1 Stunde pausieren"; enabled: root.monitoring && !root.paused; activated => { root.pause(60); } }
+            MenuItem { title: "Bis morgen früh pausieren"; enabled: root.monitoring && !root.paused; activated => { root.pause(-1); } }
+            MenuItem { title: "Fortsetzen"; enabled: root.paused; activated => { root.resume(); } }
+            MenuSeparator { }
+            MenuItem { title: root.monitoring ? "Ausschalten" : "Einschalten"; activated => { root.set-monitoring(!root.monitoring); } }
+        }
+        MenuItem { title: "Einstellungen …"; activated => { root.show-page(6); } }
+        MenuSeparator { }
+        MenuItem { title: "mogumogu beenden"; activated => { root.exit-app(); } }
     }
 }

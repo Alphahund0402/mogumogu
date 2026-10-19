@@ -1,0 +1,12 @@
+{
+  "family": "Zen Maru Gothic",
+  "license": "OFL-1.1",
+  "repository": "https://github.com/google/fonts",
+  "revision": "92503f07b74eab956c1abf4956fbf46170716caa",
+  "directory": "ofl/zenmarugothic",
+  "files": {
+    "ZenMaruGothic-Regular.ttf": "a0c0b53543e0993ae2225e629c833f3d51495ad31720694ff112ce4ce11111ef",
+    "ZenMaruGothic-Bold.ttf": "fe24426b9c8b5523a0146a8235c8674eccf0493af354a53ec895c3596d9eb745",
+    "OFL.txt": "2a20cf7ce1909d8ee1e949095d340f7d7656705f7c810a2d6faf56800ad0cb3d"
+  }
+}

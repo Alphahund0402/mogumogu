@@ -1,15 +1,14 @@
 import { Switch, ListView } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
-import { Store, Actions, ProjectRow, DonutSegment, LegendRow } from "store.slint";
+import { Store, Actions, ProjectRow } from "store.slint";
 
+// A white cloud on the sky canvas.
 export component Card inherits Rectangle {
+    min-width: 0px;
     background: Theme.surface;
     border-radius: Theme.radius;
-    border-width: 1px;
-    border-color: Theme.line;
-    drop-shadow-blur: 14px;
-    drop-shadow-offset-y: 3px;
-    drop-shadow-color: #16354f0a;
+    border-width: Theme.stroke;
+    border-color: Theme.edge;
 }
 
 export component Icon inherits Image {
@@ -21,10 +20,91 @@ export component Icon inherits Image {
     accessible-role: none;
 }
 
+// Decorative artwork: one drawing scale for every pose (4 % inset per cell).
+// 0 neutral, 1 happy, 2 folder, 3 laptop (sheet v2); 4 munching, 5 sleeping,
+// 6 worried (mood sheet). State is always also given as text elsewhere.
+export component Mascot inherits Image {
+    in property <int> pose: 1;
+    property <bool> mood: root.pose >= 4;
+    property <int> cell-index: root.mood ? root.pose - 4 : root.pose;
+    source: root.mood ? Icons.moods : Icons.mascots;
+    property <int> cell: root.source.width / 2;
+    property <int> inset: root.cell / 25;
+    source-clip-x: (root.cell-index == 1 || root.cell-index == 3 ? root.cell : 0) + root.inset;
+    source-clip-y: (root.cell-index >= 2 ? root.cell : 0) + root.inset;
+    source-clip-width: root.cell - 2 * root.inset;
+    source-clip-height: root.source-clip-width;
+    image-fit: contain;
+    accessible-role: none;
+}
+
+// The artwork is painted on paper, not cut out: on white cards it sits on a
+// creme plate so the paper edge reads as intended.
+export component MascotPlate inherits Rectangle {
+    in property <int> pose: 1;
+    // The software renderer does not clip images to rounded corners, so the
+    // paper (≈ creme) sits inside the plate with a margin instead.
+    property <length> margin: self.width / 14;
+    background: Theme.creme;
+    border-radius: min(18px, self.width / 4);
+    Mascot { pose: root.pose; x: root.margin; y: root.margin; width: parent.width - 2 * root.margin; height: parent.height - 2 * root.margin; }
+}
+
+// One short sentence from Mochi. Bubble and tail are one outline, so the
+// stroke runs without a seam; the soft tail points down-left to the figure.
+export component SpeechBubble inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size: 11.5px;
+    // Where the tail's tip sits, measured from the bubble's left edge.
+    in property <length> tail-x: 24px;
+    property <length> tail: 9px;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+    preferred-height: message.preferred-height + 2 * Theme.bubble-padding + root.tail;
+    min-height: self.preferred-height;
+    // Path units are logical pixels, inset by half the stroke so nothing clips.
+    property <float> w: root.width / 1px;
+    property <float> h: (root.height - root.tail) / 1px;
+    property <float> i: Theme.stroke / 2px;
+    property <float> r: 14;
+    property <float> t: root.tail-x / 1px;
+    property <float> d: root.tail / 1px;
+    Path {
+        width: root.width; height: root.height;
+        viewbox-width: root.w; viewbox-height: root.height / 1px;
+        fill: Theme.surface;
+        stroke: Theme.ink;
+        stroke-width: Theme.stroke;
+        stroke-line-join: round;
+        MoveTo { x: root.r + root.i; y: root.i; }
+        LineTo { x: root.w - root.r - root.i; y: root.i; }
+        ArcTo { x: root.w - root.i; y: root.r + root.i; radius-x: root.r; radius-y: root.r; sweep: true; }
+        LineTo { x: root.w - root.i; y: root.h - root.r - root.i; }
+        ArcTo { x: root.w - root.r - root.i; y: root.h - root.i; radius-x: root.r; radius-y: root.r; sweep: true; }
+        LineTo { x: root.t + 17; y: root.h - root.i; }
+        QuadraticTo { control-x: root.t + 8; control-y: root.h + 1; x: root.t; y: root.h + root.d - root.i; }
+        QuadraticTo { control-x: root.t + 3; control-y: root.h + 3; x: root.t + 5; y: root.h - root.i; }
+        LineTo { x: root.r + root.i; y: root.h - root.i; }
+        ArcTo { x: root.i; y: root.h - root.r - root.i; radius-x: root.r; radius-y: root.r; sweep: true; }
+        LineTo { x: root.i; y: root.r + root.i; }
+        ArcTo { x: root.r + root.i; y: root.i; radius-x: root.r; radius-y: root.r; sweep: true; }
+        Close { }
+    }
+    // Text keeps clear of the outline and the rounded corners on every side.
+    VerticalLayout {
+        x: 0px; y: 0px; width: root.width; height: root.height - root.tail;
+        padding: Theme.bubble-padding;
+        alignment: center;
+        message := Text { text: root.text; font-size: root.font-size; color: Theme.ink; wrap: word-wrap; }
+    }
+}
+
 // Keyboard-activatable surface: Enter/Space trigger, focus ring visible.
 // Disabled while a dialog is open unless the element lives in the dialog.
 export component Activatable inherits Rectangle {
     in property <bool> available: true;
+    // Read-only rows keep normal contrast without a false button or tab stop.
+    in property <bool> interactive: true;
     in property <bool> in-dialog: false;
     in property <string> label;
     in property <string> selection-kind;
@@ -37,13 +117,13 @@ export component Activatable inherits Rectangle {
     out property <bool> hovered: touch.has-hover && root.active;
     out property <bool> pressed: touch.pressed && root.active;
     out property <bool> focused: focus.has-focus && root.active;
-    property <bool> active: root.available && (Store.modal == 0 || root.in-dialog);
+    property <bool> active: root.interactive && root.available && (Store.modal == 0 || root.in-dialog);
     callback activated();
     forward-focus: focus;
-    border-width: 1px;
-    border-color: root.selected ? Theme.selected-border : root.hovered ? Theme.hover-border : root.resting-border;
+    border-width: Theme.stroke;
+    border-color: root.selected ? Theme.ink : root.hovered ? Theme.edge-strong : root.resting-border;
     background: !root.available ? Theme.disabled
-        : root.selected ? (root.pressed ? Theme.selected-pressed : root.hovered ? Theme.selected-hover : Theme.selected)
+        : root.selected ? (root.pressed ? Theme.sky-pressed : root.hovered ? Theme.sky-hover : Theme.row-selected)
         : root.pressed ? Theme.pressed : root.hovered ? Theme.hover : root.resting-background;
     public function grab-focus() { focus.focus(); }
     public function trigger() {
@@ -55,10 +135,11 @@ export component Activatable inherits Rectangle {
             root.activated();
         }
     }
+    // Slint roles are static; read-only use sites also set accessible-role: text.
     accessible-role: button;
     accessible-label: root.label + (root.selected ? ", ausgewählt" : "");
-    accessible-enabled: root.active;
-    accessible-checkable: root.checkable;
+    accessible-enabled: root.interactive ? root.active : true;
+    accessible-checkable: root.interactive && root.checkable;
     accessible-checked: root.selected;
     accessible-action-default => { root.trigger(); }
     focus := FocusScope {
@@ -72,19 +153,14 @@ export component Activatable inherits Rectangle {
     touch := TouchArea {
         width: root.width; height: root.height;
         enabled: root.active;
-        mouse-cursor: pointer;
+        mouse-cursor: root.active ? MouseCursor.pointer : MouseCursor.default;
         clicked => { focus.focus(); root.trigger(); }
     }
     @children
-    if root.selected && root.selection-kind != "" : Rectangle {
-        x: 1px; y: 8px; width: 3px; height: root.height - 16px;
-        border-radius: 2px; background: Theme.blue;
-        accessible-role: none;
-    }
-    // Inset and explicitly bound to this control: no layout expansion or
-    // clipping into adjacent rows, including virtualized ListView items.
+    // Inset and bound to this control: no layout expansion or clipping into
+    // adjacent rows, including virtualized ListView items.
     if root.focused : Rectangle {
-        border-radius: max(0px, root.border-radius - 2px);
+        border-radius: max(0px, root.border-radius - 3px);
         border-width: 2px;
         border-color: root.focus-color;
         x: 3px; y: 3px; width: root.width - 6px; height: root.height - 6px;
@@ -92,150 +168,129 @@ export component Activatable inherits Rectangle {
     }
 }
 
+// Pill button. Primary: sky with Mochi's ink outline.
 export component UiButton inherits Activatable {
     available: !Store.busy;
     in property <bool> primary: false;
+    in property <bool> quiet: false;
+    in property <bool> small: false;
     in property <image> icon;
     in property <bool> has-icon: false;
-    in property <length> font-size: 11px;
-    focus-color: root.primary ? white : Theme.focus;
-    height: 32px;
-    min-width: 72px;
-    border-radius: 7px;
-    border-width: 1px;
-    resting-background: Theme.surface;
-    resting-border: #d3deea;
-    border-color: !root.available ? Theme.line : root.primary ? Theme.blue : root.selected ? Theme.selected-border : root.hovered ? Theme.hover-border : root.resting-border;
+    in property <length> font-size: root.small ? 11.5px : 12.5px;
+    height: root.small ? 26px : Theme.control-height;
+    min-width: max(root.has-icon && root.label == "" ? root.height : 48px, button-content.preferred-width);
+    horizontal-stretch: 0;
+    border-radius: root.height / 2;
+    resting-background: root.quiet ? transparent : Theme.surface;
+    resting-border: root.quiet ? transparent : Theme.edge-strong;
+    border-color: !root.available ? transparent : root.primary ? Theme.ink : root.selected ? Theme.protected-ink : root.hovered ? Theme.ink : root.resting-border;
     background: !root.available ? Theme.disabled
-        : root.primary ? (root.pressed ? Theme.blue-pressed : root.hovered ? Theme.blue-hover : Theme.blue)
-        : root.selected ? (root.pressed ? Theme.selected-pressed : root.hovered ? Theme.selected-hover : Theme.selected)
+        : root.primary ? (root.pressed ? Theme.sky-pressed : root.hovered ? Theme.sky-hover : Theme.sky)
+        : root.selected ? Theme.sky-soft
         : root.pressed ? Theme.pressed : root.hovered ? Theme.hover : root.resting-background;
-    HorizontalLayout {
-        padding-left: 12px; padding-right: 12px; spacing: 7px; alignment: center;
-        if root.has-icon : Icon { source: root.icon; width: 13px; height: 13px; y: (parent.height - self.height) / 2; tone: !root.available ? Theme.disabled-ink : root.primary ? white : root.selected ? Theme.selected-ink : Theme.ink; }
-        Text {
+    accessible-label: root.label;
+    button-content := HorizontalLayout {
+        padding-left: root.label == "" ? 0px : (root.small ? 10px : 13px);
+        padding-right: root.label == "" ? 0px : (root.small ? 10px : 13px);
+        spacing: 6px; alignment: center;
+        if root.has-icon : Icon { source: root.icon; width: root.small ? 12px : 14px; height: self.width; y: (parent.height - self.height) / 2; tone: !root.available ? Theme.disabled-ink : root.selected ? Theme.protected-ink : Theme.ink; }
+        if root.label != "" : Text {
             text: root.label;
             font-size: root.font-size;
+            font-weight: 700;
             vertical-alignment: center;
-            color: !root.available ? Theme.disabled-ink : root.primary ? white : root.selected ? Theme.selected-ink : Theme.ink;
-            font-weight: root.selected || root.primary ? 600 : 400;
+            color: !root.available ? Theme.disabled-ink : root.selected ? Theme.protected-ink : Theme.ink;
         }
     }
 }
 
 export component NavItem inherits Activatable {
     in property <image> icon;
+    in property <string> badge;
+    in property <bool> badge-new: false;
     checkable: true;
-    height: 42px;
-    border-radius: 8px;
-    if root.selected : Rectangle { x: 1px; y: 10px; width: 3px; height: root.height - 20px; border-radius: 2px; background: Theme.blue; }
+    height: 32px;
+    border-radius: Theme.radius-small;
+    border-color: root.selected ? Theme.ink : transparent;
+    background: root.selected ? (root.hovered ? Theme.sky-hover : Theme.sky) : root.pressed ? Theme.pressed : root.hovered ? Theme.canvas : transparent;
+    accessible-label: root.label + (root.badge != "" ? ", " + root.badge : "") + (root.selected ? ", ausgewählt" : "");
     HorizontalLayout {
-        padding-left: 13px; spacing: 12px;
-        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.selected-ink : Theme.ink; }
-        Text { text: root.label; vertical-alignment: center; font-size: 12px; color: root.selected ? Theme.selected-ink : Theme.ink; font-weight: root.selected ? 650 : 400; }
-    }
-}
-
-export component Metric inherits Activatable {
-    in property <string> value;
-    in property <string> caption;
-    in property <string> note;
-    in property <image> icon;
-    in property <color> tone: Theme.blue;
-    in property <color> tint: #edf4ff;
-    min-height: 96px;
-    resting-background: Theme.surface;
-    border-radius: Theme.radius;
-    resting-border: Theme.line;
-    drop-shadow-blur: 14px;
-    drop-shadow-offset-y: 3px;
-    drop-shadow-color: #16354f0a;
-    accessible-label: root.value + " " + root.caption + ". " + root.note;
-    HorizontalLayout {
-        padding-left: 16px; padding-right: 12px; spacing: 15px; alignment: start;
-        Rectangle {
-            width: 44px; height: 44px; y: (parent.height - self.height) / 2; border-radius: 12px; background: root.tint;
-            Icon { source: root.icon; width: 25px; height: 25px; tone: root.tone; }
-        }
-        VerticalLayout {
-            alignment: center; spacing: 3px;
-            Text { text: root.value; font-size: 24px; font-weight: 720; color: Theme.ink; }
-            Text { text: root.caption; font-size: 11px; color: #6d7f93; }
-            Text { text: root.note; font-size: 9px; color: root.tone; overflow: elide; }
+        padding-left: 10px; padding-right: 8px; spacing: 9px;
+        Icon { source: root.icon; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: Theme.ink; }
+        Text { text: root.label; vertical-alignment: center; font-size: 12.5px; color: Theme.ink; font-weight: root.selected ? 700 : 400; horizontal-stretch: 1; overflow: elide; }
+        if root.badge != "" : Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 18px;
+            width: max(18px, badge-text.preferred-width + 12px);
+            border-radius: 9px;
+            background: root.badge-new ? Theme.sky-soft : Theme.amber;
+            badge-text := Text { text: root.badge; font-size: 10.5px; font-weight: 700; color: root.badge-new ? Theme.protected-ink : Theme.review-ink; horizontal-alignment: center; vertical-alignment: center; }
         }
     }
 }
 
-export component CardTitle inherits HorizontalLayout {
-    in property <string> title;
-    in property <string> eyebrow;
-    padding-left: 17px; padding-right: 17px; padding-top: 14px; height: 38px;
-    Text { text: root.title; font-size: 14px; font-weight: 700; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
-    if root.eyebrow != "" : Text { text: root.eyebrow; font-size: 7px; font-weight: 650; letter-spacing: 0.8px; color: Theme.muted; vertical-alignment: center; }
-}
-
-export component Pill inherits Rectangle {
+// Status always shows colour, icon and word together.
+export component StatusChip inherits Rectangle {
     in property <string> label;
     in property <string> kind;
-    height: 21px;
-    min-width: 62px;
-    border-radius: 5px;
-    background: root.kind == "observed" || root.kind == "ok" ? #e7f7ef
-        : root.kind == "review" || root.kind == "warn" ? Theme.amber-soft
-        : root.kind == "protected" ? #edf3fc
-        : root.kind == "running" ? #e5efff
-        : root.kind == "danger" ? #fde8e8 : #f0f3f7;
+    // Fixed table columns opt in; the full status remains accessible.
+    in property <bool> constrained: false;
+    horizontal-stretch: 0;
+    property <image> glyph: root.kind == "ok" || root.kind == "observed" ? Icons.check
+        : root.kind == "review" || root.kind == "warn" ? Icons.clock
+        : root.kind == "alert" || root.kind == "danger" ? Icons.warning
+        : root.kind == "protected" ? Icons.lock
+        : root.kind == "running" ? Icons.activity
+        : root.kind == "locked" ? Icons.lock
+        : root.kind == "info" ? Icons.info
+        : root.kind == "next" ? Icons.arrow : Icons.question;
+    property <color> ink: root.kind == "ok" || root.kind == "observed" ? Theme.ok-ink
+        : root.kind == "review" || root.kind == "warn" ? Theme.review-ink
+        : root.kind == "alert" || root.kind == "danger" ? Theme.alert-ink
+        : root.kind == "protected" || root.kind == "running" || root.kind == "next" || root.kind == "info" ? Theme.protected-ink : Theme.neutral-ink;
+    height: 22px;
+    min-width: root.constrained ? 0px : chip-row.preferred-width;
+    border-radius: 11px;
+    border-width: root.kind == "locked" ? Theme.stroke : 0px;
+    border-color: Theme.input-border;
+    background: root.kind == "ok" || root.kind == "observed" ? Theme.sage
+        : root.kind == "review" || root.kind == "warn" ? Theme.amber
+        : root.kind == "alert" || root.kind == "danger" ? Theme.blush
+        : root.kind == "protected" || root.kind == "running" || root.kind == "next" || root.kind == "info" ? Theme.sky-soft
+        : root.kind == "locked" ? Theme.surface : Theme.fog;
     accessible-role: AccessibleRole.text;
     accessible-label: root.label;
-    HorizontalLayout {
-        padding-left: 8px; padding-right: 8px;
-        Text {
-            text: root.label;
-            font-size: 9px;
-            vertical-alignment: center;
-            horizontal-alignment: center;
-            color: root.kind == "observed" || root.kind == "ok" ? #1b8b67
-                : root.kind == "review" || root.kind == "warn" ? Theme.amber
-                : root.kind == "protected" ? #6080a1
-                : root.kind == "running" ? Theme.blue
-                : root.kind == "danger" ? #b23b3b : #7b899b;
-        }
+    chip-row := HorizontalLayout {
+        padding-left: 8px; padding-right: 9px; spacing: 4px;
+        Icon { source: root.glyph; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: root.ink; }
+        Text { text: root.label; font-size: 11px; font-weight: 700; color: root.ink; vertical-alignment: center; horizontal-stretch: 1; overflow: root.constrained ? elide : clip; }
     }
 }
 
 export component FilterChip inherits Activatable {
     in property <string> count;
     checkable: true;
-    height: 30px;
-    border-radius: 6px;
-    resting-background: Theme.row;
-    resting-border: Theme.line;
+    height: 26px;
+    border-radius: 13px;
+    resting-background: transparent;
+    resting-border: transparent;
+    border-color: root.selected ? Theme.protected-ink : root.hovered ? Theme.edge-strong : transparent;
+    background: root.selected ? Theme.sky-soft : root.hovered ? Theme.fog : transparent;
     accessible-label: root.label + " " + root.count + (root.selected ? ", aktiv" : "");
     HorizontalLayout {
-        padding-left: 11px; padding-right: 11px; spacing: 6px;
-        if root.selected : Icon { source: Icons.check; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: Theme.selected-ink; }
-        Text { text: root.label; font-size: 10px; font-weight: root.selected ? 650 : 400; vertical-alignment: center; color: root.selected ? Theme.selected-ink : Theme.muted; }
-        if root.count != "" : Text { text: root.count; font-size: 9px; font-weight: root.selected ? 600 : 400; vertical-alignment: center; color: root.selected ? Theme.selected-ink : Theme.muted; }
+        padding-left: 10px; padding-right: 10px; spacing: 5px;
+        if root.selected : Icon { source: Icons.check; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: Theme.protected-ink; }
+        Text { text: root.label; font-size: 11.5px; font-weight: 700; vertical-alignment: center; color: root.selected ? Theme.protected-ink : Theme.muted; }
+        if root.count != "" : Text { text: root.count; font-size: 11px; vertical-alignment: center; color: root.selected ? Theme.protected-ink : Theme.muted; }
     }
 }
 
-export component QuickAction inherits Activatable {
-    in property <string> subtitle;
-    in property <image> icon;
-    height: 50px;
-    border-radius: 8px;
-    resting-border: Theme.line;
-    resting-background: Theme.row;
-    HorizontalLayout {
-        padding-left: 12px; padding-right: 12px; spacing: 12px;
-        Icon { source: root.icon; y: (parent.height - self.height) / 2; }
-        VerticalLayout {
-            alignment: center; spacing: 3px; horizontal-stretch: 1;
-            Text { text: root.label; font-size: 10px; color: Theme.ink; }
-            Text { text: root.subtitle; font-size: 8px; color: Theme.muted; overflow: elide; }
-        }
-        Icon { source: Icons.chevron; width: 12px; height: 12px; y: (parent.height - self.height) / 2; tone: #8191a3; }
-    }
+export component CardTitle inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> eyebrow;
+    padding-left: 14px; padding-right: 14px; padding-top: 4px; height: 36px; spacing: 8px;
+    Text { text: root.title; font-size: 13.5px; font-weight: 700; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+    if root.eyebrow != "" : Text { text: root.eyebrow; max-width: 112px; font-size: 11px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
 }
 
 export component RowCard inherits Activatable {
@@ -245,97 +300,100 @@ export component RowCard inherits Activatable {
     in property <string> pill;
     in property <string> pill-kind;
     in property <image> icon;
-    height: 62px;
-    border-radius: 9px;
-    resting-border: Theme.line;
-    resting-background: Theme.row;
-    accessible-label: root.title + ". " + root.subtitle + ". " + root.pill + (root.selected ? ", ausgewählt" : "");
-    HorizontalLayout {
-        padding-left: 16px; padding-right: 16px; spacing: 14px;
-        Icon { source: root.icon; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.selected-ink : #6585a0; }
+    in property <bool> wrap-content: !root.interactive;
+    height: max(root.subtitle == "" ? Theme.row-height : Theme.detail-row-height, row-content.preferred-height);
+    border-radius: Theme.radius-small;
+    resting-background: transparent;
+    accessible-label: root.title + ". " + root.subtitle + ". " + root.meta + ". " + root.pill + (root.selected ? ", ausgewählt" : "");
+    row-content := HorizontalLayout {
+        padding-left: 12px; padding-right: 12px; padding-top: 8px; padding-bottom: 8px; spacing: 10px;
+        Icon { source: root.icon; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.ink : Theme.muted; }
         VerticalLayout {
-            alignment: center; spacing: 4px; horizontal-stretch: 1;
-            Text { text: root.title; font-size: 12px; font-weight: root.selected ? 700 : 600; color: root.selected ? Theme.selected-ink : Theme.ink; overflow: elide; }
-            Text { text: root.subtitle; font-size: 10px; color: Theme.muted; overflow: elide; }
+            alignment: center; spacing: 2px; horizontal-stretch: 1; min-width: 0px;
+            Text { text: root.title; font-size: 12.5px; font-weight: 700; color: Theme.ink; overflow: elide; wrap: root.wrap-content ? word-wrap : no-wrap; }
+            if root.subtitle != "" : Text { text: root.subtitle; font-size: 11px; color: Theme.muted; overflow: elide; wrap: root.wrap-content ? word-wrap : no-wrap; }
         }
-        if root.meta != "" : Text { text: root.meta; font-size: 12px; color: #49617b; vertical-alignment: center; }
-        if root.pill != "" : Pill { label: root.pill; kind: root.pill-kind; y: (parent.height - self.height) / 2; }
+        if root.meta != "" : Text { text: root.meta; max-width: 144px; font-size: 11.5px; color: Theme.text; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
+        if root.pill != "" : StatusChip { label: root.pill; kind: root.pill-kind; constrained: true; max-width: 144px; y: (parent.height - self.height) / 2; }
     }
 }
 
 export component Callout inherits Rectangle {
     in property <string> text;
+    in property <string> kind: "info";
     in property <bool> warn: false;
     in property <image> icon: Icons.info;
-    min-height: 46px;
-    border-radius: 9px;
-    border-width: 1px;
-    border-color: root.warn ? #f5e6c9 : #dceaf9;
-    background: root.warn ? #fff8ed : #edf5fd;
+    property <string> tone: root.warn ? "warn" : root.kind;
+    min-width: 0px;
+    preferred-width: 0px;
+    height: max(36px, content.preferred-height);
+    border-radius: Theme.radius-small;
+    background: root.tone == "warn" ? Theme.amber-soft : root.tone == "alert" ? Theme.blush-soft : root.tone == "ok" ? Theme.sage-soft : Theme.sky-soft;
     accessible-role: AccessibleRole.text;
     accessible-label: root.text;
+    property <color> ink: root.tone == "warn" ? Theme.review-ink : root.tone == "alert" ? Theme.alert-ink : root.tone == "ok" ? Theme.ok-ink : Theme.protected-ink;
+    content := HorizontalLayout {
+        width: root.width; height: self.preferred-height;
+        padding: 9px; padding-left: 11px; spacing: 9px;
+        Icon { source: root.icon; width: 15px; height: 15px; tone: root.ink; }
+        Text { text: root.text; wrap: word-wrap; font-size: 11.5px; color: root.ink; horizontal-stretch: 1; vertical-alignment: center; }
+        @children
+    }
+}
+
+// A callout where Mochi carries the mood next to the decision it concerns.
+// Decorative: title and text state everything, the figure adds no focus stop.
+export component MochiCallout inherits Rectangle {
+    in property <string> title;
+    in property <string> text;
+    in property <string> kind: "info";
+    in property <int> pose: 1;
+    in property <length> figure: 52px;
+    min-height: root.figure + 16px;
+    border-radius: Theme.radius-small;
+    background: root.kind == "warn" ? Theme.amber-soft : root.kind == "alert" ? Theme.blush-soft : root.kind == "ok" ? Theme.sage-soft : Theme.sky-soft;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.title == "" ? root.text : root.title + ". " + root.text;
+    property <color> ink: root.kind == "warn" ? Theme.review-ink : root.kind == "alert" ? Theme.alert-ink : root.kind == "ok" ? Theme.ok-ink : Theme.protected-ink;
     HorizontalLayout {
-        padding: 14px; spacing: 10px;
-        Icon { source: root.icon; width: 16px; height: 16px; tone: root.warn ? #987340 : #496c92; }
-        Text { text: root.text; wrap: word-wrap; font-size: 11px; color: root.warn ? #987340 : #496c92; horizontal-stretch: 1; vertical-alignment: center; }
+        padding: 8px; padding-right: 11px; spacing: 11px;
+        MascotPlate { pose: root.pose; width: root.figure; height: root.figure; y: (parent.height - self.height) / 2; }
+        VerticalLayout {
+            alignment: center; spacing: 2px; horizontal-stretch: 1; min-width: 0px;
+            if root.title != "" : Text { text: root.title; font-size: 12px; font-weight: 700; color: root.ink; wrap: word-wrap; }
+            Text { text: root.text; font-size: 11.5px; color: root.ink; wrap: word-wrap; }
+        }
+        @children
     }
 }
 
 export component PageHeader inherits VerticalLayout {
     in property <string> title;
     in property <string> description;
-    spacing: 6px;
-    Text { text: root.title; font-size: 22px; font-weight: 700; color: Theme.ink; accessible-role: AccessibleRole.text; }
-    Text { text: root.description; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+    spacing: 2px;
+    Text { text: root.title; font-size: 19px; font-weight: 700; color: Theme.ink; wrap: word-wrap; accessible-role: AccessibleRole.text; }
+    if root.description != "" : Text { text: root.description; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
 }
 
-export component Donut inherits Rectangle {
-    in property <[DonutSegment]> segments;
-    in property <string> value;
-    in property <string> caption;
-    width: 166px;
-    height: 166px;
-    accessible-role: AccessibleRole.text;
-    accessible-label: root.value + " " + root.caption;
-    if root.segments.length == 0 : Rectangle {
-        border-radius: self.width / 2; border-width: 19px; border-color: Theme.line;
-    }
-    for segment in root.segments : Path {
-        width: parent.width; height: parent.height;
-        viewbox-width: 100; viewbox-height: 100;
-        commands: segment.commands;
-        fill: segment.color;
-        stroke-width: 0px;
-    }
-    VerticalLayout {
-        alignment: center;
-        Text { text: root.value; font-size: 21px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; }
-        Text { text: root.caption; font-size: 8px; color: Theme.muted; horizontal-alignment: center; }
-    }
-}
-
-export component Legend inherits VerticalLayout {
-    in property <[LegendRow]> rows;
-    spacing: 10px;
-    alignment: center;
-    for row in root.rows : HorizontalLayout {
-        spacing: 7px;
-        Rectangle { width: 7px; height: 7px; y: (parent.height - self.height) / 2; border-radius: 4px; background: row.color; }
-        Text { text: row.label; font-size: 9px; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; }
-        Text { text: row.value; font-size: 9px; color: #6f8196; vertical-alignment: center; horizontal-alignment: right; }
-    }
-}
-
-// Light grey settings card; its height follows its content.
+// Settings card; its height follows its content.
 export component Panel inherits Rectangle {
     in property <string> title;
-    border-radius: 9px;
-    border-width: 1px;
-    border-color: Theme.line;
-    background: Theme.row;
+    in property <string> chip;
+    in property <string> chip-kind;
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    border-radius: Theme.radius;
+    border-width: Theme.stroke;
+    border-color: Theme.edge;
+    background: Theme.surface;
     VerticalLayout {
-        padding: 18px; spacing: 8px; alignment: start;
-        Text { text: root.title; font-size: 13px; font-weight: 700; color: Theme.ink; }
+        padding: 14px; spacing: 7px; alignment: start;
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: root.title; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; wrap: word-wrap; }
+            if root.chip != "" : StatusChip { label: root.chip; kind: root.chip-kind; }
+        }
         @children
     }
 }
@@ -344,12 +402,10 @@ export component SettingToggle inherits Panel {
     in property <string> description;
     in property <bool> checked;
     in property <bool> enabled: true;
-    background: root.checked ? Theme.selected : Theme.row;
-    border-color: root.checked ? Theme.selected-border : Theme.line;
     callback toggled(bool);
     HorizontalLayout {
         spacing: 12px;
-        Text { text: root.description; font-size: 11px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+        Text { text: root.description; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
         Switch {
             checked: root.checked;
             enabled: root.enabled && Store.modal == 0 && !Store.busy;
@@ -360,67 +416,135 @@ export component SettingToggle inherits Panel {
     }
 }
 
-component ProjectLine inherits Activatable {
-    in property <ProjectRow> data;
-    height: 40px;
-    border-radius: 6px;
-    selection-kind: "project";
-    selection-key: "" + root.data.id;
-    label: root.data.name + ", " + root.data.state + ", " + root.data.path;
-    Rectangle { y: parent.height - 1px; height: 1px; background: #edf2f6; visible: !root.selected; }
+// Pill text field with a leading icon and a placeholder.
+export component PillField inherits Rectangle {
+    in property <string> placeholder;
+    in property <image> icon: Icons.search;
+    in property <bool> enabled: true;
+    in property <string> label;
+    in-out property <string> text;
+    callback edited(string);
+    callback accepted(string);
+    height: 32px;
+    min-width: 100px;
+    border-radius: self.height / 2;
+    border-width: Theme.stroke;
+    border-color: input.has-focus ? Theme.focus : Theme.input-border;
+    background: root.enabled ? Theme.surface : Theme.disabled;
+    public function focus-input() { input.focus(); }
+    forward-focus: input;
     HorizontalLayout {
-        padding-left: 10px; padding-right: 10px; spacing: 10px;
-        HorizontalLayout {
-            width: 150px; spacing: 8px;
-            Icon { source: Icons.folder; width: 14px; height: 14px; y: (parent.height - self.height) / 2; tone: root.selected ? Theme.selected-ink : Theme.blue; }
-            Text { text: root.data.name; font-size: 10px; font-weight: root.selected ? 650 : 500; color: root.selected ? Theme.selected-ink : Theme.ink; vertical-alignment: center; overflow: elide; }
+        padding-left: 12px; padding-right: 12px; spacing: 8px;
+        Icon { source: root.icon; width: 14px; height: 14px; y: (parent.height - self.height) / 2; tone: Theme.muted; }
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            clip: true;
+            if input.text == "" : Text { text: root.placeholder; color: Theme.muted; font-size: 12px; vertical-alignment: center; width: parent.width; height: parent.height; overflow: elide; }
+            input := TextInput {
+                width: parent.width;
+                height: parent.height;
+                text <=> root.text;
+                enabled: root.enabled;
+                single-line: true;
+                font-size: 12.5px;
+                color: Theme.ink;
+                vertical-alignment: center;
+                accessible-label: root.label;
+                edited => { root.edited(self.text); }
+                accepted => { root.accepted(self.text); }
+            }
         }
-        Text { text: root.data.path; horizontal-stretch: 1; font-size: 9px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
-        Text { text: root.data.size; width: 72px; font-size: 10px; color: Theme.ink; vertical-alignment: center; }
-        HorizontalLayout { width: 92px; alignment: start; Pill { label: root.data.state; kind: root.data.state-kind; y: (parent.height - self.height) / 2; } }
-        Text { text: root.data.ecosystem; width: 130px; font-size: 9px; color: #6f8197; vertical-alignment: center; overflow: elide; }
     }
 }
 
+component ProjectLine inherits Activatable {
+    in property <ProjectRow> data;
+    in property <bool> show-technology;
+    in property <bool> stacked-path;
+    height: root.stacked-path ? Theme.detail-row-height : Theme.row-height;
+    border-radius: 10px;
+    selection-kind: "project";
+    selection-key: "" + root.data.id;
+    label: root.data.name + ", " + root.data.size + ", " + root.data.state + ", " + root.data.coverage + ", " + root.data.path + ", " + root.data.ecosystem;
+    border-color: transparent;
+    if root.selected : Rectangle { x: 2px; y: 8px; width: 3px; height: parent.height - 16px; border-radius: 2px; background: Theme.ink; }
+    HorizontalLayout {
+        padding-left: 12px; padding-right: 12px; spacing: 10px;
+        HorizontalLayout {
+            min-width: root.stacked-path ? 100px : 150px;
+            max-width: root.stacked-path ? 100000px : 150px;
+            horizontal-stretch: root.stacked-path ? 1 : 0; spacing: 8px;
+            Icon { source: Icons.folder; width: 14px; height: 14px; y: (parent.height - self.height) / 2; tone: Theme.protected-ink; }
+            VerticalLayout {
+                spacing: 2px; alignment: center; horizontal-stretch: 1; min-width: 0px;
+                Text { text: root.data.name; font-size: 12.5px; font-weight: 700; color: Theme.ink; overflow: elide; }
+                if root.stacked-path : Text { text: root.data.path; font-size: 11px; color: Theme.muted; overflow: elide; }
+            }
+        }
+        if !root.stacked-path : Text { text: root.data.path; horizontal-stretch: 1; min-width: 50px; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+        Text { text: root.data.size; width: 94px; font-size: 11.5px; color: Theme.text; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
+        HorizontalLayout { width: 112px; alignment: start; StatusChip { label: root.data.state; kind: root.data.state-kind; constrained: true; max-width: 112px; y: (parent.height - self.height) / 2; } }
+        Text {
+            text: root.data.coverage;
+            width: 118px;
+            font-size: 11.5px;
+            color: root.data.coverage-kind == "ok" ? Theme.ok-ink : root.data.coverage-kind == "review" ? Theme.review-ink : Theme.muted;
+            vertical-alignment: center; overflow: elide;
+        }
+        if root.show-technology : Text { text: root.data.ecosystem; width: 110px; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; overflow: elide; }
+    }
+    Rectangle { x: 12px; width: parent.width - 24px; y: parent.height - 1px; height: 1px; background: Theme.line; }
+}
+
+export component TableHead inherits Rectangle {
+    height: 26px;
+    Rectangle { x: 12px; width: parent.width - 24px; y: parent.height - 1.5px; height: 1.5px; background: Theme.line; }
+    @children
+}
+
 export component ProjectTable inherits Rectangle {
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
     in property <[ProjectRow]> rows;
-    in property <bool> compact: false;
+    // Width comes from the window, not the table's intrinsic layout (which
+    // would form a layout-info cycle). Details retain all data.
+    property <bool> show-technology: Store.window-width >= 1200px;
+    property <bool> stacked-path: Store.window-width < 1200px;
     callback selected(int);
     VerticalLayout {
-        spacing: 2px;
-        Rectangle {
-            height: 30px; border-radius: 6px; background: #f7f9fc;
+        spacing: 0px;
+        TableHead {
             HorizontalLayout {
-                padding-left: 10px; padding-right: 10px; spacing: 10px;
-                Text { text: "PROJEKT"; width: 150px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
-                Text { text: "PFAD"; horizontal-stretch: 1; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
-                Text { text: "GRÖSSE"; width: 72px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
-                Text { text: "BEOBACHTUNG"; width: 92px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
-                Text { text: "TECHNOLOGIE"; width: 130px; font-size: 8px; color: #7b8a9d; vertical-alignment: center; }
+                padding-left: 12px; padding-right: 12px; spacing: 10px;
+                Text { text: "Projekt"; min-width: root.stacked-path ? 100px : 150px; max-width: root.stacked-path ? 100000px : 150px; horizontal-stretch: root.stacked-path ? 1 : 0; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                if !root.stacked-path : Text { text: "Pfad"; horizontal-stretch: 1; min-width: 50px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                Text { text: "Größe"; width: 94px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; horizontal-alignment: right; }
+                Text { text: "Nutzung"; width: 112px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                Text { text: "Erfassung"; width: 118px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
+                if root.show-technology : Text { text: "Technologie"; width: 110px; font-size: 11px; font-weight: 700; color: Theme.muted; vertical-alignment: center; }
             }
         }
         if root.rows.length == 0 : VerticalLayout {
             padding: 16px; spacing: 10px; alignment: center;
             Text {
-                text: Store.project-count == "0" ? "Noch keine Projekte registriert. Beginne mit einem Projektordner." : "Keine Projekte passen zur Suche und zum Filter.";
-                font-size: 11px; color: Theme.muted; wrap: word-wrap; horizontal-alignment: center;
+                text: "Noch keine Projekte. Beginne mit einem Projektordner.";
+                font-size: 12px; color: Theme.muted; wrap: word-wrap; horizontal-alignment: center;
                 accessible-role: text;
             }
             HorizontalLayout {
                 alignment: center;
-                if Store.project-count == "0" : UiButton {
-                    label: "Projekt registrieren";
-                    activated => { Actions.new-project(); }
-                }
-                if Store.project-count != "0" : UiButton {
-                    label: "Suche und Filter zurücksetzen";
-                    activated => { Store.query = ""; Store.filter = 0; Actions.filter-projects(); }
+                UiButton {
+                    label: "Projekt hinzufügen"; primary: true;
+                    available: !Store.demo && !Store.busy;
+                    activated => { Actions.guide-start(); }
                 }
             }
         }
         ListView {
             vertical-stretch: 1;
-            for row in root.rows : ProjectLine { data: row; activated => { root.selected(row.id); } }
+            for row in root.rows : ProjectLine { data: row; stacked-path: root.stacked-path; show-technology: root.show-technology; activated => { root.selected(row.id); } }
         }
     }
 }

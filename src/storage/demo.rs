@@ -99,20 +99,19 @@ impl Repository {
 
     /// Demo AI rows (the local inventory derives AI entries from scans).
     pub fn demo_ai(&mut self) -> Result<Vec<crate::domain::AiEntry>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare("SELECT client,label,path,state FROM ai_configs ORDER BY id LIMIT 200")?;
-            let rows = statement.query_map([], |r| {
-                Ok(crate::domain::AiEntry {
-                    client: r.get(0)?,
-                    label: r.get(1)?,
-                    path: r.get(2)?,
-                    state: r.get(3)?,
-                    kind: "Beispiel".into(),
-                    scope: "Projekt".into(),
-                    references: Vec::new(),
-                })
-            })?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+        self.query("SELECT client,label,path,state FROM ai_configs ORDER BY id LIMIT 200", [], |r| {
+            Ok(crate::domain::AiEntry {
+                client: r.get(0)?,
+                label: r.get(1)?,
+                path: r.get(2)?,
+                state: r.get(3)?,
+                kind: "Beispiel".into(),
+                scope: "Projekt".into(),
+                references: Vec::new(),
+                scope_id: None,
+                rel_path: String::new(),
+                viewable: true,
+            })
         })
     }
 }

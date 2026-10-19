@@ -85,6 +85,36 @@ pub fn display_date(ts: Timestamp) -> String {
     format!("{d:02}.{m:02}.{y:04}")
 }
 
+/// `14:20` in local time.
+pub fn display_time(ts: Timestamp) -> String {
+    let (_, _, _, hh, mm, _) = civil(ts + crate::platform::local_utc_offset_seconds());
+    format!("{hh:02}:{mm:02}")
+}
+
+/// Local hour of day (0–23) and local day number, with the current offset.
+pub fn local_hour_and_day(ts: Timestamp) -> (u8, i64) {
+    hour_and_day(ts, crate::platform::local_utc_offset_seconds())
+}
+
+/// The next local `hour`:00 strictly after `ts` ("bis morgen früh").
+pub fn next_local_hour(ts: Timestamp, hour: u8) -> Timestamp {
+    next_hour(ts, hour, crate::platform::local_utc_offset_seconds())
+}
+
+fn hour_and_day(ts: Timestamp, offset: i64) -> (u8, i64) {
+    let local = ts + offset;
+    ((local.rem_euclid(DAY) / HOUR) as u8, local.div_euclid(DAY))
+}
+
+fn next_hour(ts: Timestamp, hour: u8, offset: i64) -> Timestamp {
+    let local = ts + offset;
+    let mut candidate = local.div_euclid(DAY) * DAY + i64::from(hour) * HOUR;
+    if candidate <= local {
+        candidate += DAY;
+    }
+    candidate - offset
+}
+
 /// Relative German description ("vor 3 Tagen") for activity lists.
 pub fn display_relative(ts: Timestamp, now: Timestamp) -> String {
     let delta = now - ts;
@@ -138,6 +168,18 @@ mod tests {
     fn relative_time_is_human_readable() {
         assert_eq!(display_relative(100, 130), "gerade eben");
         assert_eq!(display_relative(0, 3 * DAY), "vor 3 Tagen");
+    }
+
+    #[test]
+    fn local_hours_follow_the_offset() {
+        let ts = 1_791_123_600; // 2026-10-04T14:20:00Z
+        assert_eq!(hour_and_day(ts, 2 * HOUR).0, 16);
+        assert_eq!(hour_and_day(ts, -15 * HOUR).0, 23);
+        assert_eq!(hour_and_day(ts, 10 * HOUR).1, hour_and_day(ts, 0).1 + 1, "next local day");
+        let next = next_hour(ts, 8, 2 * HOUR);
+        assert_eq!(hour_and_day(next, 2 * HOUR).0, 8);
+        assert!(next > ts && next - ts < DAY);
+        assert_eq!(next_hour(ts, 16, 0) - ts, HOUR + 40 * MINUTE, "later today");
     }
 
     #[test]

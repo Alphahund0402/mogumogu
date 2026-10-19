@@ -2,7 +2,7 @@
 //! program start, protection changes and plan confirmation are separate
 //! commands; none of them grants another.
 use super::Core;
-use crate::domain::{ProcessIdentity, ScopeKind, Settings};
+use crate::domain::{PackageQuery, ProcessIdentity, ScopeKind, Settings};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -36,6 +36,17 @@ pub enum Request {
     },
     MeasureScope {
         scope_id: i64,
+    },
+    StorageOverview,
+    FolderTree {
+        scope_id: i64,
+        #[serde(default)]
+        rel_path: String,
+    },
+    AiContent {
+        scope_id: Option<i64>,
+        #[serde(default)]
+        rel_path: String,
     },
     Why {
         resource_id: i64,
@@ -126,11 +137,53 @@ pub enum Request {
     },
     Updates,
     UpdateList,
+    Packages {
+        offset: usize,
+        limit: usize,
+        #[serde(default)]
+        query: PackageQuery,
+    },
+    /// Metadata-only system check; `refresh` checks again instead of the cache.
+    SystemFindings {
+        #[serde(default)]
+        refresh: bool,
+    },
+    Search {
+        query: String,
+    },
+    RetainPackage {
+        key: String,
+        retained: bool,
+    },
+    RegisterCandidate {
+        scope_id: i64,
+        rel_path: String,
+    },
+    ProjectCandidates,
+    DiscoveryCandidate {
+        scope_id: i64,
+        rel_path: String,
+    },
+    AdoptCandidate {
+        scope_id: i64,
+        rel_path: String,
+        project_id: i64,
+        purpose: Option<String>,
+    },
     Export {
+        include_paths: bool,
+    },
+    /// Same content as `Export`, written to a new file.
+    ExportTo {
+        path: String,
         include_paths: bool,
     },
     Backup {
         path: String,
+    },
+    /// Per-user start entry of the tray owner.
+    SetAutostart {
+        enabled: bool,
     },
     /// Owner process control; handled by the desktop/headless host.
     ShowDashboard,
@@ -152,6 +205,14 @@ impl Request {
                 | Self::Review
                 | Self::GetSettings
                 | Self::UpdateList
+                | Self::Packages { .. }
+                | Self::SystemFindings { .. }
+                | Self::Search { .. }
+                | Self::ProjectCandidates
+                | Self::DiscoveryCandidate { .. }
+                | Self::StorageOverview
+                | Self::FolderTree { .. }
+                | Self::AiContent { .. }
                 | Self::Export { .. }
                 | Self::ShowDashboard
                 | Self::HideDashboard
@@ -182,6 +243,12 @@ impl Core {
             Scan { scope_id: None } => json!(self.scan_all()?),
             MeasureResource { resource_id } => json!(measurement(self.measure_resource(resource_id)?)),
             MeasureScope { scope_id } => json!(measurement(self.measure_scope(scope_id)?)),
+            StorageOverview => {
+                self.storage_cache = None;
+                json!(self.storage_overview()?)
+            }
+            FolderTree { scope_id, rel_path } => json!(self.folder_tree(scope_id, &rel_path)?),
+            AiContent { scope_id, rel_path } => json!(self.ai_content(scope_id, &rel_path)?),
             Why { resource_id } => json!(self.explain(resource_id)?),
             ScratchRegister { project_id, name, path } => {
                 json!({ "resource_id": self.register_scratch(project_id, &name, &path)?, "protected": true, "scanned": false })
@@ -234,8 +301,25 @@ impl Core {
             }
             Updates => json!(self.check_updates()?),
             UpdateList => json!(self.update_records()?),
+            Packages { offset, limit, query } => json!(self.package_page(&query, offset, limit)?),
+            SystemFindings { refresh } => json!(self.system_report(refresh)?),
+            Search { query } => json!(self.search(&query)?),
+            RetainPackage { key, retained } => {
+                self.retain_package(&key, retained)?;
+                json!({"retained":retained})
+            }
+            RegisterCandidate { scope_id, rel_path } => {
+                json!({"project_id":self.register_candidate(scope_id,&rel_path)?,"scanned":false})
+            }
+            ProjectCandidates => json!(self.project_candidates()?),
+            DiscoveryCandidate { scope_id, rel_path } => json!(self.discovery_candidate(scope_id, &rel_path)?),
+            AdoptCandidate { scope_id, rel_path, project_id, purpose } => {
+                json!({"resource_id": self.adopt_candidate(scope_id, &rel_path, project_id, purpose.as_deref())?, "protected": true})
+            }
             Export { include_paths } => self.export(include_paths)?,
+            ExportTo { path, include_paths } => json!({ "export": self.export_to(&path, include_paths)? }),
             Backup { path } => json!({ "backup": self.backup(&path)? }),
+            SetAutostart { enabled } => json!(self.set_autostart(enabled)?),
             ShowDashboard | HideDashboard | Shutdown => {
                 return Err(Error::unsupported("Nur der Besitzerprozess steuert sein Fenster."));
             }

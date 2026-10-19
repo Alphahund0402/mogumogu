@@ -5,7 +5,8 @@
 //! UI-independent by design; the desktop supplies an [`OwnerEvents`]
 //! implementation that posts results into its event loop.
 use crate::config::Config;
-use crate::domain::{ScopeKind, ScopeStatus, Snapshot};
+use crate::domain::{ScopeKind, ScopeStatus, Snapshot, TraySummary};
+use crate::fsread::ScanControl;
 use crate::ipc::Server;
 use crate::limits::EVENT_QUEUE;
 use crate::service::{Core, Request};
@@ -13,6 +14,7 @@ use crate::watcher::WatchHub;
 use crate::{Error, Result};
 use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -22,7 +24,13 @@ const SESSION_RECHECK: Duration = Duration::from_secs(3);
 
 /// Callbacks from the worker thread. Implementations must not block.
 pub trait OwnerEvents: Send + 'static {
+    /// Whether anyone shows the full read model right now. Without a visible
+    /// dashboard the owner publishes only a [`TraySummary`] after changes.
+    fn wants_snapshot(&self) -> bool {
+        true
+    }
     fn snapshot(&self, snapshot: Snapshot);
+    fn summary(&self, _summary: TraySummary) {}
     /// Result of a request that came from the local UI.
     fn outcome(&self, request: &Request, result: &Result<Value>);
     fn busy(&self, busy: bool);
@@ -44,6 +52,7 @@ pub struct Owner {
     jobs: SyncSender<Job>,
     worker: Option<JoinHandle<()>>,
     server: Option<Server>,
+    scan_control: Arc<ScanControl>,
 }
 
 impl std::fmt::Debug for Job {
@@ -74,10 +83,16 @@ impl Owner {
             Error::conflict(format!("IPC-Kanal belegt – läuft bereits ein mogumogu-Besitzerprozess? ({e})"))
         })?;
         let wake = jobs.clone();
+        let scan_control = core.scan_control();
         let worker = std::thread::Builder::new()
             .name("mogumogu-core".into())
             .spawn(move || run(core, receiver, events, wake))?;
-        Ok(Self { jobs, worker: Some(worker), server: Some(server) })
+        Ok(Self { jobs, worker: Some(worker), server: Some(server), scan_control })
+    }
+
+    /// Progress of a running pass and its cancel request, for the dashboard.
+    pub fn scan_control(&self) -> Arc<ScanControl> {
+        Arc::clone(&self.scan_control)
     }
 
     /// Queues a request from the local UI. Returns false if the worker is
@@ -112,14 +127,23 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents, wake: 
     configure_watchers(&mut core, &mut hub, &wake);
     publish(&mut core, &events);
     loop {
-        // Block without timers unless something waits: dirty scopes or
-        // sessions whose completion still needs process evidence.
-        let job = if hub.has_dirty() {
-            receiver.recv_timeout(Duration::from_millis(500))
+        // Block without timers unless something waits: dirty scopes,
+        // sessions whose completion still needs process evidence, or the
+        // end of a monitoring pause.
+        let pausing = pause_end(&mut core);
+        let mut wait = None;
+        if hub.has_dirty() {
+            wait = Some(Duration::from_millis(500));
         } else if core.has_open_sessions() {
-            receiver.recv_timeout(SESSION_RECHECK)
-        } else {
-            receiver.recv().map_err(|_| RecvTimeoutError::Disconnected)
+            wait = Some(SESSION_RECHECK);
+        }
+        if let Some(seconds) = pausing {
+            let until_end = Duration::from_secs(seconds.clamp(1, 3_600) as u64);
+            wait = Some(wait.map_or(until_end, |w| w.min(until_end)));
+        }
+        let job = match wait {
+            Some(wait) => receiver.recv_timeout(wait),
+            None => receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
         };
         match job {
             Ok(Job::Request(request, reply)) => {
@@ -138,8 +162,12 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents, wake: 
                         events.shutdown();
                     }
                     request => {
-                        events.busy(true);
+                        // Reads (search, filters, findings) stay quiet so typing
+                        // never blocks the dashboard's buttons.
                         let write = request.is_write();
+                        if write {
+                            events.busy(true);
+                        }
                         let result = core.dispatch(request.clone());
                         if from_ui {
                             events.outcome(&request, &result);
@@ -150,10 +178,10 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents, wake: 
                         if write {
                             configure_watchers(&mut core, &mut hub, &wake);
                             publish(&mut core, &events);
+                            events.busy(false);
                         } else if core.take_changed() {
                             publish(&mut core, &events);
                         }
-                        events.busy(false);
                     }
                 }
             }
@@ -161,6 +189,11 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents, wake: 
             Ok(Job::Wake) | Err(RecvTimeoutError::Timeout) => {
                 if core.reconcile_sessions().unwrap_or(0) > 0 {
                     core.take_changed();
+                    publish(&mut core, &events);
+                }
+                if pausing.is_some() && pause_end(&mut core).is_none() {
+                    // The pause ran out: watchers resume, tray shows it.
+                    configure_watchers(&mut core, &mut hub, &wake);
                     publish(&mut core, &events);
                 }
                 let due = hub.take_due();
@@ -186,15 +219,26 @@ fn reply_ok(reply: Option<SyncSender<Result<Value>>>) {
 }
 
 fn publish(core: &mut Core, events: &impl OwnerEvents) {
-    match core.snapshot() {
-        Ok(snapshot) => events.snapshot(snapshot),
-        Err(e) => events.outcome(&Request::Snapshot, &Err(e)),
+    let result = if events.wants_snapshot() {
+        core.snapshot().map(|snapshot| events.snapshot(snapshot))
+    } else {
+        core.tray_summary().map(|summary| events.summary(summary))
+    };
+    if let Err(e) = result {
+        events.outcome(&Request::Snapshot, &Err(e));
     }
 }
 
-/// Watchers follow the monitoring setting and the approved project scopes.
+/// Seconds until a pending monitoring pause ends, if one is pending.
+fn pause_end(core: &mut Core) -> Option<i64> {
+    let now = core.repository().now();
+    core.settings().ok()?.pause_pending(now).map(|until| until - now)
+}
+
+/// Watchers follow the monitoring setting, its pause and the approved project scopes.
 fn configure_watchers(core: &mut Core, hub: &mut WatchHub, wake: &SyncSender<Job>) {
-    let enabled = core.settings().map(|s| s.monitoring_enabled).unwrap_or(false);
+    let now = core.repository().now();
+    let enabled = core.settings().map(|s| s.monitoring_active(now)).unwrap_or(false);
     let scopes: Vec<(i64, PathBuf)> = if enabled && !core.is_demo() {
         core.repository()
             .scopes()

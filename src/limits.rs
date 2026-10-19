@@ -10,6 +10,10 @@ pub const MAX_RESOURCES: i64 = 5_000;
 pub const ACTIVITY_KEEP: i64 = 200;
 /// Default UI page size; the dashboard never holds a full inventory copy.
 pub const UI_PAGE: i64 = 200;
+/// Package review: bounded facts, one cached page and evidence per finding.
+pub const PACKAGE_ANALYSIS_ITEMS: i64 = 200_000;
+pub const PACKAGE_PAGE: usize = 60;
+pub const PACKAGE_EVIDENCE_ROWS: usize = 6;
 /// Inventory events kept per scope.
 pub const EVENTS_KEEP: i64 = 2_000;
 /// Complete generations kept per scope (the published one plus history).

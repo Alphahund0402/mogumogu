@@ -4,7 +4,7 @@
 //! happen here — every intent becomes a core `Request`.
 mod actions;
 mod dialogs;
-mod donut;
+mod disk;
 mod forms;
 mod view;
 
@@ -13,19 +13,25 @@ pub mod ui {
     slint::include_modules!();
 }
 
+use mogumogu::clock::{Clock, SystemClock, Timestamp, display_relative, display_time, local_hour_and_day};
 use mogumogu::config::Config;
-use mogumogu::domain::{PlanSummary, Settings, Snapshot};
+use mogumogu::domain::{PackageQuery, PlanSummary, SearchHit, Settings, Snapshot, TraySummary};
 use mogumogu::owner::{Owner, OwnerEvents};
-use mogumogu::service::Request;
+use mogumogu::service::{Request, ScanControl};
 use serde_json::Value;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Timer, TimerMode};
 use std::cell::RefCell;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use ui::*;
 
 thread_local! {
     static DESKTOP: RefCell<Option<Desktop>> = const { RefCell::new(None) };
 }
+
+/// Read by the owner worker: only a visible dashboard needs full snapshots.
+static DASHBOARD_OPEN: AtomicBool = AtomicBool::new(false);
 
 fn with(f: impl FnOnce(&mut Desktop)) {
     DESKTOP.with(|cell| {
@@ -40,11 +46,30 @@ fn later(f: impl FnOnce(&mut Desktop) + 'static) {
     slint::Timer::single_shot(Duration::ZERO, move || with(f));
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Form {
     None,
-    Project,
     Scratch,
+    Release(i64),
+    Candidate,
+}
+
+/// The guided start in progress: which project and scope it created.
+#[derive(Debug, Default)]
+struct Guide {
+    /// Closed for this run of the app; it opens again on the next start.
+    skipped: bool,
+    project: Option<i64>,
+    scope: Option<i64>,
+}
+
+/// What the tray has already shown, so hints are reported gathered once.
+#[derive(Debug, Default)]
+struct TrayMemory {
+    review_count: usize,
+    acknowledged: usize,
+    acknowledged_day: Option<i64>,
+    last_scan_at: Option<Timestamp>,
 }
 
 struct Desktop {
@@ -56,6 +81,21 @@ struct Desktop {
     status: String,
     data_path: String,
     form: Form,
+    package_query: PackageQuery,
+    package_key: Option<String>,
+    experiment: Option<i64>,
+    search_hits: Vec<SearchHit>,
+    folder_tree: Option<mogumogu::domain::FolderTree>,
+    folder_pending: Option<(i64, String)>,
+    content_scope: Option<i64>,
+    adoption_candidate: Option<mogumogu::domain::ProjectCandidate>,
+    guide: Guide,
+    memory: TrayMemory,
+    control: Arc<ScanControl>,
+    progress_timer: Timer,
+    tray_timer: Timer,
+    search_timer: Timer,
+    notice_timer: Timer,
 }
 
 /// Worker-thread events forwarded into the UI thread.
@@ -64,8 +104,14 @@ struct UiEvents;
 type Outcome = Result<Value, String>;
 
 impl OwnerEvents for UiEvents {
+    fn wants_snapshot(&self) -> bool {
+        DASHBOARD_OPEN.load(Ordering::Relaxed)
+    }
     fn snapshot(&self, snapshot: Snapshot) {
         let _ = slint::invoke_from_event_loop(move || with(|d| d.accept(snapshot)));
+    }
+    fn summary(&self, summary: TraySummary) {
+        let _ = slint::invoke_from_event_loop(move || with(|d| d.accept_summary(summary)));
     }
     fn outcome(&self, request: &Request, result: &mogumogu::Result<Value>) {
         let request = request.clone();
@@ -96,10 +142,30 @@ pub fn run(config: Config, show: bool) -> Result<(), Box<dyn std::error::Error>>
     let data_path = config.database_path().to_string_lossy().into_owned();
     let demo = config.demo;
     let owner = Owner::start(config, UiEvents)?;
+    let control = owner.scan_control();
     tray.on_show_dashboard(|| with(Desktop::show_or_report));
-    tray.on_refresh_inventory(|| with(|d| d.owner.refresh()));
+    tray.on_show_page(|page| {
+        with(move |d| {
+            d.show_or_report();
+            if let Some(ui) = &d.dashboard {
+                let store = ui.global::<Store>();
+                store.invoke_open(page, 0);
+                store.set_overview_tab(0);
+            }
+            d.acknowledge_hints();
+        })
+    });
     tray.on_scan_all(|| with(|d| d.submit(Request::Scan { scope_id: None })));
-    tray.on_toggle_monitoring(|| with(|d| d.change_settings(|s| s.monitoring_enabled = !s.monitoring_enabled)));
+    tray.on_pause(|minutes| with(move |d| d.pause_monitoring(minutes)));
+    tray.on_resume(|| with(|d| d.pause_monitoring(0)));
+    tray.on_set_monitoring(|on| {
+        with(move |d| {
+            d.change_settings(|s| {
+                s.monitoring_enabled = on;
+                s.monitoring_paused_until = None;
+            })
+        })
+    });
     tray.on_exit_app(|| {
         let _ = slint::quit_event_loop();
     });
@@ -113,7 +179,27 @@ pub fn run(config: Config, show: bool) -> Result<(), Box<dyn std::error::Error>>
             status: "Inventar wird geladen …".into(),
             data_path,
             form: Form::None,
+            package_query: PackageQuery::default(),
+            package_key: None,
+            experiment: None,
+            search_hits: Vec::new(),
+            folder_tree: None,
+            folder_pending: None,
+            content_scope: None,
+            adoption_candidate: None,
+            guide: Guide::default(),
+            memory: TrayMemory::default(),
+            control,
+            progress_timer: Timer::default(),
+            tray_timer: Timer::default(),
+            search_timer: Timer::default(),
+            notice_timer: Timer::default(),
         });
+    });
+    // Quiet hours, the daily summary and a running pause change with the
+    // clock, not with data: re-evaluate the tray once a minute.
+    with(|d| {
+        d.tray_timer.start(TimerMode::Repeated, Duration::from_secs(60), || with(|d| d.update_tray()));
     });
     if show {
         with(Desktop::show_or_report);
@@ -137,17 +223,24 @@ impl Desktop {
             let ui = Dashboard::new()?;
             actions::wire(&ui);
             self.dashboard = Some(ui);
+            // Shows the last read model at once; while hidden the owner only
+            // sent tray summaries, so a fresh snapshot follows.
             self.render_snapshot();
+            DASHBOARD_OPEN.store(true, Ordering::Relaxed);
+            self.owner.refresh();
         }
         if let Some(ui) = &self.dashboard {
             ui.show()?;
         }
+        self.acknowledge_hints();
         Ok(())
     }
 
     /// Dropping the component releases its models and views; the tray and
     /// the owner keep running.
     fn hide(&mut self) {
+        DASHBOARD_OPEN.store(false, Ordering::Relaxed);
+        self.progress_timer.stop();
         if let Some(ui) = self.dashboard.take() {
             let _ = ui.hide();
         }
@@ -155,8 +248,14 @@ impl Desktop {
 
     fn render_snapshot(&self) {
         if let Some(ui) = &self.dashboard {
-            view::render_snapshot(ui, &self.snapshot, &self.data_path);
+            let state = view::ViewState {
+                package_key: self.package_key.as_deref(),
+                experiment: self.experiment,
+                scanning: self.control.progress().running,
+            };
+            view::render_snapshot(ui, &self.snapshot, &self.data_path, &state);
             view::render_status(ui, self.busy, &self.status);
+            self.maybe_open_guide(ui);
         }
     }
 
@@ -168,35 +267,121 @@ impl Desktop {
 
     fn accept(&mut self, snapshot: Snapshot) {
         self.snapshot = snapshot;
-        let settings = self.snapshot.settings.clone().unwrap_or_default();
-        let hints = self.snapshot.review_count();
-        let hint = if settings.notifications_enabled && hints > 0 {
-            format!("mogumogu · {hints} Prüfhinweise")
-        } else {
-            "mogumogu · lokales Entwicklungsinventar".into()
-        };
-        self.tray.set_hint(hint.into());
-        self.tray.set_local(!self.snapshot.demo);
-        self.tray.set_monitoring(settings.monitoring_enabled);
+        if self.dashboard.as_ref().is_some_and(|ui| ui.global::<Store>().get_modal() == 3)
+            && self.content_scope.is_some_and(|id| {
+                !self
+                    .snapshot
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.id == id && scope.status == mogumogu::domain::ScopeStatus::Approved)
+            })
+        {
+            self.close_modal();
+            self.content_scope = None;
+        }
+        if self.folder_tree.as_ref().is_some_and(|tree| {
+            !self.snapshot.demo
+                && !self
+                    .snapshot
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.id == tree.scope_id && scope.status == mogumogu::domain::ScopeStatus::Approved)
+        }) {
+            self.folder_tree = None;
+            if let Some(ui) = &self.dashboard {
+                disk::clear_tree(ui, "Lesefreigabe nicht mehr gültig. Ordner erneut freigeben.");
+            }
+        }
+        if self.experiment.is_none_or(|id| !self.snapshot.resources.iter().any(|r| r.id == id)) {
+            self.experiment = view::default_experiment(&self.snapshot);
+        }
+        self.memory.review_count = self.snapshot.review_count();
+        self.memory.last_scan_at = self.snapshot.last_scan_at;
+        if self.memory.review_count < self.memory.acknowledged {
+            self.memory.acknowledged = self.memory.review_count;
+        }
+        self.update_tray();
         if !self.busy {
             self.status = self.default_status();
         }
         self.render_snapshot();
     }
 
+    /// Keeps tray and settings current while the dashboard is closed; tray
+    /// actions such as pausing monitoring change these settings.
+    fn accept_summary(&mut self, summary: TraySummary) {
+        self.snapshot.demo = summary.demo;
+        self.snapshot.settings = Some(summary.settings);
+        self.memory.review_count = summary.review_count;
+        self.memory.last_scan_at = summary.last_scan_at;
+        if self.memory.review_count < self.memory.acknowledged {
+            self.memory.acknowledged = self.memory.review_count;
+        }
+        self.update_tray();
+    }
+
+    /// Opening the dashboard or the review list counts as having seen the hints.
+    fn acknowledge_hints(&mut self) {
+        let now = SystemClock.now();
+        self.memory.acknowledged = self.memory.review_count;
+        self.memory.acknowledged_day = Some(local_hour_and_day(now).1);
+        self.update_tray();
+    }
+
+    fn update_tray(&self) {
+        let now = SystemClock.now();
+        let settings = self.snapshot.settings.clone().unwrap_or_default();
+        let (hour, day) = local_hour_and_day(now);
+        let hints = self.memory.review_count;
+        let pending = if settings.daily_summary {
+            hour >= settings.summary_hour && self.memory.acknowledged_day != Some(day) && hints > 0
+        } else {
+            hints > self.memory.acknowledged
+        };
+        let alert = !self.snapshot.demo && settings.alert_allowed(hour) && pending;
+        let paused = settings.pause_pending(now);
+        let scanned = self.memory.last_scan_at.map_or("noch nicht erfasst".to_string(), |t| {
+            if now - t < 86_400 {
+                format!("erfasst {}", display_time(t))
+            } else {
+                format!("erfasst {}", display_relative(t, now))
+            }
+        });
+        let line = if self.snapshot.demo {
+            "Demodaten · schreibgeschützt".to_string()
+        } else if let Some(until) = paused {
+            format!("Überwachung pausiert bis {} · {scanned}", display_time(until))
+        } else if settings.monitoring_enabled {
+            format!("Überwachung an · {scanned}")
+        } else {
+            format!("Überwachung aus · {scanned}")
+        };
+        self.tray.set_status_line(line.into());
+        self.tray.set_hint_count(i32::try_from(hints).unwrap_or(i32::MAX));
+        self.tray.set_alert(alert);
+        self.tray.set_paused(paused.is_some());
+        self.tray.set_hint(
+            if alert {
+                format!("mogumogu · {hints} Prüfhinweise")
+            } else {
+                "mogumogu · lokales Entwicklungsinventar".into()
+            }
+            .into(),
+        );
+        self.tray.set_local(!self.snapshot.demo);
+        self.tray.set_monitoring(settings.monitoring_enabled);
+    }
+
     fn default_status(&self) -> String {
         let s = &self.snapshot;
-        let settings = s.settings.clone().unwrap_or_default();
         if s.demo {
             return "Demodaten · eigene Datenbank · kein Dateisystemscan · keine Netzwerkabfragen".into();
         }
-        format!(
-            "Lokales Inventar · SQLite {} · {} Lesefreigaben · Überwachung {} · Updatehinweise {} · Bereinigung nur in Wegwerf-Testwurzeln",
-            s.sqlite_version,
-            s.scopes.len(),
-            if settings.monitoring_enabled { "an" } else { "aus" },
-            if settings.network_updates_enabled { "an" } else { "aus" }
-        )
+        match s.scopes.len() {
+            0 => "Bereit · noch keine Lesefreigabe".into(),
+            1 => "Bereit · 1 Lesefreigabe".into(),
+            n => format!("Bereit · {n} Lesefreigaben"),
+        }
     }
 
     fn set_busy(&mut self, busy: bool) {
@@ -205,10 +390,31 @@ impl Desktop {
         self.tray.set_busy(busy);
         if busy {
             self.status = WORKING.into();
-        } else if self.status == WORKING {
-            self.status = self.default_status();
+            self.start_progress();
+        } else {
+            if self.status == WORKING {
+                self.status = self.default_status();
+            }
+            self.progress_timer.stop();
+            if let Some(ui) = &self.dashboard {
+                view::render_progress(ui, &self.control.progress());
+            }
         }
         self.render_status();
+    }
+
+    /// Polls the shared scan control while the owner works; cheap atomics only.
+    fn start_progress(&mut self) {
+        if self.dashboard.is_none() {
+            return;
+        }
+        self.progress_timer.start(TimerMode::Repeated, Duration::from_millis(250), || {
+            with(|d| {
+                if let Some(ui) = &d.dashboard {
+                    view::render_progress(ui, &d.control.progress());
+                }
+            })
+        });
     }
 
     fn submit(&mut self, request: Request) {
@@ -220,12 +426,46 @@ impl Desktop {
             ));
             return;
         }
+        let write = request.is_write();
+        let scan = matches!(request, Request::Scan { .. });
         if !self.owner.submit(request) {
             self.status = "Der Kern ist ausgelastet; bitte gleich erneut versuchen.".into();
             self.render_status();
-        } else {
+        } else if write {
             // Feedback immediately, before the worker's event reaches the UI.
             self.set_busy(true);
+            if scan {
+                self.scan_started();
+            }
+        }
+    }
+
+    /// Shows the strip at once: a small scope finishes before the first
+    /// progress poll and would otherwise leave no visible trace.
+    fn scan_started(&mut self) {
+        self.notice_timer.stop();
+        if let Some(ui) = &self.dashboard {
+            let store = ui.global::<Store>();
+            store.set_scan_notice("".into());
+            store.set_scan_running(true);
+            store.set_scan_cancelling(false);
+            store.set_scan_progress(0.0);
+            store.set_scan_text("Erfassung startet …".into());
+        }
+    }
+
+    /// The result of an action the user started stays in the strip for a
+    /// while, then the strip closes.
+    fn notify(&mut self, text: &str, kind: &str) {
+        if let Some(ui) = &self.dashboard {
+            view::render_scan_notice(ui, text, kind);
+            self.notice_timer.start(TimerMode::SingleShot, Duration::from_secs(10), || {
+                with(|d| {
+                    if let Some(ui) = &d.dashboard {
+                        view::render_scan_notice(ui, "", "");
+                    }
+                })
+            });
         }
     }
 
@@ -235,16 +475,65 @@ impl Desktop {
         self.submit(Request::SaveSettings { settings });
     }
 
+    /// `minutes` > 0 pauses for that long, -1 until 08:00 local, 0 resumes.
+    fn pause_monitoring(&mut self, minutes: i32) {
+        let now = SystemClock.now();
+        let until = match minutes {
+            0 => None,
+            -1 => Some(mogumogu::clock::next_local_hour(now, 8)),
+            m => Some(now + i64::from(m.max(1)) * 60),
+        };
+        self.change_settings(|s| {
+            s.monitoring_paused_until = until;
+            if until.is_none() {
+                s.monitoring_enabled = true;
+            }
+        });
+    }
+
     fn outcome(&mut self, request: Request, result: Outcome) {
+        if let Request::FolderTree { scope_id, rel_path } = &request {
+            if self.folder_pending.as_ref() != Some(&(*scope_id, rel_path.clone())) {
+                return;
+            }
+            self.folder_pending = None;
+            if let Some(ui) = &self.dashboard {
+                let store = ui.global::<Store>();
+                store.set_tree_loading(false);
+                let drive = store.get_selected_drive().to_string();
+                if !drive.is_empty()
+                    && !self.snapshot.disks.scopes.iter().any(|scope| {
+                        scope.scope_id == *scope_id
+                            && scope.path.to_ascii_lowercase().starts_with(&drive.to_ascii_lowercase())
+                    })
+                {
+                    return;
+                }
+            }
+            if result.is_err() {
+                self.folder_tree = None;
+                if let Some(ui) = &self.dashboard {
+                    disk::clear_tree(ui, "Ordner konnte nicht gelesen werden. Freigabe und Erreichbarkeit prüfen.");
+                }
+            }
+        }
         let value = match result {
             Ok(value) => value,
             Err(message) => {
                 self.status = message.clone();
+                if self.guide_failed(&request, &message) {
+                    self.render_status();
+                    return;
+                }
                 if let Some(ui) = &self.dashboard
                     && ui.global::<Store>().get_modal() == 2
-                    && !matches!(self.form, Form::None)
+                    && self.form != Form::None
                 {
                     ui.global::<Store>().set_form_error(message.into());
+                    self.render_status();
+                    return;
+                }
+                if matches!(request, Request::Search { .. }) {
                     self.render_status();
                     return;
                 }
@@ -252,40 +541,29 @@ impl Desktop {
                 return;
             }
         };
+        if self.guide_step(&request, &value) {
+            self.render_status();
+            return;
+        }
         match request {
-            Request::RegisterProject { .. } => {
+            Request::RegisterProject { .. } | Request::RegisterCandidate { .. } => {
                 self.close_modal();
                 self.status = "Projekt registriert – Lesefreigabe ist ein eigener Schritt.".into();
                 if let Some(id) = value["project_id"].as_i64() {
                     later(move |d| d.open_project(id));
                 }
             }
-            Request::ApproveProject { .. } => {
+            Request::ApproveProject { .. } | Request::ApproveSystem { .. } => {
                 self.close_modal();
                 if let Some(scope_id) = value["scope_id"].as_i64() {
-                    self.status = "Lesefreigabe erteilt – erste Erfassung startet.".into();
+                    self.status = "Lesen erlaubt – erste Erfassung startet.".into();
                     self.submit(Request::Scan { scope_id: Some(scope_id) });
                 }
             }
             Request::Scan { .. } => {
-                let reports = value.as_array().map(Vec::as_slice).unwrap_or_default();
-                let summary: Vec<String> = reports
-                    .iter()
-                    .map(|r| match r["problem"].as_str() {
-                        Some(problem) => format!("Bereich {}: {problem}", r["scope_id"]),
-                        None if r["baseline"] == true => format!("Bereich {}: Vergleichsbasis erstellt", r["scope_id"]),
-                        None => format!(
-                            "Bereich {}: {} neu, {} entfernt, {} geändert ({})",
-                            r["scope_id"],
-                            r["added"],
-                            r["removed"],
-                            r["changed"],
-                            r["state"].as_str().unwrap_or("?")
-                        ),
-                    })
-                    .collect();
-                self.status =
-                    if summary.is_empty() { "Keine freigegebenen Bereiche.".into() } else { summary.join(" · ") };
+                let (text, kind) = view::scan_notice(&value, &self.snapshot);
+                self.notify(&text, kind);
+                self.status = text;
             }
             Request::MeasureResource { .. } | Request::MeasureScope { .. } => {
                 let text = match value["bytes"].as_i64() {
@@ -296,6 +574,86 @@ impl Desktop {
                 };
                 self.status = text.clone();
                 self.dialog(dialogs::message("Größenmessung", &text));
+            }
+            Request::StorageOverview => {
+                if let Ok(report) = serde_json::from_value(value) {
+                    self.snapshot.disks = report;
+                    if let Some(ui) = &self.dashboard {
+                        disk::render(ui, &self.snapshot.disks);
+                    }
+                }
+                self.status = "Speicherübersicht aktualisiert.".into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+                if self.dashboard.as_ref().is_some_and(|ui| ui.global::<Store>().get_storage_tab() == 1)
+                    && let Some(tree) = self.folder_tree.clone()
+                {
+                    self.request_tree(tree.scope_id, tree.rel_path);
+                }
+            }
+            Request::FolderTree { .. } => {
+                if let Ok(tree) = serde_json::from_value::<mogumogu::domain::FolderTree>(value) {
+                    let root = self
+                        .snapshot
+                        .disks
+                        .scopes
+                        .iter()
+                        .find(|scope| scope.scope_id == tree.scope_id)
+                        .map_or("", |scope| scope.path.as_str());
+                    if let Some(ui) = &self.dashboard {
+                        disk::render_tree(ui, &tree, root);
+                    }
+                    self.folder_tree = Some(tree);
+                }
+                return;
+            }
+            Request::AiContent { scope_id, .. } => {
+                if let Ok(content) = serde_json::from_value::<mogumogu::service::AiContent>(value)
+                    && let Some(ui) = &self.dashboard
+                {
+                    let store = ui.global::<Store>();
+                    store.set_detail_title(content.title.into());
+                    store.set_detail_path(content.path.into());
+                    store.set_content_text(content.text.into());
+                    store.set_content_note(if content.redacted { "Schreibgeschützt · erkannte sensible Werte ausgeblendet · Text markieren und kopieren möglich" } else { "Schreibgeschützt · Text markieren und kopieren möglich" }.into());
+                    self.content_scope = scope_id;
+                    self.form = Form::None;
+                    store.set_modal(3);
+                    ui.invoke_focus_dialog();
+                }
+                return;
+            }
+            Request::AdoptCandidate { .. } => {
+                self.close_modal();
+                self.status = "Fund einem Projekt zugeordnet. Schutz bleibt aktiv.".into();
+                if let Some(id) = value["resource_id"].as_i64() {
+                    later(move |d| d.open_resource(id));
+                }
+            }
+            Request::DiscoveryCandidate { .. } => {
+                if let Ok(candidate) = serde_json::from_value::<mogumogu::domain::ProjectCandidate>(value) {
+                    let index = self
+                        .snapshot
+                        .discoveries
+                        .iter()
+                        .position(|c| c.scope_id == candidate.scope_id && c.rel_path == candidate.rel_path);
+                    let index = match index {
+                        Some(index) => {
+                            self.snapshot.discoveries[index] = candidate;
+                            index
+                        }
+                        None => {
+                            if self.snapshot.discoveries.len() >= mogumogu::limits::UI_PAGE as usize {
+                                self.snapshot.discoveries.pop();
+                            }
+                            let index = self.snapshot.discoveries.len();
+                            self.snapshot.discoveries.push(candidate);
+                            index
+                        }
+                    };
+                    self.dialog(dialogs::candidate(&self.snapshot, index));
+                }
+                return;
             }
             Request::CleanupPlan { .. }
             | Request::CleanupApprove { .. }
@@ -308,18 +666,83 @@ impl Desktop {
                 }
             }
             Request::Updates => {
-                self.status = format!(
-                    "Updatehinweise: {} geprüft, {} neuer, {} privat übersprungen, {} Quelle nicht freigegeben, {} fehlgeschlagen",
-                    value["checked"],
-                    value["available"],
-                    value["skipped_private"],
-                    value["not_approved"],
-                    value["failed"]
+                let count = |key: &str| value[key].as_u64().unwrap_or(0);
+                let mut text = format!(
+                    "Quellen geprüft: {} Versionen, {} mit neuerer Version",
+                    count("checked"),
+                    count("available")
                 );
+                for (key, label) in [
+                    ("not_approved", "Quelle nicht erlaubt"),
+                    ("skipped_private", "privat übersprungen"),
+                    ("failed", "fehlgeschlagen"),
+                ] {
+                    if count(key) > 0 {
+                        text.push_str(&format!(", {} {label}", count(key)));
+                    }
+                }
+                if value["partial"] == true {
+                    text.push_str(" · nicht alle geprüft, bitte erneut prüfen");
+                }
+                let kind = if count("failed") > 0 || value["partial"] == true { "warn" } else { "ok" };
+                self.notify(&text, kind);
+                self.status = text;
+            }
+            Request::Packages { .. } => {
+                if let Ok(report) = serde_json::from_value::<mogumogu::domain::PackageReport>(value) {
+                    self.snapshot.packages = report;
+                    if let Some(ui) = &self.dashboard {
+                        view::render_packages(ui, &self.snapshot.packages, self.package_key.as_deref());
+                    }
+                }
+                return;
+            }
+            Request::Search { .. } => {
+                self.search_hits = serde_json::from_value(value).unwrap_or_default();
+                if let Some(ui) = &self.dashboard {
+                    view::render_search(ui, &self.search_hits);
+                }
+                return;
+            }
+            Request::SystemFindings { .. } => {
+                self.status = "Suchpfad und bekannte Orte erneut geprüft.".into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+            }
+            Request::RetainPackage { retained, .. } => {
+                self.close_modal();
+                self.status = if retained {
+                    "Paket zum Behalten vorgemerkt. Upstream-Hinweise bleiben sichtbar."
+                } else {
+                    "Behalten-Vormerkung gelöst."
+                }
+                .into();
             }
             Request::ScratchCreate { .. } => {
                 self.close_modal();
                 self.status = "Scratchpad angelegt (source, environment, temporary, results).".into();
+            }
+            Request::SessionRelease { .. } => {
+                self.close_modal();
+                self.status =
+                    "Session nach Prüfung freigegeben. Für eine Bereinigung braucht es weiterhin einen Plan.".into();
+            }
+            Request::Backup { .. } => {
+                self.status = format!("Sicherung erstellt: {}", value["backup"].as_str().unwrap_or("?"));
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+            }
+            Request::ExportTo { .. } => {
+                self.status = format!("Export gespeichert: {}", value["export"].as_str().unwrap_or("?"));
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+            }
+            Request::SetAutostart { enabled } => {
+                self.status = if enabled {
+                    "mogumogu startet bei der Anmeldung im Tray.".into()
+                } else {
+                    "Start bei Anmeldung ausgeschaltet.".into()
+                };
             }
             Request::SaveSettings { .. } => self.status = "Einstellungen gespeichert.".into(),
             _ => {

@@ -1,56 +1,164 @@
-import { ScrollView, LineEdit } from "std-widgets.slint";
+import { ListView, ScrollView, SpinBox, CheckBox } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { UiButton, Panel, SettingToggle } from "../components.slint";
-import { PageCard } from "page-card.slint";
+import { UiButton, Panel, SettingToggle, PageHeader, PillField, MochiCallout, RowCard, FilterChip, Card } from "../components.slint";
 
-export component SettingsPage inherits PageCard {
-    title: "Einstellungen";
-    description: "Alles bleibt lokal. Überwachung, Hinweise und Netzwerk sind ausdrückliche, abschaltbare Entscheidungen.";
-    ScrollView {
+export component SettingsPage inherits VerticalLayout {
+    min-width: 0px;
+    preferred-width: 0px;
+    property <bool> compact: Store.window-width < 820px + 188px + 2 * Theme.page-padding;
+    spacing: Theme.gap;
+    PageHeader {
+        title: "Einstellungen";
+        description: "Änderungen werden sofort gespeichert.";
+    }
+    HorizontalLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Allgemein"; selected: Store.settings-tab == 0; activated => { Store.settings-tab = 0; } }
+        scopes-tab := FilterChip { label: "Lesefreigaben"; count: Store.scopes.length; selected: Store.settings-tab == 1; activated => { Store.settings-tab = 1; } }
+    }
+    if Store.settings-tab == 1 : Card {
         vertical-stretch: 1;
         VerticalLayout {
-            spacing: 14px; alignment: start;
+            padding: 8px; spacing: 4px;
             HorizontalLayout {
-                spacing: 14px;
-                Panel {
-                    title: "Datenort und Modus"; horizontal-stretch: 1;
-                    Text { text: Store.demo ? "Demodaten · eigene Datenbank, schreibgeschützt" : "Lokales Inventar · explizite Registrierung"; font-size: 11px; color: Theme.ink; }
-                    Text { text: Store.data-path; font-size: 10px; color: Theme.muted; wrap: word-wrap; }
-                    Text { text: "SQLite " + Store.sqlite-version + " · Tray-Betrieb: Fenster schließen beendet die App nicht."; font-size: 10px; color: Theme.muted; wrap: word-wrap; }
-                }
-                Panel {
-                    title: "Bereinigung"; horizontal-stretch: 1;
-                    Text { text: Store.cleanup-status; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                padding-left: 6px; padding-right: 6px; spacing: 8px;
+                Text { text: "Diese Ordner darf mogumogu lesen. Öffne einen Eintrag, um ihn zu erfassen, seine Größe zu messen oder die Freigabe zu widerrufen."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+            }
+            if Store.scopes.length == 0 : VerticalLayout {
+                vertical-stretch: 1; alignment: center; spacing: 10px; padding: 16px;
+                Text { text: "Noch keine Lesefreigaben."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; }
+                HorizontalLayout { alignment: center; UiButton { label: "Projekt hinzufügen"; primary: true; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } } }
+            }
+            if Store.scopes.length > 0 : ListView {
+                vertical-stretch: 1;
+                for scope in Store.scopes : RowCard {
+                    selection-kind: "scope";
+                    selection-key: "" + scope.id;
+                    icon: scope.watched ? Icons.monitor : Icons.shield;
+                    title: scope.name;
+                    subtitle: scope.kind + " · " + scope.coverage + (scope.last != "" ? " · " + scope.last : "") + " · " + scope.path;
+                    pill: scope.healthy ? "" : scope.status;
+                    pill-kind: "warn";
+                    label: scope.path + ", " + scope.kind + ", " + scope.status;
+                    activated => { Actions.open-scope(scope.id); }
                 }
             }
-            HorizontalLayout {
-                spacing: 14px;
+        }
+    }
+    if Store.settings-tab == 0 : ScrollView {
+        vertical-stretch: 1;
+        horizontal-scrollbar-policy: always-off;
+        content-width: self.visible-width;
+        VerticalLayout {
+            spacing: Theme.gap; alignment: start; padding-right: 16px; padding-bottom: 12px;
+            GridLayout {
+                spacing: Theme.gap;
                 SettingToggle {
-                    horizontal-stretch: 1; title: "Überwachung";
-                    description: "Entprellte Dateiereignisse in freigegebenen Projektordnern lösen eine begrenzte Neuerfassung aus. Aus: nur manuelle Erfassung.";
+                    col: 0;
+                    row: 0;
+                    title: "Überwachung";
+                    description: "Änderungen in freigegebenen Projektordnern automatisch erfassen.";
                     checked: Store.monitoring; enabled: !Store.demo;
                     toggled(on) => { Actions.set-monitoring(on); }
+                    if Store.pause-text != "" : MochiCallout {
+                        pose: 5; figure: 60px;
+                        title: Store.pause-text;
+                        text: "„Jetzt erfassen“ funktioniert trotzdem.";
+                        UiButton { small: true; label: "Fortsetzen"; y: (parent.height - self.height) / 2; available: !Store.demo && !Store.busy; activated => { Actions.pause-monitoring(0); } }
+                    }
+                    if Store.pause-text == "" && Store.monitoring : FlexboxLayout {
+                        spacing: 6px; alignment: start;
+                        UiButton { small: true; has-icon: true; icon: Icons.pause; label: "1 Stunde pausieren"; available: !Store.demo && !Store.busy; activated => { Actions.pause-monitoring(60); } }
+                        UiButton { small: true; label: "Bis morgen früh"; available: !Store.demo && !Store.busy; activated => { Actions.pause-monitoring(-1); } }
+                    }
                 }
                 SettingToggle {
-                    horizontal-stretch: 1; title: "Tray-Hinweise";
-                    description: "Generische Hinweise im Tray-Tooltip (Anzahl Prüfhinweise) – ohne Pfade oder Paketnamen.";
+                    col: root.compact ? 0 : 1;
+                    row: root.compact ? 1 : 0;
+                    title: "Tray-Hinweise";
+                    description: "Neue Prüfhinweise im Tray melden, ohne Pfade oder Paketnamen.";
                     checked: Store.notifications; enabled: !Store.demo;
                     toggled(on) => { Actions.set-notifications(on); }
+                    HorizontalLayout {
+                        spacing: 8px; alignment: start;
+                        CheckBox {
+                            text: "Einmal täglich um";
+                            checked: Store.daily-summary;
+                            enabled: Store.notifications && !Store.demo && Store.modal == 0;
+                            toggled => { Actions.set-daily-summary(self.checked); }
+                        }
+                        SpinBox {
+                            width: 62px;
+                            accessible-label: "Uhrzeit der täglichen Zusammenfassung";
+                            value: Store.summary-hour; minimum: 0; maximum: 23;
+                            enabled: Store.notifications && Store.daily-summary && !Store.demo && Store.modal == 0;
+                            edited(value) => { Actions.set-summary-hour(value); }
+                        }
+                        Text { text: "Uhr"; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px; alignment: start;
+                        CheckBox {
+                            text: "Ruhezeit von";
+                            checked: Store.quiet-enabled;
+                            enabled: Store.notifications && !Store.demo && Store.modal == 0;
+                            toggled => { Actions.set-quiet(self.checked, Store.quiet-from, Store.quiet-to); }
+                        }
+                        SpinBox {
+                            width: 62px;
+                            accessible-label: "Beginn der Ruhezeit";
+                            value: Store.quiet-from; minimum: 0; maximum: 23;
+                            enabled: Store.notifications && Store.quiet-enabled && !Store.demo && Store.modal == 0;
+                            edited(value) => { Actions.set-quiet(true, value, Store.quiet-to); }
+                        }
+                        Text { text: "bis"; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; }
+                        SpinBox {
+                            width: 62px;
+                            accessible-label: "Ende der Ruhezeit";
+                            value: Store.quiet-to; minimum: 0; maximum: 23;
+                            enabled: Store.notifications && Store.quiet-enabled && !Store.demo && Store.modal == 0;
+                            edited(value) => { Actions.set-quiet(true, Store.quiet-from, value); }
+                        }
+                        Text { text: "Uhr"; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; }
+                    }
                 }
             }
-            HorizontalLayout {
-                spacing: 14px;
+            GridLayout {
+                spacing: Theme.gap;
                 SettingToggle {
-                    horizontal-stretch: 1; title: "Updatehinweise (Netzwerk)";
-                    description: "Aus = keine Netzwerkzugriffe. Ein = nur einzeln freigegebene öffentliche Quellen; private Quellen nie.";
+                    col: 0;
+                    row: 0;
+                    title: "Mit Windows starten";
+                    description: "Nach der Anmeldung im Tray starten, ohne Fenster.";
+                    checked: Store.autostart; enabled: !Store.demo && Store.autostart-available;
+                    toggled(on) => { Actions.set-autostart(on); }
+                    if Store.autostart-note != "" : Text { text: Store.autostart-note; font-size: 11px; color: Theme.review-ink; wrap: word-wrap; }
+                }
+                SettingToggle {
+                    col: root.compact ? 0 : 1;
+                    row: root.compact ? 1 : 0;
+                    title: "Geführter Einstieg";
+                    description: "Bei leerem Inventar Schritt für Schritt zum ersten Projekt führen.";
+                    checked: Store.guide-enabled; enabled: !Store.demo;
+                    toggled(on) => { Actions.set-guide(on); }
+                }
+            }
+            GridLayout {
+                spacing: Theme.gap;
+                SettingToggle {
+                    col: 0;
+                    row: 0;
+                    title: "Updatehinweise";
+                    description: "Öffentliche Paketquellen nach neueren und abgekündigten Versionen fragen. Nur die hier erlaubten Quellen werden kontaktiert.";
                     checked: Store.updates; enabled: !Store.demo;
                     toggled(on) => { Actions.set-updates(on); }
                     for source in Store.sources : HorizontalLayout {
                         spacing: 8px;
-                        Text { text: source.host; font-size: 11px; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: source.host; min-width: 0px; overflow: elide; font-size: 11.5px; color: Theme.ink; vertical-alignment: center; horizontal-stretch: 1; }
                         UiButton {
-                            label: source.enabled ? "Freigegeben" : "Freigeben";
+                            small: true;
+                            label: source.enabled ? "Erlaubt" : "Erlauben";
                             selected: source.enabled;
                             checkable: true;
                             has-icon: source.enabled;
@@ -61,19 +169,26 @@ export component SettingsPage inherits PageCard {
                     }
                 }
                 Panel {
-                    title: "Scratchpad-Wurzel"; horizontal-stretch: 1;
-                    Text { text: "Hier legt mogumogu verwaltete Scratchpads an (source, environment, temporary, results)."; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        root-field := LineEdit { text: Store.scratch-root; placeholder-text: "C:\\dev\\scratch"; enabled: !Store.demo && Store.modal == 0 && !Store.busy; accessible-label: "Scratchpad-Wurzel"; horizontal-stretch: 1; }
-                        UiButton { label: "Speichern"; available: !Store.demo && !Store.busy; activated => { Actions.save-scratch-root(root-field.text); } }
+                    col: root.compact ? 0 : 1;
+                    row: root.compact ? 1 : 0;
+                    title: "Ordner für Scratchpads";
+                    Text { text: "Hier legt mogumogu neue Scratchpads an."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                    root-field := PillField { text: Store.scratch-root; icon: Icons.folder; placeholder: "C:\\dev\\scratch"; label: "Ordner für Scratchpads"; enabled: !Store.demo && Store.modal == 0 && !Store.busy; }
+                    FlexboxLayout {
+                        spacing: 8px; alignment: start;
+                        UiButton { small: true; label: "Durchsuchen …"; available: !Store.demo && !Store.busy; activated => { Actions.browse-scratch-root(); } }
+                        UiButton { small: true; primary: true; label: "Speichern"; available: !Store.demo && !Store.busy && root-field.text != Store.scratch-root; activated => { Actions.save-scratch-root(root-field.text); } }
                     }
                 }
             }
-            HorizontalLayout {
-                spacing: 12px; alignment: start;
-                UiButton { label: "In den Tray wechseln"; activated => { Actions.hide-dashboard(); } }
-                Text { text: "Tastatur: Strg+K Suche · Alt+1…8 Bereiche · Esc schließt Dialoge · Tab wechselt den Fokus"; font-size: 11px; color: Theme.muted; vertical-alignment: center; }
+            Panel {
+                title: "Daten";
+                Text { text: (Store.demo ? "Demo-Datenbank, schreibgeschützt: " : "Lokale Datenbank: ") + Store.data-path; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                FlexboxLayout {
+                    spacing: 8px; alignment: start;
+                    UiButton { small: true; label: "Sicherung erstellen …"; available: !Store.demo && !Store.busy; activated => { Actions.backup-now(); } }
+                    UiButton { small: true; label: "Exportieren …"; available: !Store.busy; activated => { Actions.export-now(); } }
+                }
             }
         }
     }

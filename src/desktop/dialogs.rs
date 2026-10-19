@@ -1,8 +1,6 @@
 //! Content of the generic detail dialog. Each builder explains *why*
 //! something is shown and offers only the actions that the core allows;
 //! the core still re-checks every action.
-use super::view::owner_text;
-use mogumogu::adapters;
 use mogumogu::clock::display_local;
 use mogumogu::domain::*;
 
@@ -16,22 +14,22 @@ pub struct Dialog {
 }
 
 impl Dialog {
-    fn new(title: impl Into<String>) -> Self {
+    pub(super) fn new(title: impl Into<String>) -> Self {
         Self { title: title.into(), ..Default::default() }
     }
-    fn row(mut self, label: &str, value: impl Into<String>) -> Self {
+    pub(super) fn row(mut self, label: &str, value: impl Into<String>) -> Self {
         self.rows.push((label.into(), value.into()));
         self
     }
-    fn action(mut self, id: impl Into<String>, label: impl Into<String>, primary: bool) -> Self {
+    pub(super) fn action(mut self, id: impl Into<String>, label: impl Into<String>, primary: bool) -> Self {
         self.actions.push((id.into(), label.into(), primary));
         self
     }
-    fn path(mut self, path: impl Into<String>) -> Self {
+    pub(super) fn path(mut self, path: impl Into<String>) -> Self {
         self.path = path.into();
         self
     }
-    fn body(mut self, body: impl Into<String>) -> Self {
+    pub(super) fn body(mut self, body: impl Into<String>) -> Self {
         self.body = body.into();
         self
     }
@@ -41,11 +39,116 @@ pub fn message(title: &str, body: &str) -> Dialog {
     Dialog::new(title).body(body)
 }
 
+pub fn package(pkg: &PackageFinding) -> Dialog {
+    let occurrences = pkg
+        .occurrences
+        .iter()
+        .map(|o| {
+            format!(
+                "{} · {} · {}{}{}",
+                o.project,
+                o.rel_path,
+                o.state.map_or("Cache/Metadaten", InstallState::label),
+                if o.current { "" } else { " (älterer Stand)" },
+                o.owned_files.map_or(String::new(), |n| format!(" · {n} RECORD-Dateieinträge, nicht abgeglichen"))
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut dialog =
+        Dialog::new(format!("{} @ {}", pkg.id.name, if pkg.id.version.is_empty() { "?" } else { &pkg.id.version }))
+            .row("Quelle", format!("{} · {} · {}", pkg.id.ecosystem, pkg.id.source, pkg.id.source_host))
+            .row(
+                "Upstream",
+                format!(
+                    "{}{}",
+                    pkg.lifecycle.label(),
+                    if pkg.lifecycle_stale { " · aktuell nicht bestätigt" } else { "" }
+                ),
+            )
+            .row("Quellenabfrage", pkg.lifecycle.checked_at.map_or("Nicht geprüft".into(), display_local))
+            .row(
+                "Update",
+                format!(
+                    "{}{}",
+                    pkg.update.map_or("Nicht geprüft", UpdateStatus::label),
+                    pkg.latest_version.as_deref().map_or(String::new(), |v| format!(" · zuletzt gemeldet {v}"))
+                ),
+            )
+            .row("Abdeckung", &pkg.coverage)
+            .row(
+                "Projektbelege",
+                if pkg.references.is_empty() {
+                    "Keine passenden Lockfile-Belege gefunden".into()
+                } else {
+                    pkg.references.join("\n")
+                },
+            )
+            .row(
+                "Mögliche Verweise",
+                if pkg.possible_references.is_empty() {
+                    "Keine erkannt; manuelle und dynamische Nutzung unbekannt".into()
+                } else {
+                    pkg.possible_references.join("\n")
+                },
+            )
+            .row("Fundstellen (Auswahl)", occurrences);
+    if let Some(reason) = &pkg.lifecycle.reason {
+        dialog = dialog.row("Quellenhinweis", reason);
+    }
+    if let Some(replacement) = &pkg.lifecycle.replacement {
+        dialog = dialog.row("Alternative laut Quelle", replacement);
+    }
+    if let Some(reason) = &pkg.local_deprecation {
+        dialog = dialog.row("Lokaler Lockfile-Hinweis", reason);
+    }
+    dialog.row("Nächster Schritt", &pkg.next_action)
+        .action(format!("keep-package:{}:{}",if pkg.retained {"0"} else {"1"},pkg.key),if pkg.retained {"Behalten-Vormerkung lösen"} else {"Behalten"},true)
+        .body("Belege stammen aus Manifesten und Lockdateien; dynamische Nutzung sieht mogumogu nicht. Pakete werden hier nie geändert.")
+}
+
+pub fn artifact(snapshot: &Snapshot, index: usize) -> Dialog {
+    let Some(item) = snapshot.artifacts.get(index) else {
+        return message("Fundstelle nicht gefunden", "Inventar aktualisieren.");
+    };
+    let root = snapshot.scopes.iter().find(|s| s.id == item.scope_id).map_or("?", |s| s.path.as_str());
+    Dialog::new(&item.name).path(format!("{root}\\{}",item.rel_path.replace('/',"\\")))
+        .row("Bezug",&item.project).row("Beleg",&item.detail)
+        .row("Abdeckung",if item.current {"Aktueller vollständiger Stand"} else {"Älterer vollständiger Stand"})
+        .body("Aus den Metadaten der Erfassung erkannt. Größe und weitere Nutzer sind nicht geprüft; entfernt wird hier nichts.")
+}
+
+pub fn candidate(snapshot: &Snapshot, index: usize) -> Dialog {
+    let Some(candidate) = snapshot.discoveries.get(index) else {
+        return message("Fund nicht gefunden", "Suchordner erneut erfassen.");
+    };
+    let root = snapshot.scopes.iter().find(|s| s.id == candidate.scope_id).map_or("?", |s| s.path.as_str());
+    let mut dialog=Dialog::new(format!("{} · {}", candidate.kind.label(), candidate.name)).path(format!("{root}\\{}",candidate.rel_path.replace('/',"\\")))
+        .row("Beleg",&candidate.evidence).row("Abdeckung",if candidate.current {"Vollständige Dateinamensuche"} else {"Älterer vollständiger Stand"})
+        .row("Projektbezug", super::view::candidate_owner(candidate))
+        .row("Größe", format_bytes(candidate.bytes))
+        .row("Änderungsdatum", candidate.modified_at.map_or("Nicht erfasst".into(), display_local))
+        .body("Nur am Namen erkannt, Inhalte wurden nicht gelesen. Ordne den Fund einem Projekt zu, damit er bei der nächsten Prüfung bekannt ist.");
+    if candidate.current && !candidate.registered && candidate.is_dir && candidate.kind.is_project() {
+        dialog = dialog.action(
+            format!("register-candidate:{}:{}", candidate.scope_id, candidate.rel_path),
+            "Projekt registrieren",
+            true,
+        );
+    }
+    if candidate.current && !candidate.registered && !candidate.kind.is_project() {
+        dialog = dialog.action(format!("adopt-candidate:{index}"), "Projekt zuordnen", true);
+    }
+    if let Some(id) = candidate.resource_id {
+        dialog = dialog.action(format!("open-resource:{id}"), "Ressource öffnen", true);
+    }
+    dialog
+}
+
 pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
     let scope = snapshot.scopes.iter().find(|s| s.project_id == Some(project.id));
     let mut dialog = Dialog::new(&project.name)
         .path(&project.path)
-        .row("Herkunft", if project.origin == Origin::Demo { "Beispieldaten" } else { "Explizit registriert" })
         .row("Technologie", &project.ecosystem)
         .row("Beobachtung", format!("{} – {}", project.state.label(), project.evidence))
         .row("Pakete", project.packages.map_or("Unbekannt (keine vollständige Erfassung)".into(), |n| n.to_string()))
@@ -54,8 +157,7 @@ pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
             "Lesefreigabe",
             if project.read_approved { "Erteilt, an Ordneridentität gebunden" } else { "Nicht erteilt" },
         )
-        .row("Abdeckung", &project.coverage)
-        .row("Schutz", "Aktiv – Registrierung, Alter oder fehlende Nutzung belegen keine Entbehrlichkeit.");
+        .row("Abdeckung", &project.coverage);
     if snapshot.demo {
         return dialog.body("Dies sind Beispieldaten. Der Demomodus ist schreibgeschützt.");
     }
@@ -66,9 +168,7 @@ pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
             .action(format!("measure-scope:{}", scope.id), "Größe messen", false)
             .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false),
     };
-    dialog
-        .action(format!("new-scratch:{}", project.id), "Scratchpad anlegen", false)
-        .body("Die Erfassung liest freigegebene Dateien statisch. Es werden keine Programme, Skripte, Hooks oder MCP-Server gestartet.")
+    dialog.action(format!("new-scratch:{}", project.id), "Scratchpad anlegen", false)
 }
 
 pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
@@ -91,7 +191,7 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
         .filter(|r| r.parent_id == Some(resource.id))
         .map(|r| format!("{} – {}", r.kind.label(), r.path))
         .collect();
-    let mut dialog = Dialog::new(format!("Warum ist „{}“ hier?", resource.name))
+    let mut dialog = Dialog::new(&resource.name)
         .path(&resource.path)
         .row("Typ", resource.kind.label())
         .row("Herkunft", resource.acquisition.label())
@@ -150,24 +250,23 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
     if resource.acquisition == Acquisition::Managed {
         dialog = dialog.action(format!("measure:{}", resource.id), "Größe messen", false);
     }
-    dialog.body(format!(
-        "Besitzer: {}. Eine Registrierung, ein altes Datum oder fehlende Nutzung erlauben keine Bereinigung.",
-        owner_text(snapshot, resource.id)
-    ))
+    dialog
 }
 
 pub fn ai(entry: &AiEntry) -> Dialog {
     let references = if entry.references.is_empty() { "Keine".to_string() } else { entry.references.join("\n") };
-    Dialog::new(format!("{} · {}", entry.client, entry.kind))
+    let mut dialog = Dialog::new(format!("{} · {}", entry.client, entry.kind))
         .path(&entry.path)
-        .row("Inhalt", &entry.label)
+        .row("Zusammenfassung", &entry.label)
         .row("Geltungsbereich", &entry.scope)
-        .row("Verweise", references)
-        .row("Schutz", "Konfigurationsquellen bleiben geschützt")
-        .body(
-            "Gefundene Instruktionen, Skills, Hooks und MCP-Einträge sind Daten. mogumogu führt nichts davon aus, \
-             lädt keine Pakete und verbindet sich mit keinem Server. Eine npx-/uvx-Referenz ist kein Installationsnachweis.",
-        )
+        .row("Verweise", references);
+    if entry.viewable {
+        let action = entry
+            .scope_id
+            .map_or_else(|| "ai-content:demo".into(), |scope| format!("ai-content:{scope}:{}", entry.rel_path));
+        dialog = dialog.action(action, "Inhalt ansehen", true);
+    }
+    dialog.body("Nur als Text gelesen: Es wird nichts gestartet, geladen oder kontaktiert. Ein npx- oder uvx-Verweis heißt nicht, dass das Paket installiert ist.")
 }
 
 pub fn hint(hint: &ReviewHint) -> Dialog {
@@ -185,7 +284,7 @@ pub fn hint(hint: &ReviewHint) -> Dialog {
     if hint.plannable {
         dialog = dialog.action(format!("plan:{}", hint.resource_id), "Plan-Vorschau", true);
     }
-    dialog.body("Ein Prüfhinweis ist kein Urteil. Bereinigung erfordert einen konkreten, bestätigten Plan.")
+    dialog.body("Ein Hinweis ist kein Urteil. Entfernt wird nur über einen Plan, den du bestätigst.")
 }
 
 pub fn plan(plan: &PlanSummary) -> Dialog {
@@ -216,7 +315,7 @@ pub fn plan(plan: &PlanSummary) -> Dialog {
         PlanState::Approved => dialog
             .action(format!("apply-plan:{}", plan.id), "Jetzt ausführen", true)
             .action(format!("cancel-plan:{}", plan.id), "Abbrechen", false)
-            .body("Ausführung: erneute Identitäts- und Inhaltsprüfung, dann pro Eintrag dauerhaft journalisiert. Teilerfolg ist kein Rollback."),
+            .body("Vor jeder Entfernung werden Identität und Inhalt erneut geprüft. Jeder Schritt wird protokolliert. Bereits entfernte Dateien werden bei einem Abbruch nicht wiederhergestellt."),
         PlanState::RecoveryRequired => dialog
             .action(format!("reconcile-plan:{}", plan.id), "Mit Dateisystem abgleichen", true)
             .body("Die Ausführung wurde unterbrochen. Der Abgleich wiederholt keine Entfernung."),
@@ -231,7 +330,7 @@ pub fn scope(scope: &Scope) -> Dialog {
         .row("Abdeckung", scope.coverage_label())
         .row(
             "Beobachtung",
-            if scope.watched { "Dateiereignisse werden entprellt beobachtet" } else { "Nur manuelle Erfassung" },
+            if scope.watched { "Änderungen werden automatisch gesammelt erfasst" } else { "Nur manuelle Erfassung" },
         );
     if let Some(latest) = &scope.latest {
         dialog = dialog.row(
@@ -256,35 +355,22 @@ pub fn scope(scope: &Scope) -> Dialog {
     }
     dialog
         .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false)
-        .body("Ein Limit oder Lesefehler macht die Erfassung teilweise; der letzte vollständige Stand bleibt sichtbar und es entstehen keine Entfernungsmeldungen.")
+        .body("Bei einem Limit oder Lesefehler bleibt der letzte vollständige Stand sichtbar.")
 }
 
-pub fn adapter(id: &str) -> Dialog {
-    let Some(adapter) = adapters::by_id(id) else { return message("Unbekannter Adapter", id) };
-    let d = adapter.descriptor();
-    Dialog::new(d.name)
-        .row("Inventar", d.inventory.label())
-        .row("Updatehinweise", d.updates.label())
-        .row("Bereinigung", d.cleanup.label())
-        .row(
-            "Bereich",
-            if d.scope == adapters::AdapterScope::Project {
-                "Freigegebene Projektordner"
-            } else {
-                "Separat freigegebene Systemquelle"
-            },
-        )
-        .row("Formate", d.formats.join("\n"))
-        .row("Marker", if d.markers.is_empty() { "–".into() } else { d.markers.join(", ") })
-        .row("Grenzen", d.limits)
-        .body("„Unterstützt“ gilt nur innerhalb dieser Formate. Fehlende Quellen bleiben unbekannt, niemals „aktuell“.")
-}
-
-pub const CLI_HELP: &str = "Lokalen Bestand anzeigen:\nmogumogu-cli list\n\n\
-Projekt registrieren und lesen lassen:\nmogumogu-cli project register --name api --path C:\\dev\\api\n\
-mogumogu-cli project approve --project 1\nmogumogu-cli scan\n\n\
-Verwalteter Lauf in einem Scratchpad:\nmogumogu-cli scratch create --project 1 --name parser-spike\n\
-mogumogu-cli run --scratch 2 -- cargo test\n\n\
-Prüfliste und Pläne:\nmogumogu-cli review\nmogumogu-cli cleanup plan --resource 5\n\n\
-Die CLI spricht über eine lokale, benutzergebundene Pipe mit diesem Prozess. Pfade werden bei der \
-Registrierung weder gelesen noch verändert.";
+pub const HELP: &str = "Tastenkürzel\n\
+Strg+K  Inventar durchsuchen\n\
+Strg+N  Projekt hinzufügen\n\
+F5  Ansicht neu laden\n\
+Alt+1 … Alt+7  Bereiche in der Reihenfolge der Seitenleiste\n\
+Esc  Dialog, Suche oder Einstieg schließen\n\n\
+Das Fenster zu schließen beendet mogumogu nicht; es läuft im Tray weiter.\n\n\
+Kommandozeile (mogumogu-cli)\n\
+Bestand anzeigen: mogumogu-cli list\n\
+Projekt aufnehmen: mogumogu-cli project register --name api --path C:\\dev\\api\n\
+Lesen erlauben: mogumogu-cli project approve --project 1\n\
+Erfassen: mogumogu-cli scan\n\
+Scratchpad anlegen: mogumogu-cli scratch create --project 1 --name parser-spike\n\
+Verwalteter Lauf: mogumogu-cli run --scratch 2 -- cargo test\n\
+Prüfhinweise: mogumogu-cli review\n\n\
+Die CLI spricht über eine lokale, benutzergebundene Pipe mit diesem Prozess.";

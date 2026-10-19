@@ -81,32 +81,28 @@ impl Repository {
     }
 
     pub fn sessions(&mut self) -> Result<Vec<Session>> {
-        self.read(|tx| {
-            let mut statement =
-                tx.prepare(&format!("SELECT {COLUMNS} FROM sessions ORDER BY id DESC LIMIT {}", limits::UI_PAGE))?;
-            let rows = statement.query_map([], map_session)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(
+            &format!("SELECT {COLUMNS} FROM sessions ORDER BY id DESC LIMIT {}", limits::UI_PAGE),
+            [],
+            map_session,
+        )
     }
 
     /// Sessions that still lock resources and need reconciliation.
     pub fn open_sessions(&mut self) -> Result<Vec<Session>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(&format!(
-                "SELECT {COLUMNS} FROM sessions WHERE state IN ('starting','running','completion_requested') ORDER BY id"
-            ))?;
-            let rows = statement.query_map([], map_session)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(
+            &format!("SELECT {COLUMNS} FROM sessions WHERE state IN ('starting','running','completion_requested') ORDER BY id"),
+            [],
+            map_session,
+        )
     }
 
     pub fn sessions_for_scratch(&mut self, scratch_id: i64) -> Result<Vec<Session>> {
-        self.read(|tx| {
-            let mut statement =
-                tx.prepare(&format!("SELECT {COLUMNS} FROM sessions WHERE scratch_id = ?1 ORDER BY id"))?;
-            let rows = statement.query_map([scratch_id], map_session)?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(
+            &format!("SELECT {COLUMNS} FROM sessions WHERE scratch_id = ?1 ORDER BY id"),
+            [scratch_id],
+            map_session,
+        )
     }
 
     /// Moves a session forward; invalid transitions are refused.

@@ -8,7 +8,7 @@ use crate::platform::FileIdentity;
 use crate::{Error, Result, privacy};
 use rusqlite::{OptionalExtension, Row, Transaction, params};
 
-const SCOPE_COLUMNS: &str = "id, project_id, kind, path, status, approved_at, last_error";
+const SCOPE_COLUMNS: &str = "id, project_id, kind, path, status, approved_at, last_error, profile, realm";
 const GENERATION_COLUMNS: &str =
     "id, state, started_at, finished_at, entries_seen, files_read, item_count, limit_reason, error_count";
 
@@ -45,7 +45,12 @@ fn load_scope(tx: &Transaction<'_>, row: &Row<'_>) -> rusqlite::Result<Scope> {
     Ok(Scope {
         id,
         project_id: row.get(1)?,
-        kind: row.get(2)?,
+        kind: match (row.get::<_, String>(8)?.as_str(), row.get::<_, String>(7)?.as_str()) {
+            ("user", _) => ScopeKind::UserAi,
+            ("", "") => row.get(2)?,
+            ("", profile) => ScopeKind::parse(profile).ok_or_else(|| rusqlite::Error::InvalidQuery)?,
+            _ => return Err(rusqlite::Error::InvalidQuery),
+        },
         path: row.get(3)?,
         status: row.get(4)?,
         approved_at: row.get(5)?,
@@ -69,6 +74,9 @@ impl Repository {
         self.require_local()?;
         let now = self.now();
         let identity = identity.map(|i| i.to_string());
+        let storage_kind = kind.storage_kind();
+        let profile = kind.profile();
+        let realm = kind.realm();
         self.write(|tx| {
             if let Some(project) = project_id {
                 let exists: bool =
@@ -79,8 +87,9 @@ impl Repository {
             }
             let existing: Option<(i64, Option<String>)> = tx
                 .query_row(
-                    "SELECT id, identity FROM scopes WHERE kind = ?1 AND path = ?2 AND status <> 'revoked'",
-                    params![kind, path],
+                    "SELECT id, identity FROM scopes
+                     WHERE kind = ?1 AND path = ?2 AND profile = ?3 AND realm = ?4 AND status <> 'revoked'",
+                    params![storage_kind, path, profile, realm],
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .optional()?;
@@ -92,11 +101,18 @@ impl Repository {
                 tx.execute("UPDATE scopes SET status = 'revoked' WHERE id = ?1", [id])?;
             }
             tx.execute(
-                "INSERT INTO scopes(project_id, kind, path, identity, status, approved_at) VALUES(?1, ?2, ?3, ?4, 'approved', ?5)",
-                params![project_id, kind, path, identity, now],
+                "INSERT INTO scopes(project_id, kind, path, identity, status, approved_at, profile, realm)
+                 VALUES(?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7)",
+                params![project_id, storage_kind, path, identity, now, profile, realm],
             )?;
             let id = tx.last_insert_rowid();
-            log_in(tx, now, "scope", "Lesefreigabe erteilt", &format!("{} · neue Vergleichsbasis beginnt", kind.label()))?;
+            log_in(
+                tx,
+                now,
+                "scope",
+                "Lesefreigabe erteilt",
+                &format!("{} · neue Vergleichsbasis beginnt", kind.label()),
+            )?;
             Ok(id)
         })
     }

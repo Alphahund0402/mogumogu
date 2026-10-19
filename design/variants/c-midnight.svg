@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="680" viewBox="0 0 1080 680">
+<defs><clipPath id="window"><rect width="1080" height="680" rx="10"/></clipPath></defs><g clip-path="url(#window)">
+<rect x="0" y="0" width="1080" height="680" rx="0" fill="#101a28"/>
+<rect x="0" y="0" width="1080" height="32" rx="0" fill="#0d1623"/>
+<text x="16" y="21" font-family="Segoe UI" font-size="11" font-weight="600" fill="#a1b1c8">mogumogu</text>
+<path d="M952 16L964 16" stroke="#a1b1c8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<rect x="997" y="11" width="10" height="10" rx="0" fill="none" stroke="#a1b1c8" stroke-width="1"/>
+<path d="M1046 11L1056 21" stroke="#a1b1c8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<path d="M1056 11L1046 21" stroke="#a1b1c8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<rect x="0" y="32" width="64" height="624" rx="0" fill="#131f30"/>
+<g data-cat="c" transform="translate(13 45) scale(0.3958333333333333)"><g stroke="#233a59" stroke-linecap="round" stroke-linejoin="round">
+<path d="M19 39 21 19Q22 14 26 19L37 29Q49 26 61 29L72 19Q76 15 78 20L78 40Q86 49 83 63Q79 77 48 79Q17 77 13 63Q10 49 19 39Z" fill="#f3f2ff" stroke-width="4.2"/>
+<path d="m27 25 6 7m39-7-6 7" stroke="#c6c9ef" stroke-width="3.5" fill="none"/>
+<g stroke="none"><ellipse cx="32" cy="49" rx="4" ry="5" fill="#233a59"/><ellipse cx="64" cy="49" rx="4" ry="5" fill="#233a59"/>
+<circle cx="30.7" cy="47.5" r="1.2" fill="white"/><circle cx="62.7" cy="47.5" r="1.2" fill="white"/>
+<ellipse cx="24" cy="59" rx="5.3" ry="3" fill="#c4c0e7"/><ellipse cx="72" cy="59" rx="5.3" ry="3" fill="#c4c0e7"/>
+<path d="M45 57q3-2 6 0l-3 4Z" fill="#9591c5"/></g>
+<path d="M48 61v2m-7 0q3 5 7 0 4 5 7 0" stroke-width="2.7" fill="none"/>
+<path d="m19 55-11-3m10 10H6m71-7 11-3m-10 10h12" stroke-width="2.6"/>
+<path d="M23 75q0-10 9-10t9 10v4q0 8-9 8t-9-8Zm32 0q0-10 9-10t9 10v4q0 8-9 8t-9-8Z" fill="#f3f2ff" stroke-width="3.4"/>
+<path d="M29 75v4m6-4v4m26-4v4m6-4v4" stroke-width="1.9"/>
+</g></g>
+<rect x="11" y="109" width="42" height="36" rx="8" fill="#283c5e"/>
+<rect x="1" y="119" width="2" height="16" rx="1" fill="#aac3ff"/>
+<g transform="translate(23 119) scale(0.75)" stroke="#aac3ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></g>
+<g transform="translate(23 165) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<g transform="translate(23 211) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/></g>
+<g transform="translate(23 257) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5zM20 2v4M18 4h4"/></g>
+<g transform="translate(23 303) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></g>
+<g transform="translate(23 349) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 3C9 3 4 6 4 12c0 8 13 9 16-9zM3 21 16 8"/></g>
+<circle cx="47" cy="347" r="3" fill="#edc58d"/>
+<g transform="translate(23 395) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M2 12h5l3-8 4 16 3-8h5"/></g>
+<g transform="translate(23 610) scale(0.75)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m9 3-.6 3-2.7 1-2.6-1-2 3 2.3 2-.1 3L1 16l2 3 3-1 2.4 1 1 3h4l.6-3 2.8-1 2.5 1 2-3-2.2-2v-3L22 9l-2-3-3 1-2.4-1-1-3z" transform="translate(1 0) scale(.91)"/><circle cx="12" cy="12" r="3"/></g>
+<text x="84" y="65" font-family="Segoe UI" font-size="13" font-weight="600" fill="#e5edf8">mogumogu</text>
+<text x="170" y="65" font-family="Segoe UI" font-size="12" font-weight="400" fill="#a1b1c8">/ Übersicht</text>
+<rect x="704" y="45" width="258" height="30" rx="6" fill="#101a28" stroke="#2a3a51" stroke-width="1"/>
+<g transform="translate(714 53) scale(0.5833333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></g>
+<text x="736" y="65" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#a1b1c8">Projekte suchen</text>
+<text x="952" y="65" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8" text-anchor="end">Strg+F</text>
+<g transform="translate(990 52) scale(0.7083333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 7v5h-5M4 17v-5h5M20 11a8 8 0 0 0-14-5M4 13a8 8 0 0 0 14 5"/></g>
+<g transform="translate(1032 52) scale(0.7083333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></g>
+<text x="84" y="112" font-family="Segoe UI" font-size="23" font-weight="600" fill="#e5edf8">Prüfübersicht</text>
+<text x="1060" y="110" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8" text-anchor="end">Belege zuerst. Entscheidungen mit Kontext.</text>
+<rect x="84" y="134" width="976" height="60" rx="7" fill="#172436"/>
+<g transform="translate(100 156) scale(0.7083333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="130" y="173" font-family="Segoe UI" font-size="22" font-weight="600" fill="#e5edf8">6</text>
+<text x="157" y="172" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8">Projekte</text>
+<g transform="translate(344 156) scale(0.7083333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/></g>
+<text x="374" y="173" font-family="Segoe UI" font-size="22" font-weight="600" fill="#e5edf8">428</text>
+<text x="432" y="172" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8">Paketversionen</text>
+<g transform="translate(588 156) scale(0.7083333333333334)" stroke="#edc58d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 3C9 3 4 6 4 12c0 8 13 9 16-9zM3 21 16 8"/></g>
+<text x="618" y="173" font-family="Segoe UI" font-size="22" font-weight="600" fill="#e5edf8">3</text>
+<text x="645" y="172" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8">Prüfhinweise</text>
+<g transform="translate(832 156) scale(0.7083333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></g>
+<text x="862" y="173" font-family="Segoe UI" font-size="22" font-weight="600" fill="#e5edf8">142,0 GB</text>
+<text x="969" y="172" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8">Beispielbestand</text>
+<rect x="84" y="213" width="190" height="400" rx="7" fill="#172436" stroke="#2a3a51" stroke-width="1"/>
+<text x="100" y="240" font-family="Segoe UI" font-size="12" font-weight="600" fill="#e5edf8">Projekte</text>
+<text x="256" y="240" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8" text-anchor="end">6</text>
+<g transform="translate(101 267) scale(0.5833333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="124" y="279" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#e5edf8">my-app</text>
+<text x="124" y="296" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8">Node.js</text>
+<g transform="translate(101 317) scale(0.5833333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="124" y="329" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#e5edf8">website</text>
+<text x="124" y="346" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8">Node.js</text>
+<rect x="92" y="359" width="174" height="46" rx="5" fill="#283c5e"/>
+<g transform="translate(101 367) scale(0.5833333333333334)" stroke="#aac3ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="124" y="379" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#e5edf8">ml-experiments</text>
+<text x="124" y="396" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8">Python · uv</text>
+<g transform="translate(101 417) scale(0.5833333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="124" y="429" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#e5edf8">tools</text>
+<text x="124" y="446" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8">Rust</text>
+<g transform="translate(101 467) scale(0.5833333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="124" y="479" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#e5edf8">game-prototype</text>
+<text x="124" y="496" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8">C++</text>
+<g transform="translate(101 517) scale(0.5833333333333334)" stroke="#a1b1c8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="124" y="529" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#e5edf8">old-stuff</text>
+<text x="124" y="546" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8">Python</text>
+<rect x="290" y="213" width="502" height="400" rx="7" fill="#172436" stroke="#2a3a51" stroke-width="1"/>
+<text x="308" y="241" font-family="Segoe UI" font-size="15" font-weight="600" fill="#e5edf8">Prüfliste</text>
+<rect x="744" y="225" width="28" height="22" rx="6" fill="#3d352b"/>
+<text x="758.0" y="239.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#edc58d" text-anchor="middle">3</text>
+<text x="308" y="264" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8">Hinweise brauchen eine Entscheidung.</text>
+<rect x="300" y="281" width="482" height="58" rx="5" fill="#283c5e"/>
+<g transform="translate(311 299) scale(0.7083333333333334)" stroke="#edc58d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 3C9 3 4 6 4 12c0 8 13 9 16-9zM3 21 16 8"/></g>
+<text x="341" y="305" font-family="Segoe UI" font-size="12" font-weight="600" fill="#e5edf8">ml-experiments</text>
+<text x="341" y="324" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Umgebung · Prüfung offen</text>
+<rect x="700" y="298" width="68" height="22" rx="6" fill="#3d352b"/>
+<text x="734.0" y="312.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#edc58d" text-anchor="middle">Prüfen</text>
+<g transform="translate(311 363) scale(0.7083333333333334)" stroke="#edc58d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 3C9 3 4 6 4 12c0 8 13 9 16-9zM3 21 16 8"/></g>
+<text x="341" y="369" font-family="Segoe UI" font-size="12" font-weight="600" fill="#e5edf8">notebook-spike</text>
+<text x="341" y="388" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Scratchpad · Prüftermin erreicht</text>
+<rect x="700" y="362" width="68" height="22" rx="6" fill="#3d352b"/>
+<text x="734.0" y="376.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#edc58d" text-anchor="middle">Prüfen</text>
+<g transform="translate(311 427) scale(0.7083333333333334)" stroke="#edc58d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></g>
+<text x="341" y="433" font-family="Segoe UI" font-size="12" font-weight="600" fill="#e5edf8">build-cache</text>
+<text x="341" y="452" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Cache · Zuordnung prüfen</text>
+<rect x="700" y="426" width="68" height="22" rx="6" fill="#3d352b"/>
+<text x="734.0" y="440.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#edc58d" text-anchor="middle">Prüfen</text>
+<path d="M308 484L774 484" stroke="#2a3a51" stroke-width="1" fill="none" stroke-linecap="round"/>
+<text x="308" y="508" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#e5edf8">Letzte Aktivität</text>
+<circle cx="314" cy="528" r="2.5" fill="#a1b1c8"/>
+<text x="328" y="532" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Beispielinventar geladen</text>
+<circle cx="314" cy="555" r="2.5" fill="#a1b1c8"/>
+<text x="328" y="559" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Session im Beispiel abgeschlossen</text>
+<circle cx="314" cy="582" r="2.5" fill="#a1b1c8"/>
+<text x="328" y="586" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Paketstand im Beispiel aktualisiert</text>
+<rect x="808" y="213" width="252" height="400" rx="7" fill="#172436" stroke="#2a3a51" stroke-width="1"/>
+<text x="826" y="239" font-family="Segoe UI" font-size="9.5" font-weight="600" fill="#a1b1c8">KONTEXT</text>
+<g transform="translate(826 258) scale(0.8333333333333334)" stroke="#aac3ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="856" y="274" font-family="Segoe UI" font-size="14.5" font-weight="600" fill="#e5edf8">ml-experiments</text>
+<text x="826" y="299" font-family="Segoe UI" font-size="11" font-weight="400" fill="#a1b1c8">C:\dev\ml</text>
+<text x="826" y="344" font-family="Segoe UI" font-size="25" font-weight="600" fill="#e5edf8">25,4 GB</text>
+<text x="826" y="365" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">erfasst · Beispielbestand</text>
+<path d="M826 381L1042 381" stroke="#2a3a51" stroke-width="1" fill="none" stroke-linecap="round"/>
+<text x="826" y="406" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Beobachtung</text>
+<rect x="966" y="390" width="76" height="22" rx="6" fill="#3d352b"/>
+<text x="1004.0" y="404.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#edc58d" text-anchor="middle">Prüfen</text>
+<g transform="translate(826 426) scale(0.5833333333333334)" stroke="#8cdbbf" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></g>
+<text x="849" y="438" font-family="Segoe UI" font-size="11" font-weight="400" fill="#8cdbbf">Geschützt registriert</text>
+<rect x="826" y="459" width="216" height="78" rx="6" fill="#101a28"/>
+<text x="839" y="482" font-family="Segoe UI" font-size="11" font-weight="600" fill="#e5edf8">Nutzung bleibt unbekannt.</text>
+<text x="839" y="504" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Fehlende Verweise sind</text>
+<text x="839" y="521" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">kein Löschbeleg.</text>
+<rect x="826" y="559" width="216" height="30" rx="6" fill="#172436" stroke="#2a3a51" stroke-width="1"/>
+<text x="934.0" y="578.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#e5edf8" text-anchor="middle">Details öffnen</text>
+<rect x="84" y="624" width="163" height="30" rx="6" fill="#aac3ff"/>
+<text x="165.5" y="643.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#101a28" text-anchor="middle">Freigaben erfassen</text>
+<rect x="259" y="624" width="163" height="30" rx="6" fill="#172436" stroke="#2a3a51" stroke-width="1"/>
+<g transform="translate(270 632.0) scale(0.5833333333333334)" stroke="#e5edf8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M12 4v16M4 12h16"/></g>
+<text x="292" y="643.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#e5edf8">Projekt registrieren</text>
+<text x="1060" y="644" font-family="Segoe UI" font-size="10" font-weight="400" fill="#a1b1c8" text-anchor="end">Strg+F  Suche     ·     F5  Ansicht aktualisieren</text>
+<rect x="0" y="656" width="1080" height="24" rx="0" fill="#0d1623"/>
+<path d="M0 656L1080 656" stroke="#2a3a51" stroke-width="1" fill="none" stroke-linecap="round"/>
+<circle cx="84" cy="668" r="3" fill="#8cdbbf"/>
+<text x="96" y="672" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8">Bereit</text>
+<text x="1060" y="672" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#a1b1c8" text-anchor="end">Demo · Beispielbestand</text>
+</g>
+<rect x="0.5" y="0.5" width="1079" height="679" rx="10" fill="none" stroke="#2a3a51" stroke-width="1"/>
+</svg>

@@ -9,6 +9,15 @@ string_enum! {
         Chocolatey => "chocolatey",
         /// Registry-based software list; read-only, no filesystem root.
         Winget => "winget",
+        ProjectSearch => "projects",
+        NpmGlobal => "npm-global",
+        UvTools => "uv-tools",
+        Python => "python",
+        CargoTools => "cargo-tools",
+        NugetCache => "nuget-cache",
+        /// One narrow folder of a client's user configuration (`.claude`, …),
+        /// read only along the catalog's patterns.
+        UserAi => "user-ai",
     }
 }
 
@@ -19,6 +28,35 @@ impl ScopeKind {
             Self::Scoop => "Scoop-Installation",
             Self::Chocolatey => "Chocolatey-Installation",
             Self::Winget => "Windows-Softwareliste (WinGet-Kontext)",
+            Self::ProjectSearch => "Projektsuche (nur Dateinamen)",
+            Self::NpmGlobal => "Globale npm-Pakete",
+            Self::UvTools => "uv-Toolumgebungen",
+            Self::Python => "Python-Paketbestand",
+            Self::CargoTools => "Cargo-Tools",
+            Self::NugetCache => "Gemeinsamer NuGet-Paketspeicher",
+            Self::UserAi => "KI-Konfiguration des Benutzers",
+        }
+    }
+
+    pub fn storage_kind(self) -> Self {
+        match self {
+            Self::Project | Self::Scoop | Self::Chocolatey | Self::Winget => self,
+            _ => Self::Project,
+        }
+    }
+    pub fn profile(self) -> &'static str {
+        if self == self.storage_kind() || !self.realm().is_empty() { "" } else { self.as_str() }
+    }
+    /// Stored separately from `profile`, whose values are fixed by schema v3.
+    pub fn realm(self) -> &'static str {
+        if self == Self::UserAi { "user" } else { "" }
+    }
+    /// Whose configuration this is, for scope labels in the dashboard.
+    pub fn audience(self) -> &'static str {
+        match self {
+            Self::Project | Self::ProjectSearch => "Projekt",
+            Self::UserAi => "Benutzer",
+            _ => "System",
         }
     }
 }
@@ -107,6 +145,14 @@ pub struct Scope {
 }
 
 impl Scope {
+    pub fn current(&self) -> bool {
+        self.status == ScopeStatus::Approved
+            && self
+                .published
+                .as_ref()
+                .zip(self.latest.as_ref())
+                .is_some_and(|(p, l)| p.id == l.id && l.state == GenerationState::Complete)
+    }
     /// Honest coverage text: partial or failed passes never hide behind an
     /// older complete state.
     pub fn coverage_label(&self) -> String {

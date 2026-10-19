@@ -151,6 +151,30 @@ impl Catalog {
             .flat_map(|p| &p.detect)
             .any(|d| d.pattern.rsplit('/').next().is_some_and(|last| segment_matches(last, file_name)))
     }
+
+    /// Directory routes below a user folder that stands for `prefix`
+    /// (`.claude`, …): only these subfolders are ever entered there.
+    pub fn user_routes(&self, prefix: &str) -> Vec<Vec<String>> {
+        let mut routes: Vec<Vec<String>> = Vec::new();
+        for detection in self.profiles.iter().flat_map(|p| &p.detect) {
+            let segments: Vec<&str> = detection.pattern.split('/').collect();
+            if segments.len() > 2 && segments[0].eq_ignore_ascii_case(prefix) {
+                let route: Vec<String> = segments[1..segments.len() - 1].iter().map(|s| s.to_string()).collect();
+                if !routes.contains(&route) {
+                    routes.push(route);
+                }
+            }
+        }
+        routes
+    }
+}
+
+/// Whether a relative directory lies on one of the routes (or above its end).
+pub fn route_allows(routes: &[Vec<String>], rel_dir: &str) -> bool {
+    let parts: Vec<&str> = rel_dir.split('/').collect();
+    routes.iter().any(|route| {
+        parts.len() <= route.len() && parts.iter().zip(route).all(|(part, pattern)| segment_matches(pattern, part))
+    })
 }
 
 fn validate_pattern(pattern: &str) -> Result<(), String> {
@@ -218,6 +242,19 @@ mod tests {
         assert_eq!(skill, vec!["claude-code"], "a client folder is not claimed by another client");
         assert!(catalog().matches("src/main.rs").is_empty());
         assert!(catalog().may_match("SKILL.md"));
+    }
+
+    #[test]
+    fn user_folders_are_entered_only_along_catalog_routes() {
+        let routes = catalog().user_routes(".claude");
+        for allowed in ["skills", "skills/review", "agents", "commands", "rules"] {
+            assert!(route_allows(&routes, allowed), "{allowed}");
+        }
+        for denied in ["projects", "todos", "shell-snapshots", "skills/review/scripts", "statsig"] {
+            assert!(!route_allows(&routes, denied), "{denied}");
+        }
+        assert!(catalog().user_routes(".codex").is_empty(), "only config.toml and AGENTS.md at the root");
+        assert!(route_allows(&catalog().user_routes(".roo"), "rules-code"), "one wildcard per segment");
     }
 
     #[test]

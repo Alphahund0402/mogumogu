@@ -37,6 +37,46 @@ fn new_local_inventory_has_no_fabricated_data() {
 }
 
 #[test]
+fn status_counts_sessions_beyond_the_dashboard_page() {
+    let temp = tempfile::tempdir().unwrap();
+    let config = Config::new(Some(temp.path().join("data")), false).unwrap();
+    let clock = Arc::new(FixedClock::new(1_800_000_000));
+    let scratch = {
+        let mut repo = Repository::open(&config, clock.clone()).unwrap();
+        let project = repo.register_project("example", r"C:\fixture\example").unwrap();
+        repo.approve_scope(ScopeKind::Project, Some(project), r"C:\fixture\example", None).unwrap();
+        repo.register_scratch(project, "work", r"C:\fixture\example\work").unwrap()
+    };
+    // Older unresolved sessions must still count when the newest 200 are closed.
+    // Synthetic metadata only: no project files or processes are accessed.
+    {
+        let mut db = Connection::open(config.database_path()).unwrap();
+        let tx = db.transaction().unwrap();
+        for state in SessionState::ALL {
+            tx.execute(
+                "INSERT INTO sessions(scratch_id,purpose,state,origin,started_at) VALUES(?1,'fixture',?2,'registered',1800000000)",
+                rusqlite::params![scratch, state],
+            )
+            .unwrap();
+        }
+        for _ in 0..mogumogu::limits::UI_PAGE {
+            tx.execute(
+                "INSERT INTO sessions(scratch_id,purpose,state,origin,started_at) VALUES(?1,'fixture','completed_verified','registered',1800000000)",
+                [scratch],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+    }
+    let mut core = Core::open_with(config, clock, Box::new(NoNetwork)).unwrap();
+    assert!(core.repository().sessions().unwrap().iter().all(|s| !s.state.locks_resources()));
+    let status = core.status().unwrap();
+    assert_eq!((status.projects, status.resources, status.scopes, status.open_sessions), (1, 1, 1, 4));
+    assert_eq!(status.mode, "Lokal");
+    assert_eq!(status.schema_version, SCHEMA_VERSION);
+}
+
+#[test]
 fn demo_fixture_is_consistent_and_read_only() {
     let mut repo = Repository::memory(true).unwrap();
     let projects = repo.projects().unwrap();

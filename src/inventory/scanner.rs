@@ -104,6 +104,7 @@ impl ProjectScan<'_> {
             .find_map(|a| a.claim_dir(&pending.name, &pending.parent_names, &child_names).map(|c| (*a, c)));
         match claim {
             Some((adapter, claim)) => {
+                self.result.items.extend(super::discovery::inspect_directory(&pending.rel, &entries, Some("")).items);
                 let mut errors = Vec::new();
                 let mut access =
                     HandleAccess { base: child, rel: pending.rel.clone(), budget: self.budget, errors: &mut errors };
@@ -120,6 +121,7 @@ impl ProjectScan<'_> {
     }
 
     fn process(&mut self, dir: Rc<DirHandle>, rel: String, depth: u32, entries: &[DirEntryInfo]) {
+        self.result.items.extend(super::discovery::inspect_directory(&rel, entries, Some("")).items);
         let names = Rc::new(entries.iter().filter_map(|e| e.name_str().map(str::to_string)).collect::<Vec<_>>());
         for entry in entries {
             if !self.budget.entry() {
@@ -141,6 +143,9 @@ impl ProjectScan<'_> {
             if !entry.is_dir() {
                 self.file(&dir, &rel, name, &rel_child, &names);
             } else if SKIP_ALWAYS.iter().any(|s| s.eq_ignore_ascii_case(name)) {
+                if let Some(item) = super::discovery::skipped_directory(&rel_child) {
+                    self.result.items.push(item);
+                }
                 continue;
             } else if depth + 1 > self.budget.limits().max_depth {
                 if self.budget.limit_reason.is_none() {
@@ -161,7 +166,9 @@ impl ProjectScan<'_> {
     fn file(&mut self, dir: &DirHandle, rel: &str, name: &str, rel_child: &str, names: &[String]) {
         let wanting: Vec<&dyn Adapter> = self.adapters.iter().copied().filter(|a| a.descriptor().wants(name)).collect();
         let ai = if self.catalog.may_match(name) { self.catalog.matches(rel_child) } else { Vec::new() };
-        if wanting.is_empty() && ai.is_empty() {
+        let workflow =
+            rel_child.starts_with(".github/workflows/") && (name.ends_with(".yml") || name.ends_with(".yaml"));
+        if wanting.is_empty() && ai.is_empty() && !workflow {
             return;
         }
         let max = if wanting.is_empty() {
@@ -173,6 +180,9 @@ impl ProjectScan<'_> {
             Ok(content) => content,
             Err(issue) => return self.report(rel_child, issue),
         };
+        if workflow {
+            self.result.items.push(adapters::commands::workflow(rel_child, &content));
+        }
         for adapter in wanting {
             let file = FoundFile { name, rel_dir: rel, content: &content, siblings: names };
             match adapter.parse_file(&file) {
@@ -193,6 +203,81 @@ impl ProjectScan<'_> {
     }
 }
 
+/// A client's user folder (`%USERPROFILE%\.claude`, …). Only the catalog's
+/// own subfolders are entered and only matching files are read; chat logs,
+/// sessions, caches and credentials lie outside every route. Package
+/// adapters do not run here. `prefix` maps the folder to the catalog layout.
+pub(super) fn scan_user_ai(root: Rc<DirHandle>, prefix: &str, budget: &mut Budget) -> GenerationResult {
+    let catalog = profiles::catalog();
+    let routes = catalog.user_routes(prefix);
+    let mut result = GenerationResult::default();
+    let mut notes = Notes::default();
+    let mut refs = ScopeRefCheck { root: Rc::clone(&root) };
+    let mut stack = vec![(root, String::new())];
+    while let Some((dir, rel)) = stack.pop() {
+        if budget.exhausted() {
+            break;
+        }
+        let entries = match fsread::list(&dir, budget) {
+            Ok((entries, _)) => entries,
+            Err(e) => {
+                report(&mut result, &rel, e);
+                continue;
+            }
+        };
+        for entry in entries {
+            if !budget.entry() {
+                break;
+            }
+            if entry.is_reparse() {
+                notes.links += 1;
+                continue;
+            }
+            if entry.is_placeholder() {
+                notes.placeholders += 1;
+                continue;
+            }
+            let Some(name) = entry.name_str() else {
+                notes.non_unicode += 1;
+                continue;
+            };
+            let rel_child = fsread::join(&rel, name);
+            if entry.is_dir() {
+                if profiles::route_allows(&routes, &rel_child) {
+                    match dir.open_dir(OsStr::new(name)) {
+                        Ok(child) => stack.push((Rc::new(child), rel_child)),
+                        Err(e) => report(&mut result, &rel_child, e),
+                    }
+                }
+                continue;
+            }
+            if !catalog.may_match(name) {
+                continue;
+            }
+            let matches = catalog.matches(&format!("{prefix}/{rel_child}"));
+            if matches.is_empty() {
+                continue;
+            }
+            let max = matches.iter().map(|(p, _)| p.max_bytes()).min().unwrap_or(crate::limits::AI_FILE_MAX_BYTES);
+            let content = match fsread::read_text(&dir, OsStr::new(name), max, budget) {
+                Ok(content) => content,
+                Err(issue) => {
+                    report(&mut result, &rel_child, issue);
+                    continue;
+                }
+            };
+            for (profile, detection) in matches {
+                match profiles::parse_detection(profile, detection, &rel_child, &content, &mut refs) {
+                    Ok(items) => result.items.extend(items),
+                    Err(e) => report(&mut result, &rel_child, e),
+                }
+            }
+        }
+    }
+    add_notes(&mut result, &notes);
+    result
+}
+
 pub(super) fn scan_system_root(kind: ScopeKind, root: Rc<DirHandle>, budget: &mut Budget) -> GenerationResult {
     let mut result = GenerationResult::default();
     let adapter_id = if kind == ScopeKind::Scoop { "scoop" } else { "chocolatey" };
@@ -200,6 +285,20 @@ pub(super) fn scan_system_root(kind: ScopeKind, root: Rc<DirHandle>, budget: &mu
     let mut errors = Vec::new();
     let mut access = HandleAccess { base: root, rel: String::new(), budget, errors: &mut errors };
     match adapter.inventory_root(&mut access) {
+        Ok(items) => result.items = items,
+        Err(e) => result.errors.push(e),
+    }
+    for error in errors {
+        report(&mut result, "", error);
+    }
+    result
+}
+
+pub(super) fn scan_global_root(kind: ScopeKind, root: Rc<DirHandle>, budget: &mut Budget) -> GenerationResult {
+    let mut result = GenerationResult::default();
+    let mut errors = Vec::new();
+    let mut access = HandleAccess { base: root, rel: String::new(), budget, errors: &mut errors };
+    match adapters::inventory_global(kind, &mut access) {
         Ok(items) => result.items = items,
         Err(e) => result.errors.push(e),
     }

@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="680" viewBox="0 0 1080 680">
+<defs><clipPath id="window"><rect width="1080" height="680" rx="10"/></clipPath></defs><g clip-path="url(#window)">
+<rect x="0" y="0" width="1080" height="680" rx="0" fill="#f4f5ef"/>
+<rect x="0" y="0" width="1080" height="32" rx="0" fill="#fafbf6"/>
+<text x="16" y="21" font-family="Segoe UI" font-size="11" font-weight="600" fill="#66756a">mogumogu</text>
+<path d="M952 16L964 16" stroke="#66756a" stroke-width="1" fill="none" stroke-linecap="round"/>
+<rect x="997" y="11" width="10" height="10" rx="0" fill="none" stroke="#66756a" stroke-width="1"/>
+<path d="M1046 11L1056 21" stroke="#66756a" stroke-width="1" fill="none" stroke-linecap="round"/>
+<path d="M1056 11L1046 21" stroke="#66756a" stroke-width="1" fill="none" stroke-linecap="round"/>
+<rect x="0" y="32" width="1080" height="98" rx="0" fill="#fafbf6"/>
+<g data-cat="b" transform="translate(22 43) scale(0.3958333333333333)"><g stroke="#233a59" stroke-linecap="round" stroke-linejoin="round">
+<path d="M18 40 17 23Q17 18 22 20L34 29Q48 25 62 29L74 20Q79 18 79 23L78 40Q88 50 83 66Q77 82 48 83Q19 82 13 66Q8 50 18 40Z" fill="#fff8e9" stroke-width="4.2"/>
+<path d="m23 27 6 6m44-6-6 6" stroke="#e4c7a4" stroke-width="4" fill="none"/>
+<path d="M27 49q6-7 12 0m18 0q6-7 12 0" stroke-width="3.5" fill="none"/>
+<g stroke="none"><ellipse cx="25" cy="60" rx="6.5" ry="4" fill="#e6b6a1"/><ellipse cx="71" cy="60" rx="6.5" ry="4" fill="#e6b6a1"/>
+<path d="M44 57Q48 55 52 57L48 61Z" fill="#9c7468"/></g>
+<path d="M48 61v3m-7-1q2 9 7 5 5 4 7-5" stroke-width="2.8" fill="none"/>
+<path d="m17 55-9-3m9 10H6m73-7 9-3m-9 10h11" stroke-width="2.8"/>
+<path d="M18 70q-6-12 3-14 9-1 10 12l1 5" fill="#fff8e9" stroke-width="3.6"/>
+<path d="m22 61 2 4" fill="none" stroke-width="2"/>
+</g></g>
+<text x="71" y="69" font-family="Segoe UI" font-size="19" font-weight="700" fill="#293e37">mogumogu</text>
+<text x="190" y="68" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#66756a">Lokales Inventar</text>
+<rect x="616" y="47" width="254" height="30" rx="6" fill="#f4f5ef" stroke="#dce3d8" stroke-width="1"/>
+<g transform="translate(626 55) scale(0.5833333333333334)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></g>
+<text x="648" y="67" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#66756a">Projekte suchen</text>
+<text x="860" y="67" font-family="Segoe UI" font-size="10" font-weight="400" fill="#66756a" text-anchor="end">Strg+F</text>
+<rect x="886" y="47" width="174" height="30" rx="6" fill="#467760"/>
+<g transform="translate(897 55.0) scale(0.5833333333333334)" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></g>
+<text x="919" y="66.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#ffffff">Freigaben erfassen</text>
+<rect x="16" y="92" width="104" height="31" rx="6" fill="#e5eddf"/>
+<text x="31" y="113" font-family="Segoe UI" font-size="12" font-weight="600" fill="#293e37">Übersicht</text>
+<text x="135" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Projekte</text>
+<text x="227" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Pakete</text>
+<text x="309" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">KI-Konfiguration</text>
+<text x="453" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Ressourcen</text>
+<text x="565" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Prüfliste</text>
+<text x="665" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Aktivität</text>
+<text x="761" y="113" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Einstellungen</text>
+<path d="M20 130L1060 130" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<rect x="20" y="150" width="280" height="488" rx="10" fill="#fffefa" stroke="#dce3d8" stroke-width="1"/>
+<text x="39" y="181" font-family="Segoe UI" font-size="16" font-weight="600" fill="#293e37">Projekte</text>
+<rect x="114" y="164" width="25" height="22" rx="6" fill="#f4f5ef"/>
+<text x="126.5" y="178.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#66756a" text-anchor="middle">6</text>
+<rect x="251" y="162" width="30" height="30" rx="6" fill="#fffefa" stroke="#dce3d8" stroke-width="1"/>
+<text x="266.0" y="181.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#293e37" text-anchor="middle">+</text>
+<text x="39" y="205" font-family="Segoe UI" font-size="11" font-weight="400" fill="#66756a">Dein registrierter Arbeitsplatz</text>
+<g transform="translate(42 237) scale(0.75)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="72" y="243" font-family="Segoe UI" font-size="12" font-weight="400" fill="#293e37">my-app</text>
+<text x="72" y="261" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Node.js</text>
+<circle cx="274" cy="247" r="3" fill="#3f735a"/>
+<g transform="translate(42 292) scale(0.75)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="72" y="298" font-family="Segoe UI" font-size="12" font-weight="400" fill="#293e37">website</text>
+<text x="72" y="316" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Node.js</text>
+<circle cx="274" cy="302" r="3" fill="#3f735a"/>
+<rect x="30" y="332" width="260" height="50" rx="7" fill="#e5eddf"/>
+<rect x="30" y="345" width="3" height="24" rx="1.5" fill="#467760"/>
+<g transform="translate(42 347) scale(0.75)" stroke="#467760" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="72" y="353" font-family="Segoe UI" font-size="12" font-weight="600" fill="#293e37">ml-experiments</text>
+<text x="72" y="371" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Python · uv</text>
+<circle cx="274" cy="357" r="3" fill="#936232"/>
+<g transform="translate(42 402) scale(0.75)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="72" y="408" font-family="Segoe UI" font-size="12" font-weight="400" fill="#293e37">tools</text>
+<text x="72" y="426" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Rust</text>
+<circle cx="274" cy="412" r="3" fill="#3f735a"/>
+<g transform="translate(42 457) scale(0.75)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="72" y="463" font-family="Segoe UI" font-size="12" font-weight="400" fill="#293e37">game-prototype</text>
+<text x="72" y="481" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">C++</text>
+<circle cx="274" cy="467" r="3" fill="#dce3d8"/>
+<g transform="translate(42 512) scale(0.75)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g>
+<text x="72" y="518" font-family="Segoe UI" font-size="12" font-weight="400" fill="#293e37">old-stuff</text>
+<text x="72" y="536" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Python</text>
+<circle cx="274" cy="522" r="3" fill="#dce3d8"/>
+<rect x="32" y="574" width="256" height="52" rx="7" fill="#edf1e7"/>
+<g transform="translate(44 591) scale(0.7083333333333334)" stroke="#467760" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 3C9 3 4 6 4 12c0 8 13 9 16-9zM3 21 16 8"/></g>
+<text x="72" y="596" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#293e37">3 Prüfhinweise</text>
+<text x="72" y="614" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#467760">Zur Prüfliste  →</text>
+<text x="320" y="181" font-family="Segoe UI" font-size="24" font-weight="700" fill="#293e37">ml-experiments</text>
+<text x="320" y="205" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">C:\dev\ml</text>
+<rect x="734" y="164" width="75" height="22" rx="6" fill="#f7ead7"/>
+<text x="771.5" y="178.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#936232" text-anchor="middle">Prüfen</text>
+<rect x="819" y="164" width="102" height="22" rx="6" fill="#e6eee1"/>
+<text x="870.0" y="178.5" font-family="Segoe UI" font-size="10.5" font-weight="600" fill="#3f735a" text-anchor="middle">Geschützt</text>
+<rect x="935" y="163" width="125" height="30" rx="6" fill="#fffefa" stroke="#dce3d8" stroke-width="1"/>
+<text x="997.5" y="182.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#293e37" text-anchor="middle">Details öffnen</text>
+<rect x="320" y="235" width="740" height="68" rx="8" fill="#fffefa" stroke="#dce3d8" stroke-width="1"/>
+<text x="340" y="258" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Erfasster Umfang</text>
+<text x="340" y="286" font-family="Segoe UI" font-size="18" font-weight="600" fill="#293e37">25,4 GB</text>
+<path d="M562 250L562 289" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<text x="586" y="258" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Ökosystem</text>
+<text x="586" y="286" font-family="Segoe UI" font-size="18" font-weight="600" fill="#293e37">Python · uv</text>
+<path d="M808 250L808 289" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<text x="832" y="258" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Beobachtung</text>
+<text x="832" y="286" font-family="Segoe UI" font-size="18" font-weight="600" fill="#936232">Prüfen</text>
+<text x="336" y="337" font-family="Segoe UI" font-size="12" font-weight="600" fill="#467760">Bestand</text>
+<text x="429" y="337" font-family="Segoe UI" font-size="12" font-weight="400" fill="#66756a">Aktivität</text>
+<path d="M320 349L1060 349" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<path d="M320 349L400 349" stroke="#467760" stroke-width="2" fill="none" stroke-linecap="round"/>
+<rect x="320" y="368" width="480" height="216" rx="10" fill="#fffefa" stroke="#dce3d8" stroke-width="1"/>
+<text x="340" y="396" font-family="Segoe UI" font-size="14" font-weight="600" fill="#293e37">Pakete in der Umgebung</text>
+<text x="340" y="418" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Statischer Beispielbestand</text>
+<g transform="translate(340 442) scale(0.5833333333333334)" stroke="#467760" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/></g>
+<text x="363" y="454" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#293e37">numpy</text>
+<text x="544" y="454" font-family="Segoe UI" font-size="11" font-weight="400" fill="#66756a">2.1.0</text>
+<text x="779" y="454" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a" text-anchor="end">Quelle nicht geprüft</text>
+<path d="M340 465L779 465" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<g transform="translate(340 476) scale(0.5833333333333334)" stroke="#467760" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/></g>
+<text x="363" y="488" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#293e37">pandas</text>
+<text x="544" y="488" font-family="Segoe UI" font-size="11" font-weight="400" fill="#66756a">2.2.3</text>
+<text x="779" y="488" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a" text-anchor="end">Quelle nicht geprüft</text>
+<path d="M340 499L779 499" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<g transform="translate(340 510) scale(0.5833333333333334)" stroke="#467760" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/></g>
+<text x="363" y="522" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#293e37">requests</text>
+<text x="544" y="522" font-family="Segoe UI" font-size="11" font-weight="400" fill="#66756a">2.32.3</text>
+<text x="779" y="522" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a" text-anchor="end">Quelle nicht geprüft</text>
+<path d="M340 533L779 533" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<g transform="translate(340 544) scale(0.5833333333333334)" stroke="#467760" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/></g>
+<text x="363" y="556" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#293e37">scikit-learn</text>
+<text x="544" y="556" font-family="Segoe UI" font-size="11" font-weight="400" fill="#66756a">1.5.2</text>
+<text x="779" y="556" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a" text-anchor="end">Quelle nicht geprüft</text>
+<rect x="818" y="368" width="242" height="216" rx="10" fill="#f1e9db"/>
+<g transform="translate(837 388) scale(0.9166666666666666)" stroke="#936232" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20 3C9 3 4 6 4 12c0 8 13 9 16-9zM3 21 16 8"/></g>
+<text x="837" y="439" font-family="Segoe UI" font-size="16" font-weight="600" fill="#293e37">Prüfung offen</text>
+<text x="837" y="465" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#66756a">Zweck und Besitzer dieser</text>
+<text x="837" y="483" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#66756a">Umgebung prüfen. Fehlende</text>
+<text x="837" y="501" font-family="Segoe UI" font-size="11.5" font-weight="400" fill="#66756a">Nutzung bleibt unbekannt.</text>
+<rect x="837" y="531" width="204" height="30" rx="6" fill="#fffefa" stroke="#dce3d8" stroke-width="1"/>
+<text x="939.0" y="550.0" font-family="Segoe UI" font-size="11.5" font-weight="600" fill="#293e37" text-anchor="middle">Belege ansehen</text>
+<rect x="320" y="604" width="740" height="34" rx="7" fill="#fffefa"/>
+<g transform="translate(332 613) scale(0.625)" stroke="#66756a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M2 12h5l3-8 4 16 3-8h5"/></g>
+<text x="357" y="626" font-family="Segoe UI" font-size="11" font-weight="400" fill="#66756a">Beispielinventar geladen</text>
+<text x="1044" y="626" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#467760" text-anchor="end">Aktivität öffnen  →</text>
+<rect x="0" y="656" width="1080" height="24" rx="0" fill="#fafbf6"/>
+<path d="M0 656L1080 656" stroke="#dce3d8" stroke-width="1" fill="none" stroke-linecap="round"/>
+<circle cx="22" cy="668" r="3" fill="#3f735a"/>
+<text x="34" y="672" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a">Bereit</text>
+<text x="1060" y="672" font-family="Segoe UI" font-size="10.5" font-weight="400" fill="#66756a" text-anchor="end">Demo · Beispielbestand</text>
+</g>
+<rect x="0.5" y="0.5" width="1079" height="679" rx="10" fill="none" stroke="#dce3d8" stroke-width="1"/>
+</svg>

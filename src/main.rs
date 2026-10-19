@@ -46,6 +46,9 @@ fn parse_options() -> Result<Options, String> {
 struct Headless(Mutex<Sender<()>>);
 
 impl OwnerEvents for Headless {
+    fn wants_snapshot(&self) -> bool {
+        false
+    }
     fn snapshot(&self, _: Snapshot) {}
     fn outcome(&self, _: &Request, _: &mogumogu::Result<Value>) {}
     fn busy(&self, _: bool) {}
