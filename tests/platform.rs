@@ -55,8 +55,10 @@ fn a_client_that_leaves_before_the_first_accept_does_not_wedge_the_pipe() {
         std::thread::spawn(move || platform::pipe_connect(&name, Duration::from_secs(5)))
     };
     let connection = listener.accept().expect("the next client is served");
-    drop(connection);
+    // The client verifies the server while still connected; disconnecting
+    // first would fail that check (ERROR_PIPE_NOT_CONNECTED), not the fix.
     assert!(client.join().unwrap().unwrap().is_some(), "the client got through");
+    drop(connection);
 }
 
 /// A busy pipe proves a running owner: it is serving another request.
