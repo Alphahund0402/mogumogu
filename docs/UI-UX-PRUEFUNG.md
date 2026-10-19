@@ -70,6 +70,29 @@ und die [Text-Eigenschaften](https://docs.slint.dev/latest/docs/slint/reference/
 mit dem lokal gepinnten 1.18.1-Quellstand abgeglichen; Context7 war wegen seines
 Monatslimits nicht verfügbar.
 
+## Experimente entfernt, Laufwerkssuche · 19. Oktober 2026
+
+Die Seite **Experimente** ist entfernt. Sie zeigte nur selbst angelegte
+Scratchpads, die ohnehin unter **Projekte → Ressourcen** stehen. Ihre
+Bedienelemente sind verteilt oder entfallen:
+
+| Vorher | Jetzt |
+|---|---|
+| Navigationspunkt Experimente mit Hängt-Zähler | entfällt; Übersicht meldet „Session hängt“ mit „Ressourcen ansehen“ |
+| „Scratchpad anlegen“ (Seite und Projektdialog) | nur CLI `scratch create` |
+| „+7 Tage“, „Schützen“, „Zum Projekt machen“, „Alle Angaben“ | Scratchpad-Dialog unter Ressourcen (war dort bereits vorhanden) |
+| „Begründet freigeben“ je Session | **Session begründet freigeben** im Scratchpad-Dialog |
+| „Aufräumplan anzeigen …“ | „Plan-Vorschau“ im Dialog des verwalteten Temp-Ordners (war vorhanden) |
+| Einstellungen › Ordner für Scratchpads | nur CLI `settings set scratch-root`; das Panel **Daten** rückt an seinen Platz |
+| `Alt+1` … `Alt+7` | `Alt+1` … `Alt+6` |
+
+Neu auf **Speicher**: Jede lokale Festplatte zeigt den Stand ihrer
+Namenssuche und **Projekte suchen** bzw. **Erneut suchen**; „Nur dieses
+Laufwerk“ heißt jetzt **Auswählen**. Die Ergebnisleiste bietet nach einer Suche
+**Funde ansehen**. Die Fundliste hat den Filter **Projekte**, „Skripte &
+Experimente“ heißt **Scratchpads & Skripte**, und die Fundart „Experiment /
+Scratchpad“ heißt **Scratchpad**.
+
 ## Zusammenführung auf sieben Ansichten · 18. Oktober 2026
 
 Anlass war die Rückmeldung, dass nicht jede Schaltfläche erkennbar etwas tut und

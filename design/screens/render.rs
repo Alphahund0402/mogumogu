@@ -416,6 +416,8 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 used_bytes: Some(350 * gb),
                 project_bytes: Some(38 * gb),
                 status: "Metadaten vom Betriebssystem".into(),
+                searchable: true,
+                search: None,
             },
             DriveUsage {
                 root: "D:\\".into(),
@@ -426,6 +428,14 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 used_bytes: Some(820 * gb),
                 project_bytes: Some(14 * gb),
                 status: "Metadaten vom Betriebssystem".into(),
+                searchable: true,
+                search: Some(DriveSearch {
+                    scope_id: 9,
+                    status: ScopeStatus::Approved,
+                    findings: Some(14),
+                    checked_at: Some(now - 2 * HOUR),
+                    partial: false,
+                }),
             },
         ],
         projects: s
@@ -560,12 +570,12 @@ fn main() {
     let mut snapshot = fixture(now);
     enrich(&mut snapshot, now);
     let store = ui.global::<Store>();
-    let state = |experiment| view::ViewState { package_key: None, experiment, scanning: false };
+    let state = || view::ViewState { package_key: None, scanning: false };
 
-    let pages = ["uebersicht", "projekte", "pakete", "ki", "experimente", "speicher", "einstellungen"];
+    let pages = ["uebersicht", "projekte", "pakete", "ki", "speicher", "einstellungen"];
     for (page, name) in pages.iter().enumerate() {
         store.set_page(page as i32);
-        view::render_snapshot(&ui, &snapshot, r"C:\Users\x\AppData\Local\mogumogu\inventory.sqlite3", &state(Some(20)));
+        view::render_snapshot(&ui, &snapshot, r"C:\Users\x\AppData\Local\mogumogu\inventory.sqlite3", &state());
         view::render_status(&ui, false, "Bereit · 8 Lesefreigaben");
         renderer.shot(&format!("{page:02}-{name}"), 1080, 680, 1.0);
     }
@@ -576,7 +586,7 @@ fn main() {
         (1, 2, "projekte-funde"),
         (2, 1, "pakete-werkzeuge"),
         (3, 1, "ki-persoenlich"),
-        (6, 1, "einstellungen-freigaben"),
+        (5, 1, "einstellungen-freigaben"),
     ] {
         store.invoke_open(page, tab);
         renderer.shot(&format!("0{page}-{name}"), 1080, 680, 1.0);
@@ -598,14 +608,18 @@ fn main() {
     store.set_selection_key("npm:left-pad:1.3.0".into());
     renderer.shot("10-pakete-erklaerung", 1080, 680, 1.0);
 
-    // A stuck experiment.
-    store.set_page(4);
-    view::render_snapshot(&ui, &snapshot, "", &state(Some(21)));
-    renderer.shot("11-experiment-haengt", 1080, 680, 1.0);
+    // A stuck scratchpad session is released from its resource dialog.
+    store.invoke_open(1, 1);
+    view::render_snapshot(&ui, &snapshot, "", &state());
+    if let Some(lab) = snapshot.resources.iter().find(|r| r.id == 21) {
+        show_dialog(&ui, dialogs::resource(&snapshot, lab));
+        renderer.shot("11-session-haengt", 1080, 680, 1.0);
+        store.set_modal(0);
+    }
 
     // Global search across areas.
     store.set_page(0);
-    view::render_snapshot(&ui, &snapshot, "", &state(Some(20)));
+    view::render_snapshot(&ui, &snapshot, "", &state());
     store.set_query("pars".into());
     view::render_search(&ui, &[
         SearchHit { area: SearchArea::Resource, key: "20".into(), title: "parser-spike".into(), detail: r"Scratchpad · C:\dev\scratch\parser-spike".into() },
@@ -619,7 +633,7 @@ fn main() {
 
     // Scanning: Mochi chews, progress and a safe stop.
     view::render_progress(&ui, &ScanProgress { running: true, cancelling: false, entries: 18_432, done: 2, total: 5 });
-    view::render_snapshot(&ui, &snapshot, "", &view::ViewState { package_key: None, experiment: Some(20), scanning: true });
+    view::render_snapshot(&ui, &snapshot, "", &view::ViewState { package_key: None, scanning: true });
     renderer.shot("13-erfassung-laeuft", 1080, 680, 1.0);
     view::render_progress(&ui, &ScanProgress::default());
 
@@ -627,8 +641,13 @@ fn main() {
     let result = serde_json::json!([{ "scope_id": 1, "state": "complete", "baseline": false, "added": 0, "removed": 0, "changed": 0, "problem": null }]);
     let (text, kind) = view::scan_notice(&result, &snapshot);
     view::render_scan_notice(&ui, &text, kind);
-    view::render_snapshot(&ui, &snapshot, "", &state(Some(20)));
+    view::render_snapshot(&ui, &snapshot, "", &state());
     renderer.shot("15-erfassung-fertig", 1080, 680, 1.0);
+    // A drive search links to its findings.
+    store.set_page(4);
+    view::render_scan_notice(&ui, "Laufwerk D: durchsucht · 14 Funde.", "ok");
+    view::render_scan_link(&ui, "Funde ansehen", 1, 2);
+    renderer.shot("18-laufwerk-durchsucht", 1080, 680, 1.0);
     view::render_scan_notice(&ui, "", "");
 
     // Paused monitoring.
@@ -636,14 +655,14 @@ fn main() {
     if let Some(settings) = paused.settings.as_mut() {
         settings.monitoring_paused_until = Some(now + 50 * MINUTE);
     }
-    store.set_page(6);
-    view::render_snapshot(&ui, &paused, "", &state(Some(20)));
+    store.set_page(5);
+    view::render_snapshot(&ui, &paused, "", &state());
     renderer.shot("14-pausiert", 1080, 680, 1.0);
 
     // Guided start on an empty inventory.
     let empty = Snapshot { system: snapshot.system.clone(), settings: snapshot.settings.clone(), ..Default::default() };
     store.set_page(0);
-    view::render_snapshot(&ui, &empty, "", &state(None));
+    view::render_snapshot(&ui, &empty, "", &state());
     store.set_guide_path(r"C:\dev\api-service".into());
     store.set_guide_name("api-service".into());
     store.set_guide_open(true);
@@ -662,10 +681,10 @@ fn main() {
 
     // Smallest window and high DPI.
     store.set_page(0);
-    view::render_snapshot(&ui, &snapshot, "", &state(Some(20)));
+    view::render_snapshot(&ui, &snapshot, "", &state());
     renderer.shot("30-uebersicht-900x560", 900, 560, 1.0);
     store.set_page(4);
-    renderer.shot("31-experimente-900x560", 900, 560, 1.0);
+    renderer.shot("31-speicher-900x560", 900, 560, 1.0);
     store.set_page(0);
     renderer.shot("32-uebersicht-150", 1080, 680, 1.5);
     println!("Native renders written; synthetic data only.");

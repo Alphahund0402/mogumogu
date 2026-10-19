@@ -162,6 +162,16 @@ fn path_validation_rejects_unsafe_metadata_forms() {
 }
 
 #[test]
+fn only_a_bare_drive_letter_counts_as_a_drive_root() {
+    assert_eq!(validation::drive_root("d:").unwrap(), r"D:\");
+    assert_eq!(validation::drive_root("D:/").unwrap(), r"D:\");
+    assert_eq!(validation::drive_root(r"C:\").unwrap(), r"C:\");
+    for path in [r"C:\dev", r"C:\\", "C", r"\\server\share", r"\\?\C:\", "1:", r"C:\..", ""] {
+        assert!(validation::drive_root(path).is_err(), "{path}");
+    }
+}
+
+#[test]
 fn payload_strings_are_data_not_sql() {
     let mut repo = Repository::memory(false).unwrap();
     repo.register_project("'; DROP TABLE projects; --", r"C:\dev\sql").unwrap();

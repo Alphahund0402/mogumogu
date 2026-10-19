@@ -1,6 +1,6 @@
 //! Translates UI intents into owner requests and wires callbacks in one place.
 use super::{Desktop, defer_hide, dialogs, later, ui::*, with};
-use mogumogu::domain::{PackageFilter, QuietHours, ResourceKind, ScopeKind, SearchArea};
+use mogumogu::domain::{PackageFilter, QuietHours, ScopeKind, SearchArea};
 use mogumogu::limits::PACKAGE_PAGE;
 use mogumogu::service::Request;
 use slint::{ComponentHandle, SharedString, TimerMode};
@@ -63,41 +63,12 @@ impl Desktop {
             "apply-plan" => Request::CleanupApply { plan_id: arg },
             "cancel-plan" => Request::CleanupCancel { plan_id: arg },
             "reconcile-plan" => Request::CleanupReconcile { plan_id: arg },
-            "new-scratch" => return self.new_scratch(Some(arg)),
+            "release-session" => return self.release_session(arg),
             "open-resource" => return self.open_resource(arg),
             "register-candidate" => Request::RegisterCandidate { scope_id: arg, rel_path: extra },
             _ => return,
         };
         self.submit(request);
-    }
-
-    /// Extend, protect, promote and plan act on the scratchpad or its
-    /// managed temporary folder; the core re-checks everything.
-    fn experiment_action(&mut self, verb: &str, scratch: i64) {
-        let request = match verb {
-            "extend" => Request::Extend { resource_id: scratch, days: 7 },
-            "protect" => Request::Protect { resource_id: scratch },
-            "promote" => Request::Promote { resource_id: scratch },
-            "plan" => {
-                let temporary = self
-                    .snapshot
-                    .resources
-                    .iter()
-                    .find(|r| r.parent_id == Some(scratch) && r.kind == ResourceKind::Temporary && r.expendable);
-                match temporary {
-                    Some(temp) => Request::CleanupPlan { resource_ids: vec![temp.id] },
-                    None => return,
-                }
-            }
-            _ => return,
-        };
-        self.submit(request);
-    }
-
-    fn render_experiment(&mut self) {
-        if let Some(ui) = &self.dashboard {
-            super::view::render_experiments(ui, &self.snapshot, self.experiment);
-        }
     }
 
     fn package_query(&mut self) {
@@ -129,15 +100,8 @@ impl Desktop {
             }
             SearchArea::Resource => {
                 let id: i64 = hit.key.parse().unwrap_or(-1);
-                let scratch = self.snapshot.resources.iter().any(|r| r.id == id && r.kind == ResourceKind::Scratchpad);
-                if scratch {
-                    store.invoke_open(4, 0);
-                    self.experiment = Some(id);
-                    self.render_experiment();
-                } else {
-                    store.invoke_open(1, 1);
-                    later(move |d| d.open_resource(id));
-                }
+                store.invoke_open(1, 1);
+                later(move |d| d.open_resource(id));
             }
             SearchArea::Package => {
                 store.invoke_open(2, 0);
@@ -292,6 +256,10 @@ pub(super) fn wire(ui: &Dashboard) {
             }
         });
     });
+    actions.on_search_drive(|root| {
+        let root = root.to_string();
+        with(move |d| d.search_drive(&root))
+    });
     actions.on_tree_open(|scope_id, rel_path| {
         let rel_path = rel_path.to_string();
         with(move |d| d.request_tree(i64::from(scope_id), rel_path));
@@ -316,7 +284,6 @@ pub(super) fn wire(ui: &Dashboard) {
     });
     actions.on_approve_search_folder(|| later(Desktop::approve_search_folder));
     actions.on_add_store(|| later(Desktop::add_store_dialog));
-    actions.on_new_scratch(|| later(|d| d.new_scratch(None)));
     actions.on_show_help(|| later(|d| d.dialog(dialogs::message("Hilfe", dialogs::HELP))));
     actions.on_detail_action(|id| {
         let id = id.to_string();
@@ -325,18 +292,6 @@ pub(super) fn wire(ui: &Dashboard) {
     actions.on_submit_form(|a, b| {
         let (a, b) = (a.to_string(), b.to_string());
         later(move |d| d.submit_form(a, b))
-    });
-    // Experiments
-    actions.on_select_experiment(|id| {
-        with(move |d| {
-            d.experiment = Some(i64::from(id));
-            d.render_experiment();
-        })
-    });
-    actions.on_release_session(|id| later(move |d| d.release_session(i64::from(id))));
-    actions.on_experiment_action(|verb, id| {
-        let verb = verb.to_string();
-        with(move |d| d.experiment_action(&verb, i64::from(id)))
     });
     // System
     actions.on_system_refresh(|| with(|d| d.submit(Request::SystemFindings { refresh: true })));
@@ -389,11 +344,6 @@ pub(super) fn wire(ui: &Dashboard) {
         })
     });
     actions.on_set_autostart(|on| with(move |d| d.submit(Request::SetAutostart { enabled: on })));
-    actions.on_save_scratch_root(|path| {
-        let path = path.trim().to_string();
-        with(move |d| d.change_settings(|s| s.scratch_root = (!path.is_empty()).then_some(path)))
-    });
-    actions.on_browse_scratch_root(|| later(Desktop::browse_scratch_root));
     actions.on_check_updates(|| with(|d| d.submit(Request::Updates)));
     actions.on_backup_now(|| later(Desktop::backup_now));
     actions.on_export_now(|| later(Desktop::export_preview));

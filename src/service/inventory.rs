@@ -18,6 +18,8 @@ pub struct ScanReport {
     pub added: usize,
     pub removed: usize,
     pub changed: usize,
+    /// Items of this pass; for a search these are its findings.
+    pub items: usize,
     pub problem: Option<String>,
 }
 
@@ -56,6 +58,17 @@ impl Core {
                 }
                 let identity = platform::path_identity(Path::new(&path))
                     .map_err(|e| Error::blocked(format!("Ordner nicht freigebbar: {e}")))?;
+                self.repo.approve_scope(kind, None, &path, Some(identity))
+            }
+            // A whole drive only for the names-only search, and only a local
+            // disk: network, optical and removable media stay folder-only.
+            ScopeKind::ProjectSearch if path.is_some_and(|p| validation::drive_root(p).is_ok()) => {
+                let path = validation::drive_root(path.unwrap_or_default())?;
+                if !platform::local_fixed_path(Path::new(&path)) {
+                    return Err(Error::blocked("Nur lokale Festplatten lassen sich als Ganzes durchsuchen."));
+                }
+                let identity = platform::path_identity(Path::new(&path))
+                    .map_err(|e| Error::blocked(format!("Laufwerk nicht freigebbar: {e}")))?;
                 self.repo.approve_scope(kind, None, &path, Some(identity))
             }
             _ => {
@@ -121,11 +134,16 @@ impl Core {
             kind: scope.kind,
             path: PathBuf::from(&scope.path),
             identity: self.repo.scope_identity(scope_id)?,
-            limits: ScanLimits::default(),
+            limits: if validation::drive_root(&scope.path).is_ok() {
+                ScanLimits::drive_search()
+            } else {
+                ScanLimits::default()
+            },
             control: Some(self.scan_control()),
         };
         let generation = self.repo.begin_generation(scope_id, &profiles::catalog().basis())?;
         let outcome = inventory::scan(&request);
+        let items = outcome.result.items.len();
         let cancelled = outcome.result.limit_reason.as_deref() == Some(crate::fsread::CANCELLED);
         let problem = match &outcome.failure {
             Some(ScanFailure::IdentityChanged) => {
@@ -145,7 +163,7 @@ impl Core {
         };
         let PublishReport { state, baseline, added, removed, changed, .. } =
             self.repo.finish_generation(generation, &outcome.result)?;
-        Ok(ScanReport { scope_id, state, baseline, added, removed, changed, problem })
+        Ok(ScanReport { scope_id, state, baseline, added, removed, changed, items, problem })
     }
 
     /// Measures a managed folder or an approved scope; unknown stays unknown.
@@ -166,6 +184,11 @@ impl Core {
         let scope = self.repo.scope(scope_id)?;
         if scope.status != ScopeStatus::Approved || scope.kind == ScopeKind::Winget {
             return Err(Error::blocked("Nur freigegebene Ordner können gemessen werden."));
+        }
+        if validation::drive_root(&scope.path).is_ok() {
+            return Err(Error::blocked(
+                "Ein ganzes Laufwerk wird nicht ausgemessen; seine Belegung steht unter Speicher.",
+            ));
         }
         let measurement = inventory::measure(Path::new(&scope.path), self.repo.scope_identity(scope_id)?);
         if let Some(project) = scope.project_id {

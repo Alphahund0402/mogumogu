@@ -74,8 +74,8 @@ Schreibaktionen zeigen sofort den Beschäftigt-Zustand; Navigation und das
 Schließen von Dialogen bleiben möglich.
 
 `ui/pages/pages.slint` ist nur der Seitenindex. Jede Seite besitzt ihre eigene
-Datei; `page-card.slint` teilt den Rahmen. Die sieben Seiten (Übersicht,
-Projekte, Pakete, KI-Konfiguration, Experimente, Speicher, Einstellungen) tragen
+Datei; `page-card.slint` teilt den Rahmen. Die sechs Seiten (Übersicht,
+Projekte, Pakete, KI-Konfiguration, Speicher, Einstellungen) tragen
 Unterbereiche als Reiter; `Store.open(seite, reiter)` öffnet beide zusammen.
 `system.slint` liefert die Systemfunde für die Reiter in Pakete und
 KI-Konfiguration, `discoveries.slint` die Funde in Projekte. Jede Schaltfläche

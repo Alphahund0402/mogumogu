@@ -52,7 +52,7 @@ impl Desktop {
         store.set_form_value_2(value2.into());
         store.set_form_submit(submit.into());
         store.set_form_error("".into());
-        store.set_form_project_picker(matches!(form, Form::Candidate | Form::Scratch));
+        store.set_form_project_picker(form == Form::Candidate);
         self.form = form;
         store.set_modal(2);
         ui.invoke_focus_dialog();
@@ -120,36 +120,6 @@ impl Desktop {
         }
     }
 
-    pub(super) fn new_scratch(&mut self, project_id: Option<i64>) {
-        if self.snapshot.demo {
-            self.submit(Request::ScratchCreate {
-                project_id: 0,
-                name: String::new(),
-                purpose: String::new(),
-                review_days: None,
-            });
-            return;
-        }
-        if self.snapshot.projects.is_empty() {
-            self.dialog(dialogs::message(
-                "Scratchpad anlegen",
-                "Füge zuerst ein Projekt hinzu, dem das Scratchpad gehört.",
-            ));
-            return;
-        }
-        self.form(
-            Form::Scratch,
-            "Scratchpad anlegen",
-            "Erstellt einen Arbeitsordner für Quellcode, Umgebung, temporäre Daten und Ergebnisse. Quellcode und Ergebnisse bleiben geschützt.",
-            [
-                ("Projekt", "", String::new()),
-                ("Name", "Zum Beispiel: parser-spike", String::new()),
-            ],
-            "Anlegen",
-        );
-        self.project_choices(project_id);
-    }
-
     /// The reason is the only way to end a stuck lock; nothing is stopped.
     pub(super) fn release_session(&mut self, session_id: i64) {
         self.form(
@@ -169,15 +139,6 @@ impl Desktop {
             return;
         }
         match self.form {
-            Form::Scratch => match self.selected_project() {
-                Some(project_id) => self.submit(Request::ScratchCreate {
-                    project_id,
-                    name: second,
-                    purpose: "Über das Dashboard angelegt".into(),
-                    review_days: None,
-                }),
-                None => self.form_error("Wähle ein Projekt für das Scratchpad."),
-            },
             Form::Release(session_id) => self.submit(Request::SessionRelease { session_id, reason: first }),
             Form::Candidate => {
                 if let (Some(project_id), Some(candidate)) = (self.selected_project(), &self.adoption_candidate) {
@@ -194,18 +155,26 @@ impl Desktop {
         self.render_status();
     }
 
-    fn form_error(&self, message: &str) {
-        if let Some(ui) = &self.dashboard {
-            ui.global::<Store>().set_form_error(message.into());
-        }
-    }
-
     /// A search folder is read by file names only; the core binds the
     /// approval to the chosen folder's identity.
     pub(super) fn approve_search_folder(&mut self) {
         if let Some(path) = self.pick_folder("Suchordner für mogumogu wählen") {
             self.submit(Request::ApproveSystem { kind: mogumogu::domain::ScopeKind::ProjectSearch, path: Some(path) });
         }
+    }
+
+    /// One click per local drive: the core approves a names-only search of
+    /// the whole drive, bound to its identity. An approved drive is searched
+    /// again; a replaced one needs this click as its new approval.
+    pub(super) fn search_drive(&mut self, root: &str) {
+        let search = self.snapshot.disks.drives.iter().find(|d| d.root == root).and_then(|d| d.search.as_ref());
+        let request = match search {
+            Some(search) if search.status != mogumogu::domain::ScopeStatus::IdentityChanged => {
+                Request::Scan { scope_id: Some(search.scope_id) }
+            }
+            _ => Request::ApproveSystem { kind: mogumogu::domain::ScopeKind::ProjectSearch, path: Some(root.into()) },
+        };
+        self.submit(request);
     }
 
     /// Stores outside their usual place, chosen by kind in plain words.
@@ -394,12 +363,6 @@ impl Desktop {
                 self.render_status();
                 None
             }
-        }
-    }
-
-    pub(super) fn browse_scratch_root(&mut self) {
-        if let Some(path) = self.pick_folder("Ort für neue Scratchpads wählen") {
-            self.change_settings(|s| s.scratch_root = Some(path));
         }
     }
 

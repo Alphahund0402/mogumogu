@@ -129,6 +129,8 @@ pub fn logical_drives() -> io::Result<Vec<DriveUsage>> {
             used_bytes: known.then_some(total.saturating_sub(free)),
             project_bytes: None,
             status: status.into(),
+            searchable: matches!(drive_type, 3 | 6),
+            search: None,
         });
     }
     Ok(drives)

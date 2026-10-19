@@ -162,3 +162,32 @@ fn demo_drives_and_folder_contents_are_synthetic() {
     assert!(tree.entries.iter().all(|e| e.status == "Synthetische Beispieldaten"));
     assert!(matches!(core.folder_tree(7, ""), Err(Error::NotFound(_))));
 }
+
+#[test]
+fn only_a_names_only_search_may_cover_a_whole_local_drive() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut core = core_at(temp.path(), false);
+    for kind in [ScopeKind::Scoop, ScopeKind::NpmGlobal, ScopeKind::Python] {
+        assert!(matches!(core.approve_system(kind, Some("C:\\")), Err(Error::Invalid(_))), "{kind:?}");
+    }
+    let used: Vec<String> = platform::logical_drives().unwrap().into_iter().map(|d| d.root).collect();
+    let absent = ('D'..='Z').map(|c| format!("{c}:\\")).find(|root| !used.contains(root)).unwrap();
+    let refused = core.approve_system(ScopeKind::ProjectSearch, Some(&absent)).unwrap_err();
+    assert!(refused.to_string().contains("lokale Festplatten"), "{refused}");
+    assert!(core.repository().scopes().unwrap().is_empty());
+}
+
+#[test]
+fn a_drive_search_shows_on_its_drive_and_is_never_measured() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut core = core_at(temp.path(), false);
+    let Some(local) = core.storage_overview().unwrap().drives.into_iter().find(|d| d.searchable) else { return };
+    // A metadata record only: no identity is taken and nothing is scanned.
+    let scope = core.repository().approve_scope(ScopeKind::ProjectSearch, None, &local.root, None).unwrap();
+    let overview = core.storage_overview().unwrap();
+    let search = drive(&overview, &local.root).search.clone().unwrap();
+    assert_eq!(search.scope_id, scope);
+    assert!(search.findings.is_none() && search.checked_at.is_none() && !search.partial);
+    let refused = core.measure_scope(scope).unwrap_err();
+    assert!(refused.to_string().contains("ganzes Laufwerk"), "{refused}");
+}

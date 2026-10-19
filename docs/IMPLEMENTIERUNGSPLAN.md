@@ -55,19 +55,18 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 
 ## 4. Dashboardgestaltung
 
-Visuelle Basis ist die **Mochi-Wolke**: cremeweiße Karten auf hellem Himmelblau, 1,5-px-Konturen, Radien 16/12 px, Pillenschaltflächen und eine schmale linke Navigation mit Mochi. Statuschips verbinden immer Farbe, Symbol und Wort. Mochis Pose folgt dem Zustand (fröhlich, mampft beim Erfassen, schläft bei Pause, besorgt bei teilweiser Erfassung oder hängendem Experiment) und ist nie die einzige Information. Kein animierter Hintergrund, keine permanenten Diagrammanimationen und keine externe Bildabfrage.
+Visuelle Basis ist die **Mochi-Wolke**: cremeweiße Karten auf hellem Himmelblau, 1,5-px-Konturen, Radien 16/12 px, Pillenschaltflächen und eine schmale linke Navigation mit Mochi. Statuschips verbinden immer Farbe, Symbol und Wort. Mochis Pose folgt dem Zustand (fröhlich, mampft beim Erfassen, schläft bei Pause, besorgt bei teilweiser Erfassung oder hängender Scratchpad-Session) und ist nie die einzige Information. Kein animierter Hintergrund, keine permanenten Diagrammanimationen und keine externe Bildabfrage.
 
 Navigation, Filter, Schaltflächen und Listenzeilen teilen zentrale Zustandsfarben. Ausgewählte Zeilen behalten ihre Markierung über stabile Schlüssel; Fokusrahmen liegen innerhalb der jeweiligen Komponente, auch in virtualisierten Listen. Der normale Build-/Startweg verwendet die lokale Datenbank; fehlende Messungen bleiben unbekannt.
 
 | Bereich | Verhalten |
 |---|---|
-| Übersicht | Kennzahlen mit Sprung zur Seite; Entscheidungen auf anderen Seiten (hängendes Experiment ohne Hinweis, Abkündigungen, teilweise Erfassung, neu gefundene Orte); Prüfhinweise mit Auslöser und Beleg, letzte Änderungen und Bereinigungspläne mit Plan-Vorschau und Bestätigung per Fingerabdruck; kein „Alles löschen“; immer Demo-/Lokalstatus zeigen |
-| Projekte | Tabelle und Detailansicht mit Lesefreigabe und Abdeckung; Reiter Ressourcen (Besitzer, Typ, bekannte oder unbekannte Größe) und Funde (Namenssuche und erfasste Umgebungen/Ausgaben mit Filtern und expliziter Projektzuordnung) |
+| Übersicht | Kennzahlen mit Sprung zur Seite; Entscheidungen auf anderen Seiten (hängende Session ohne Hinweis, Abkündigungen, teilweise Erfassung, neu gefundene Orte); Prüfhinweise mit Auslöser und Beleg, letzte Änderungen und Bereinigungspläne mit Plan-Vorschau und Bestätigung per Fingerabdruck; kein „Alles löschen“; immer Demo-/Lokalstatus zeigen |
+| Projekte | Tabelle und Detailansicht mit Lesefreigabe und Abdeckung; Reiter Ressourcen (Besitzer, Typ, bekannte oder unbekannte Größe; Scratchpad-Dialog mit Prüftermin, Schutz, Zum Projekt machen und begründeter Freigabe hängender Sessions) und Funde (Namenssuche in Ordnern und Laufwerken und erfasste Umgebungen/Ausgaben mit Filtern und expliziter Projektzuordnung) |
 | Pakete | Versionen und Quellen mit Projektbelegen, Abdeckung, Quellenstatus und Behalten-Vormerkung; Suche und Filterchips vor dem Blättern; Belegkette im Erklärpanel; Reiter Werkzeuge im Suchpfad und globale Bestände mit Nachweis und Freigabe je Ort |
 | KI-Konfiguration | Quellen, Scope, Client und Referenzen; Skill-/Instruktionstexte auf Anfrage schreibgeschützt, flüchtig und redigiert anzeigen; Reiter persönliche Ordner mit Freigabe je Ort |
-| Speicher | Laufwerkskapazitäten, gemessene logische Projektanteile und begrenzte navigierbare Ordnerstruktur innerhalb freigegebener Bereiche |
-| Experimente | Scratchpads mit Sessions und Ordnern, hängende Sessions mit Auslöser und begründeter Freigabe; Aufräumplan nur, wenn verwaltete Temp-Ausgabe als entbehrlich markiert ist |
-| Einstellungen | Überwachung mit Pause, Tray-Hinweise mit Ruhezeiten und Tageszusammenfassung, Autostart, geführter Einstieg, Netzwerkquellen, Scratchpad-Wurzel, Sicherung und Export, Datenort; Reiter Lesefreigaben mit Erfassungsabdeckung je Freigabe |
+| Speicher | Laufwerkskapazitäten, gemessene logische Projektanteile, Laufwerkssuche nach Projekten und Scratchpads mit einem Klick je lokaler Festplatte und begrenzte navigierbare Ordnerstruktur innerhalb freigegebener Bereiche |
+| Einstellungen | Überwachung mit Pause, Tray-Hinweise mit Ruhezeiten und Tageszusammenfassung, Autostart, geführter Einstieg, Netzwerkquellen, Sicherung und Export, Datenort (Scratchpad-Wurzel nur per CLI); Reiter Lesefreigaben mit Erfassungsabdeckung je Freigabe |
 
 Die Projektgröße der Übersicht summiert nur gemessene Projekte und nennt die Zahl der ungemessenen; gemessen werden nur von mogumogu verwaltete Ordner und freigegebene Bereiche. Eine Prüfung heißt nie „sicher bereinigbar“.
 

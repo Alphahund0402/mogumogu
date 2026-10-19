@@ -101,7 +101,7 @@ Rahmens bleiben lange Seiten vertikal scrollbar. Das entspricht bei 200 % Skalie
 | Übersicht – Zusammenfassungen | Unter 1012 px Fensterbreite unterhalb der Projekte |
 | Übersicht – Hinweiskarten | Unter 1200 px Fensterbreite zwei Spalten; dritte Karte in eigener Zeile |
 | Einstellungen | Unter 1120 px Inhaltsbreite eine Spalte |
-| System / Experimente | Unter 1000 px Inhaltsbreite eine Spalte |
+| System | Unter 1000 px Inhaltsbreite eine Spalte |
 | Paketdetails | Unter 1060 px Inhaltsbreite volle Detailansicht; Schließen führt zur Liste |
 | Einstiegsbegrüßung | Unter 1120 px eigener Breite gestapelt |
 | HTML-Metriken | Eine, zwei oder vier Spalten entsprechend der verfügbaren Breite |

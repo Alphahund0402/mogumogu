@@ -44,8 +44,8 @@ mod audit {
         Rc::new(VecModel::from(rows)).into()
     }
 
-    /// Overview, projects, packages, AI, experiments, storage, settings.
-    const PAGES: i32 = 7;
+    /// Overview, projects, packages, AI, storage, settings.
+    const PAGES: i32 = 6;
     const LONG: &str = "Ein sehr langer synthetischer Projektname zur Prüfung von Umbruch und Abständen";
     const PATH: &str = r"C:\fixture\workspace\ein-sehr-langer-projektordner\packages\beispiel-mit-langem-namen";
 
@@ -72,7 +72,6 @@ mod audit {
         s.set_package_counts(model(vec!["12.450".into(); 5]));
         s.set_package_next(true);
         s.set_package_previous(true);
-        s.set_scratch_root(PATH.into());
         s.set_data_path(r"C:\fixture\mogumogu".into());
         s.set_sqlite_version("3.51.0".into());
         s.set_autostart_note(detail.into());
@@ -184,50 +183,6 @@ mod audit {
                 })
                 .collect(),
         ));
-        s.set_experiments(model(
-            (0..8)
-                .map(|id| ui::ExperimentRow {
-                    id,
-                    name: title.into(),
-                    project: title.into(),
-                    purpose: detail.into(),
-                    state: "Aktiv".into(),
-                    state_kind: "ok".into(),
-                })
-                .collect(),
-        ));
-        s.set_experiment_id(0);
-        s.set_experiment_name(title.into());
-        s.set_experiment_path(PATH.into());
-        s.set_experiment_review("Prüfung erforderlich".into());
-        s.set_experiment_review_kind("review".into());
-        s.set_experiment_stall(detail.into());
-        s.set_experiment_plannable(true);
-        s.set_experiment_sessions(model(
-            (0..5)
-                .map(|id| ui::SessionRow {
-                    id,
-                    scratch: title.into(),
-                    scratch_id: 0,
-                    purpose: detail.into(),
-                    state: "Angehalten".into(),
-                    state_kind: "review".into(),
-                    started: "vor 12 Minuten".into(),
-                    stall: detail.into(),
-                    releasable: true,
-                    note: detail.into(),
-                })
-                .collect(),
-        ));
-        s.set_experiment_folders(model(vec![
-            ui::FolderRow {
-                name: PATH.into(),
-                size: "Unbekannt".into(),
-                fate: "Geschützt".into(),
-                fate_kind: "protected".into()
-            };
-            5
-        ]));
         let system = model(
             (0..6)
                 .map(|id| ui::SystemRow {
@@ -256,8 +211,8 @@ mod audit {
                 title: title.into(),
                 detail: detail.into(),
                 action: "Öffnen".into(),
-                page: 4,
-                tab: 0
+                page: 1,
+                tab: 1
             };
             3
         ]));
@@ -279,6 +234,9 @@ mod audit {
                 usage: if stress && root == "D:\\" { 0. } else { usage },
                 project_share: 0.08,
                 note: "Metadaten vom Betriebssystem".into(),
+                search: if root == "C:\\" { detail } else { "Noch nicht nach Projekten durchsucht" }.into(),
+                search_id: if root == "C:\\" { 3 } else { -1 },
+                searchable: true,
             })
             .collect(),
         ));
@@ -351,13 +309,13 @@ mod audit {
         s.set_panel_advice(detail.into());
         s.set_panel_note(detail.into());
         s.set_panel_chain(model(vec![ui::ChainStep { label: title.into(), detail: detail.into(), warn: true }; 4]));
-        s.set_form_title("Experiment registrieren".into());
+        s.set_form_title("Projekt registrieren".into());
         s.set_form_text(detail.into());
-        s.set_form_label_1("Experimentname".into());
+        s.set_form_label_1("Projektname".into());
         s.set_form_label_2("Lokaler Windows-Pfad".into());
         s.set_form_value_1(title.into());
         s.set_form_value_2(PATH.into());
-        s.set_form_submit("Geschützt registrieren".into());
+        s.set_form_submit("Registrieren".into());
         s.set_form_error(detail.into());
         s.set_detail_title(title.into());
         s.set_detail_path(PATH.into());
@@ -557,7 +515,7 @@ mod audit {
                     if stress { "long" } else { "normal" }
                 );
                 for page in 0..PAGES {
-                    if quick && page != 0 && page != 2 && page != 3 && page != 5 && page != 6 {
+                    if quick && page == 1 {
                         continue;
                     }
                     s.set_page(page);
@@ -591,7 +549,7 @@ mod audit {
                 records.push(frame(&app, &window, output, &format!("{prefix}-package-panel"), size)?);
                 s.set_package_panel(false);
                 {
-                    s.set_page(5);
+                    s.set_page(4);
                     s.set_storage_tab(1);
                     records.push(frame(&app, &window, output, &format!("{prefix}-folder-tree"), size)?);
                     s.set_storage_tab(0);
@@ -656,7 +614,7 @@ mod audit {
                 window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.0 });
                 let size = PhysicalSize::new(width, 680);
                 window.set_size(size);
-                for page in [0, 1, 2, 4, 5, 6] {
+                for page in [0, 1, 2, 4, 5] {
                     app.global::<ui::Store>().set_page(page);
                     records.push(frame(
                         &app,
@@ -718,7 +676,7 @@ mod audit {
             s.set_ai_tab(1);
             records.push(frame(&empty, &window, output, "900x560-100pct-empty-ai-personal", size)?);
             s.set_ai_tab(0);
-            s.set_page(5);
+            s.set_page(4);
             s.set_storage_tab(1);
             records.push(frame(&empty, &window, output, "900x560-100pct-empty-tree", size)?);
             s.set_storage_tab(0);
@@ -745,15 +703,15 @@ mod audit {
             s.set_modal(1);
             records.push(frame(&empty, &window, output, "900x560-100pct-short-message", size)?);
             s.set_modal(0);
-            s.set_form_title("Scratchpad anlegen".into());
+            s.set_form_title("Fund einem Projekt zuordnen".into());
             s.set_form_label_1("Projekt".into());
-            s.set_form_label_2("Name".into());
-            s.set_form_value_2("parser-spike".into());
-            s.set_form_submit("Anlegen".into());
+            s.set_form_label_2("Zweck (optional)".into());
+            s.set_form_value_2("Testdaten für den Parser".into());
+            s.set_form_submit("Zuordnen".into());
             s.set_form_project_names(model(vec!["Projekt A".into(), "Projekt B".into()]));
             s.set_form_project_picker(true);
             s.set_modal(2);
-            records.push(frame(&empty, &window, output, "900x560-100pct-scratch-form", size)?);
+            records.push(frame(&empty, &window, output, "900x560-100pct-adopt-form", size)?);
             window.dispatch_event(WindowEvent::KeyPressed { text: Key::DownArrow.into() });
             window.dispatch_event(WindowEvent::KeyReleased { text: Key::DownArrow.into() });
             assert_eq!(s.get_form_project_index(), 1, "Project picker must receive initial keyboard focus");
@@ -762,7 +720,7 @@ mod audit {
             let inner = WindowInner::from_pub(empty.window());
             let focused = inner.focus_item.borrow().upgrade().expect("Name field must receive focus");
             let input = focused.downcast::<TextInput>().expect("Tab must reach the name input");
-            assert_eq!(input.as_pin_ref().text().as_str(), "parser-spike");
+            assert_eq!(input.as_pin_ref().text().as_str(), "Testdaten für den Parser");
         }
         std::fs::write(output.join("manifest.json"), serde_json::to_vec_pretty(&records)?)?;
         println!("Rendered and measured {} native Slint states in {}", records.len(), output.display());

@@ -1,7 +1,7 @@
 import { ListView, ScrollView, SpinBox, CheckBox } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions } from "../store.slint";
-import { UiButton, Panel, SettingToggle, PageHeader, PillField, MochiCallout, RowCard, FilterChip, Card } from "../components.slint";
+import { UiButton, Panel, SettingToggle, PageHeader, MochiCallout, RowCard, FilterChip, Card } from "../components.slint";
 
 export component SettingsPage inherits VerticalLayout {
     min-width: 0px;
@@ -171,23 +171,13 @@ export component SettingsPage inherits VerticalLayout {
                 Panel {
                     col: root.compact ? 0 : 1;
                     row: root.compact ? 1 : 0;
-                    title: "Ordner für Scratchpads";
-                    Text { text: "Hier legt mogumogu neue Scratchpads an."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
-                    root-field := PillField { text: Store.scratch-root; icon: Icons.folder; placeholder: "C:\\dev\\scratch"; label: "Ordner für Scratchpads"; enabled: !Store.demo && Store.modal == 0 && !Store.busy; }
+                    title: "Daten";
+                    Text { text: (Store.demo ? "Demo-Datenbank, schreibgeschützt: " : "Lokale Datenbank: ") + Store.data-path; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
                     FlexboxLayout {
                         spacing: 8px; alignment: start;
-                        UiButton { small: true; label: "Durchsuchen …"; available: !Store.demo && !Store.busy; activated => { Actions.browse-scratch-root(); } }
-                        UiButton { small: true; primary: true; label: "Speichern"; available: !Store.demo && !Store.busy && root-field.text != Store.scratch-root; activated => { Actions.save-scratch-root(root-field.text); } }
+                        UiButton { small: true; label: "Sicherung erstellen …"; available: !Store.demo && !Store.busy; activated => { Actions.backup-now(); } }
+                        UiButton { small: true; label: "Exportieren …"; available: !Store.busy; activated => { Actions.export-now(); } }
                     }
-                }
-            }
-            Panel {
-                title: "Daten";
-                Text { text: (Store.demo ? "Demo-Datenbank, schreibgeschützt: " : "Lokale Datenbank: ") + Store.data-path; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
-                FlexboxLayout {
-                    spacing: 8px; alignment: start;
-                    UiButton { small: true; label: "Sicherung erstellen …"; available: !Store.demo && !Store.busy; activated => { Actions.backup-now(); } }
-                    UiButton { small: true; label: "Exportieren …"; available: !Store.busy; activated => { Actions.export-now(); } }
                 }
             }
         }

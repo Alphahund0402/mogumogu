@@ -2,6 +2,45 @@
 
 Stand: 5. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 19. Oktober: Laufwerkssuche, Scratchpad-Erkennung, ohne Experimente-Seite
+
+Die Seite „Experimente“ ist entfernt; das Dashboard hat sechs Ansichten.
+Scratchpads stehen unter **Projekte → Ressourcen**, eine hängende Session wird
+in ihrem Dialog begründet freigegeben, die Übersicht führt mit „Ressourcen
+ansehen“ dorthin. „Scratchpad anlegen“ und der Scratchpad-Ort sind nur noch per
+CLI erreichbar (`scratch create`, `settings set scratch-root`).
+
+Neu ist die Laufwerkssuche ([Entwicklungsfunde](ENTWICKLUNGSFUNDE.md#laufwerkssuche)):
+`validation::drive_root` lässt eine Laufwerkswurzel nur für die Namenssuche zu,
+`approve_system` nur auf lokalen Festplatten und identitätsgebunden. Die
+Erkennung lässt System-, Programm- und Werkzeugordner aus, zählt fehlende
+Zugriffsrechte als ausgelassen, listet auf Laufwerken keine einzelnen losen
+Skripte und meldet mögliche Scratchpads nach Namenswörtern oder losen Skripten.
+Die Fundliste sortiert Projekte und Scratchpads zuerst. Ein ganzes Laufwerk wird
+nie ausgemessen. **Diese Erweiterung der Lesegrenze braucht nach AGENTS.md
+einen zweiten Review; er steht aus.**
+
+Neue Tests: Laufwerksausschlüsse und Funde in einem nachgebildeten
+Laufwerksbaum, unveränderte Suchordner, Namenswörter, Auslassungen je Ort,
+Budget ohne Dateibytes, Wurzelvalidierung, Ablehnung nicht vorhandener
+Laufwerke und anderer Freigabearten, Suchstatus in der Speicherübersicht,
+Messverbot und Reihenfolge der Fundliste. `cargo fmt --all -- --check`,
+`cargo clippy --locked --all-targets -- -D warnings`, 15 statische Verträge und
+**173 Funktionstests** mit `--no-default-features --features network`
+bestanden. Der native Audit in `target/layout-audit-drive` umfasst
+**416 Zustände** (sechs Seiten) mit null Kandidaten bei
+`scripts/analyze_layout.py --strict`. Native Bilder:
+[Laufwerkssuche mit Ergebnisleiste](screenshots/wolke-laufwerkssuche.png),
+[hängende Session im Ressourcendialog](screenshots/wolke-session-haengt.png),
+[Übersicht](screenshots/wolke-uebersicht.png).
+
+Durchsatz: Eine Namenssuche über einen synthetischen Baum mit 100.100 Einträgen
+dauerte im Debug-Build bei warmem Dateisystemcache 0,75 Sekunden einschließlich
+CLI-Aufruf. Das ist kein Messwert für kalte Caches oder Festplatten mit
+Drehteller. Nicht ausgeführt: eine Laufwerkssuche über ein echtes Laufwerk.
+Dafür hätten echte Benutzerordner gelesen werden müssen; sie steht als
+Abnahmepunkt in Abschnitt K von [WINDOWS-ABNAHME.md](WINDOWS-ABNAHME.md).
+
 ## Ergänzung vom 18. Oktober: Zusammenführung auf sieben Ansichten
 
 Die Oberfläche wurde von elf auf sieben Ansichten zusammengeführt; Inventar und

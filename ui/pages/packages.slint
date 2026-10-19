@@ -21,7 +21,7 @@ export component PackagesPage inherits VerticalLayout {
             label: Store.updates ? "Quellen prüfen" : "Updatehinweise einschalten";
             has-icon: true; icon: Store.updates ? Icons.refresh : Icons.settings;
             available: !Store.busy && !Store.demo;
-            activated => { if Store.updates { Actions.check-updates(); } else { Store.page = 6; } }
+            activated => { if Store.updates { Actions.check-updates(); } else { Store.open(5, 0); } }
         }
     }
     VerticalLayout {

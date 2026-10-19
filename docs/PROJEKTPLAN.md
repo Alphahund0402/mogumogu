@@ -601,7 +601,7 @@ Diese Ziele werden im Machbarkeitsprototyp überprüft. Bei Überschreitung werd
 
 ### 12.2 Ausgangsgrenzen für Implementierung und Lasttests
 
-Die Werte sind Startparameter, keine bestätigten Optimalwerte. Profile dürfen sie nur verschärfen. Bei Überschreitung werden Fortschritt, Einschränkung und gegebenenfalls eine erweiterte Freigabe sichtbar, statt eine Ressource als abwesend zu melden.
+Die Werte sind Startparameter, keine bestätigten Optimalwerte. Profile dürfen sie nur verschärfen; das weitere Budget der Laufwerkssuche gilt nur für ihre reine Namenssuche. Bei Überschreitung werden Fortschritt, Einschränkung und gegebenenfalls eine erweiterte Freigabe sichtbar, statt eine Ressource als abwesend zu melden.
 
 | Bereich | Ausgangsgrenze / Reaktion |
 |---|---|
@@ -614,6 +614,7 @@ Die Werte sind Startparameter, keine bestätigten Optimalwerte. Profile dürfen 
 | Gesamterfassung | Zunächst 1 GiB Metadaten und 1 Mio. Referenzkanten pro Scope/Generation; Erweiterung ausdrücklich freigeben. |
 | Referenzen | Zyklen erkennen; maximal 16 Import-/Referenzebenen. |
 | Externe Programme | Standardmäßig 30 Sekunden und 16 MiB Ausgabe; Ausnahmen nur pro geprüftem Adapter. |
+| Namenssuche | Ordner: 200.000 Einträge, 16 Ebenen, 60 Sekunden. Ganze lokale Festplatte: 2 Mio. Einträge, 32 Ebenen, 180 Sekunden, null gelesene Dateibytes; System-, Programm- und Werkzeugordner ausgelassen. |
 | UI | Standardseite 200 Einträge; keine dauerhafte vollständige Inventarkopie. |
 | SQLite | Ein Schreiber, begrenzte Batches; gesamte Page-Cache-Zielgröße zunächst höchstens 8 MiB über alle Verbindungen. |
 | Logs | Redigiert und rotierend, maximal 20 MiB. |

@@ -1,6 +1,7 @@
 //! Central budgets from the plan (PROJEKTPLAN §12.2). They are starting values,
 //! not measured optima. Profiles and callers may only tighten them; hitting a
-//! limit means incomplete coverage, never absence.
+//! limit means incomplete coverage, never absence. The one wider budget is
+//! [`ScanLimits::drive_search`], which reads names only.
 use std::time::Duration;
 
 /// Prototype capacity of the metadata registry.
@@ -71,6 +72,13 @@ impl Default for ScanLimits {
 }
 
 impl ScanLimits {
+    /// A whole local drive holds far more names than a project folder. This
+    /// budget belongs to the names-only drive search alone: it reads no file
+    /// content at all, and the time budget stays the bound of one pass.
+    pub fn drive_search() -> Self {
+        Self { max_depth: 32, max_entries: 2_000_000, max_total_bytes: 0, time_budget: Duration::from_secs(180) }
+    }
+
     /// Combine two budgets; the stricter value always wins.
     pub fn tighten(self, other: Self) -> Self {
         Self {
@@ -97,5 +105,11 @@ mod tests {
         assert_eq!(ScanLimits::default().tighten(wide), ScanLimits::default());
         let narrow = ScanLimits { max_depth: 2, ..ScanLimits::default() };
         assert_eq!(ScanLimits::default().tighten(narrow).max_depth, 2);
+    }
+
+    #[test]
+    fn a_drive_search_reads_no_content() {
+        assert_eq!(ScanLimits::drive_search().max_total_bytes, 0);
+        assert!(ScanLimits::drive_search().time_budget <= Duration::from_secs(180));
     }
 }

@@ -34,3 +34,14 @@ pub fn windows_path(value: &str) -> Result<String> {
     let normalized = format!("{}:\\{}", (b[0] as char).to_ascii_uppercase(), rest);
     Ok(normalized)
 }
+
+/// A whole local drive such as `D:\`. Only a names-only project search may
+/// use one; every other approval keeps the stricter [`windows_path`] rule.
+pub fn drive_root(value: &str) -> Result<String> {
+    let b = value.as_bytes();
+    let separator = |c: &u8| matches!(c, b'\\' | b'/');
+    if !(2..=3).contains(&b.len()) || !b[0].is_ascii_alphabetic() || b[1] != b':' || !b[2..].iter().all(separator) {
+        return Err(Error::Invalid("Eine Laufwerkswurzel wie D:\\ ist erforderlich.".into()));
+    }
+    Ok(format!("{}:\\", (b[0] as char).to_ascii_uppercase()))
+}

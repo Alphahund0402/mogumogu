@@ -143,6 +143,23 @@ Bedienung des echten Fensters steht aus.
 | Sicherung und Export aus den Einstellungen: Vorschau, Ordnerwahl, vorhandene Datei wird nicht überschrieben | ☐ | ☐ |
 | Stimmungsposen (Mampft, Schläft, Besorgt) bei 100–200 % DPI neben den v2-Posen vergleichen; in Fortschrittsleiste, Pausenkarte und Hinweis zum hängenden Experiment ohne sichtbare Papierkante | ☐ | ☐ |
 
+## K. Laufwerkssuche und Wegfall der Experimente-Seite (19. Oktober 2026)
+
+Offen; braucht ein echtes Laufwerk und damit echte Benutzerordner. Vorher den
+zweiten Review der Lesegrenze abschließen.
+
+| Prüfpunkt | W10 | W11 |
+|---|---|---|
+| Speicher › „Projekte suchen“ auf einer lokalen Festplatte: Freigabe „Laufwerk X:“ unter Lesefreigaben, Ergebnisleiste mit „Funde ansehen“ | ☐ | ☐ |
+| Durchgang auf dem Systemlaufwerk vollständig innerhalb des Budgets; Notiz nennt ausgelassene Ordner | ☐ | ☐ |
+| Keine Funde aus Windows, Programme, ProgramData, AppData, Punktordnern im Profil, Spielebibliotheken | ☐ | ☐ |
+| Bekannte eigene Projekte und Scratchpads erscheinen unter Projekte › Funde vorn | ☐ | ☐ |
+| Netzlaufwerk und Wechselmedium bieten kein „Projekte suchen“ | ☐ | ☐ |
+| Abbrechen während der Laufwerkssuche: teilweise, kein Datenverlust, Karte meldet „Letzte Suche unvollständig“ | ☐ | ☐ |
+| Freigabe widerrufen: Karte zeigt wieder „Projekte suchen“, Funde verschwinden | ☐ | ☐ |
+| Hängende Session: Übersicht › „Ressourcen ansehen“ › Scratchpad-Dialog › „Session begründet freigeben“ | ☐ | ☐ |
+| Seitenleiste mit sechs Einträgen; `Alt+1` … `Alt+6`; Tray „Einstellungen …“ öffnet Einstellungen | ☐ | ☐ |
+
 ## J. Zusammengeführte Oberfläche im echten Fenster (18. Oktober 2026)
 
 Windows 10 Pro 22H2, 200 % DPI, Debug-Build mit eigenem Datenverzeichnis

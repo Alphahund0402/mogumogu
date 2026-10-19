@@ -1,8 +1,8 @@
 //! Presentation of drive metadata and bounded directory listings from the owner.
 use super::ui::*;
 use super::view::model;
-use mogumogu::clock::display_local;
-use mogumogu::domain::{FolderTree, StorageOverview, format_bytes};
+use mogumogu::clock::{Clock, SystemClock, display_local, display_relative};
+use mogumogu::domain::{DriveUsage, FolderTree, ScopeStatus, StorageOverview, format_bytes};
 use slint::ComponentHandle;
 
 impl super::Desktop {
@@ -35,7 +35,26 @@ fn fraction(part: Option<u64>, total: Option<u64>) -> f32 {
     }
 }
 
+/// Where the names-only search of a drive stands, in one short line.
+fn search_text(drive: &DriveUsage, now: i64) -> String {
+    let Some(search) = &drive.search else {
+        return if drive.searchable { "Noch nicht nach Projekten durchsucht".into() } else { String::new() };
+    };
+    let found = |n: i64| if n == 1 { "1 Fund".to_string() } else { format!("{n} Funde") };
+    match (search.status, search.findings, search.checked_at) {
+        (ScopeStatus::IdentityChanged, ..) => "Suche blockiert: Laufwerk ersetzt".into(),
+        (ScopeStatus::Unavailable, ..) => "Suche: Laufwerk nicht erreichbar".into(),
+        (_, findings, _) if search.partial => match findings {
+            Some(n) => format!("Letzte Suche unvollständig · {} aus früherem Lauf", found(n)),
+            None => "Letzte Suche unvollständig · Details unter Lesefreigaben".into(),
+        },
+        (_, Some(n), Some(at)) => format!("{} · durchsucht {}", found(n), display_relative(at, now)),
+        _ => "Suche freigegeben, noch nicht durchsucht".into(),
+    }
+}
+
 pub(super) fn render(ui: &Dashboard, report: &StorageOverview) {
+    let now = SystemClock.now();
     let store = ui.global::<Store>();
     let selected = store.get_selected_drive().to_string();
     store.set_disk_checked(
@@ -59,6 +78,9 @@ pub(super) fn render(ui: &Dashboard, report: &StorageOverview) {
                 usage: fraction(drive.used_bytes, drive.total_bytes),
                 project_share: fraction(drive.project_bytes, drive.total_bytes),
                 note: drive.status.clone().into(),
+                search: search_text(drive, now).into(),
+                search_id: drive.search.as_ref().map_or(-1, |s| s.scope_id as i32),
+                searchable: drive.searchable,
             })
             .collect(),
     ));

@@ -231,7 +231,7 @@ impl DiscoveryKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::Project => "Projekt",
-            Self::Scratchpad => "Experiment / Scratchpad",
+            Self::Scratchpad => "Scratchpad",
             Self::Script => "Skript / Quelldatei",
             Self::Notebook => "Notebook",
             Self::Environment => "Umgebung",

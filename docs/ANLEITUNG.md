@@ -22,15 +22,14 @@ Standard ist das lokale Inventar mit deinen registrierten und freigegebenen Proj
 
 | Ansicht | Inhalt |
 |---|---|
-| **Übersicht** | Kennzahlen (Projekte, Paketversionen, KI-Dateien, Projektgröße), Entscheidungen auf anderen Seiten (hängendes Experiment, Abkündigungen, teilweise Erfassung, neu gefundene Orte) und darunter **Prüfhinweise**, **Letzte Änderungen** und – falls vorhanden – **Bereinigungspläne** |
-| **Projekte** | Reiter **Projekte**, **Ressourcen** (Scratchpads, ihre Ordner, zugeordnete Funde) und **Funde** (Namenssuche in Suchordnern sowie erfasste Umgebungen und Build-Ausgaben) |
+| **Übersicht** | Kennzahlen (Projekte, Paketversionen, KI-Dateien, Projektgröße), Entscheidungen auf anderen Seiten (hängende Scratchpad-Session, Abkündigungen, teilweise Erfassung, neu gefundene Orte) und darunter **Prüfhinweise**, **Letzte Änderungen** und – falls vorhanden – **Bereinigungspläne** |
+| **Projekte** | Reiter **Projekte**, **Ressourcen** (Scratchpads mit Sessions, ihre Ordner, zugeordnete Funde) und **Funde** (Namenssuche in Suchordnern und Laufwerken sowie erfasste Umgebungen und Build-Ausgaben) |
 | **Pakete** | Paketversionen mit Belegen und Quellenstatus; Reiter **Werkzeuge & globale Bestände** für den Systembefund |
 | **KI-Konfiguration** | Gefundene Skills, Instruktionen, MCP-Server und Hooks; Reiter **Persönliche Ordner** wie `.claude` |
-| **Experimente** | Scratchpads mit Sessions, Ordnern und Prüftermin |
-| **Speicher** | Laufwerke, Projektgrößen und Ordnerstruktur |
+| **Speicher** | Laufwerke mit **Projekte suchen** je lokaler Festplatte, Projektgrößen und Ordnerstruktur |
 | **Einstellungen** | Reiter **Allgemein** und **Lesefreigaben** (alle freigegebenen Ordner; erfassen, messen, widerrufen) |
 
-Was eine Aktion ergeben hat (Erfassung, Quellenprüfung, Systemprüfung, Speicherstand, Sicherung, Export), steht danach zehn Sekunden lang in der Leiste über der Statuszeile.
+Was eine Aktion ergeben hat (Erfassung, Laufwerkssuche, Quellenprüfung, Systemprüfung, Speicherstand, Sicherung, Export), steht danach zehn Sekunden lang in der Leiste über der Statuszeile. Nach einer Suche führt **Funde ansehen** direkt zu **Projekte → Funde**.
 
 Ausgewählte Navigationseinträge, Filter und geöffnete Listenzeilen verwenden dieselbe blaue Fläche und dunkle Schrift; Häkchen bzw. eine Seitenmarkierung machen die Auswahl zusätzlich sichtbar. Die zuletzt geöffnete Zeile bleibt markiert. Der Tastaturfokus erscheint als Rahmen innerhalb des Elements und ist von der Auswahl getrennt.
 
@@ -73,6 +72,8 @@ Persönliche KI-Konfiguration (`%USERPROFILE%\.claude`, `.codex`, `.agents`, `.g
 
 ## 4. Scratchpads und verwaltete Läufe
 
+Scratchpads werden über die CLI angelegt und gesteuert. Im Dashboard stehen sie unter **Projekte → Ressourcen**; ihr Dialog bietet Prüftermin +7 Tage, Schützen, Zum Projekt machen, Größe messen und – bei einer hängenden Session – **Session begründet freigeben**.
+
 ```powershell
 & $cli settings set scratch-root C:\dev\scratch
 & $cli scratch create --project 1 --name parser-spike --purpose "Tokenizer testen"
@@ -86,7 +87,7 @@ Ein Scratchpad besteht aus `source\`, `environment\`, `temporary\` und `results\
 & $cli session release --session 4 --reason "Diagnose in results geprüft"
 ```
 
-**Hängende Experimente.** Die Ansicht **Experimente** und die Übersicht melden Sessions, die feststecken, mit Auslöser und nächstem Schritt:
+**Hängende Sessions.** Die Übersicht meldet Sessions, die feststecken, mit Auslöser und nächstem Schritt; **Ressourcen ansehen** führt zum Scratchpad:
 
 | Zustand | Auslöser | Freigabe möglich |
 |---|---|---|
@@ -99,7 +100,9 @@ Ein Scratchpad besteht aus `source\`, `environment\`, `temporary\` und `results\
 
 Weitere Aktionen: `scratch adopt` (bestehenden Ordner übernehmen), `scratch protect`, `scratch extend --days 7`, `scratch promote` (zum Projekt machen; Ablaufregel entfällt, Historie bleibt). Integrationen ohne verwalteten Lauf können `session register` und `session complete` nutzen; das ist ein schwächerer Beleg.
 
-`scratch-root` legt nur den Ort für neue Scratchpads fest. Für bestehende Experimente einen Suchordner hinzufügen: **Projekte → Funde → Suchordner hinzufügen …** (oder `& $cli system approve --kind projects --path C:\dev`) und erfassen. Unter **Projekte → Funde** erscheinen Projekte, Skripte, Notebooks, Umgebungen, Ausgaben und Testdaten mit Belegen, dazu die bei der Projekterfassung erkannten Umgebungen und Build-Ausgaben; **Projekt zuordnen** bestätigt Besitzer und optionalen Zweck. Die Einstellung selbst löst keine Suche oder Lesefreigabe aus.
+`scratch-root` legt nur den Ort für neue Scratchpads fest. Bestehende Projekte und Scratchpads findet die Namenssuche: einen Suchordner über **Projekte → Funde → Suchordner hinzufügen …** (oder `& $cli system approve --kind projects --path C:\dev`) oder ein ganzes Laufwerk über **Speicher → Projekte suchen** (oder `& $cli system approve --kind projects --path D:\`), danach erfassen. Unter **Projekte → Funde** erscheinen Projekte, Skripte, Notebooks, Umgebungen, Ausgaben und Testdaten mit Belegen, dazu die bei der Projekterfassung erkannten Umgebungen und Build-Ausgaben; **Projekt zuordnen** bestätigt Besitzer und optionalen Zweck. Die Einstellung selbst löst keine Suche oder Lesefreigabe aus.
+
+**Laufwerkssuche.** **Projekte suchen** auf einer Laufwerkskarte erteilt mit einem Klick eine Namenssuche für die ganze lokale Festplatte, gebunden an ihre Identität, und startet sie. Gelesen werden nur Ordner- und Dateinamen. Übersprungen werden Windows, Programme, ProgramData, Wiederherstellungs- und Updateordner, `Users\Default`, im Benutzerprofil `AppData`, `scoop`, `go\pkg` und Punktordner von Werkzeugen (`.cargo`, `.rustup`, `.claude` …) sowie Programmordner (`.exe` neben `.dll` ohne Projektmarker) und Spielebibliotheken. Ordner ohne Zugriffsrecht zählen als ausgelassen. Einzelne lose Skripte werden auf einem Laufwerk nicht gelistet; ab zwei Skripten oder einem Notebook in einem Ordner ohne Projektmarker erscheint der Ordner als mögliches Scratchpad. Ein Durchgang ist auf 2 Mio. Einträge, 32 Ebenen und drei Minuten begrenzt; reicht das nicht, bleibt er teilweise und zeigt den letzten vollständigen Stand. Die Freigabe steht unter **Einstellungen → Lesefreigaben** als „Laufwerk D:“ und lässt sich dort widerrufen. Netzlaufwerke, Wechselmedien und optische Laufwerke lassen sich nur ordnerweise durchsuchen; ein ganzes Laufwerk wird nie ausgemessen.
 
 **Speicher** zeigt Laufwerke mit belegtem/freiem Speicher und gemessenen logischen Projektanteilen. **Größe messen** arbeitet nur in freigegebenen Projektbereichen. Unter **Ordnerstruktur** einen freigegebenen Ordner wählen und Unterordner öffnen. Suchfreigaben zeigen nur Namen; begrenzte oder fehlende Messungen bleiben unbekannt. **Aktualisieren** erneuert die Laufwerksmetadaten und die offene Ordneransicht.
 
@@ -186,7 +189,7 @@ Deinstallation: `dist\mogumogu` löschen und optional `%LOCALAPPDATA%\mogumogu`.
 
 ## 8. Tastatur im Dashboard
 
-`Strg+K` (auch `Strg+F`) Suche über alle Bereiche, `Enter` öffnet den ersten Treffer · `Strg+N` geführter Einstieg (Projekt hinzufügen) · `F5` Ansicht neu laden · `F1` Hilfe mit Tastenkürzeln und CLI-Befehlen · `Alt+1` … `Alt+7` Bereiche in der Reihenfolge der Seitenleiste (Übersicht bis Einstellungen) · `Tab`/`Umschalt+Tab` Fokus · `Leertaste`/`Enter` auslösen · `Esc` schließt Dialog, Suche oder Einstieg.
+`Strg+K` (auch `Strg+F`) Suche über alle Bereiche, `Enter` öffnet den ersten Treffer · `Strg+N` geführter Einstieg (Projekt hinzufügen) · `F5` Ansicht neu laden · `F1` Hilfe mit Tastenkürzeln und CLI-Befehlen · `Alt+1` … `Alt+6` Bereiche in der Reihenfolge der Seitenleiste (Übersicht bis Einstellungen) · `Tab`/`Umschalt+Tab` Fokus · `Leertaste`/`Enter` auslösen · `Esc` schließt Dialog, Suche oder Einstieg.
 
 Die Suche durchsucht nur bereits erfasste Metadaten (Projektnamen und -pfade, Paketnamen und Versionen, Ressourcen, KI-Einträge, Systembefund) und braucht mindestens zwei Zeichen.
 

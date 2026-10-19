@@ -49,7 +49,6 @@ fn later(f: impl FnOnce(&mut Desktop) + 'static) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Form {
     None,
-    Scratch,
     Release(i64),
     Candidate,
 }
@@ -83,7 +82,6 @@ struct Desktop {
     form: Form,
     package_query: PackageQuery,
     package_key: Option<String>,
-    experiment: Option<i64>,
     search_hits: Vec<SearchHit>,
     folder_tree: Option<mogumogu::domain::FolderTree>,
     folder_pending: Option<(i64, String)>,
@@ -181,7 +179,6 @@ pub fn run(config: Config, show: bool) -> Result<(), Box<dyn std::error::Error>>
             form: Form::None,
             package_query: PackageQuery::default(),
             package_key: None,
-            experiment: None,
             search_hits: Vec::new(),
             folder_tree: None,
             folder_pending: None,
@@ -248,11 +245,8 @@ impl Desktop {
 
     fn render_snapshot(&self) {
         if let Some(ui) = &self.dashboard {
-            let state = view::ViewState {
-                package_key: self.package_key.as_deref(),
-                experiment: self.experiment,
-                scanning: self.control.progress().running,
-            };
+            let state =
+                view::ViewState { package_key: self.package_key.as_deref(), scanning: self.control.progress().running };
             view::render_snapshot(ui, &self.snapshot, &self.data_path, &state);
             view::render_status(ui, self.busy, &self.status);
             self.maybe_open_guide(ui);
@@ -291,9 +285,6 @@ impl Desktop {
             if let Some(ui) = &self.dashboard {
                 disk::clear_tree(ui, "Lesefreigabe nicht mehr gültig. Ordner erneut freigeben.");
             }
-        }
-        if self.experiment.is_none_or(|id| !self.snapshot.resources.iter().any(|r| r.id == id)) {
-            self.experiment = view::default_experiment(&self.snapshot);
         }
         self.memory.review_count = self.snapshot.review_count();
         self.memory.last_scan_at = self.snapshot.last_scan_at;
@@ -563,6 +554,11 @@ impl Desktop {
             Request::Scan { .. } => {
                 let (text, kind) = view::scan_notice(&value, &self.snapshot);
                 self.notify(&text, kind);
+                if view::searched(&value, &self.snapshot)
+                    && let Some(ui) = &self.dashboard
+                {
+                    view::render_scan_link(ui, "Funde ansehen", 1, 2);
+                }
                 self.status = text;
             }
             Request::MeasureResource { .. } | Request::MeasureScope { .. } => {
@@ -717,10 +713,6 @@ impl Desktop {
                     "Behalten-Vormerkung gelöst."
                 }
                 .into();
-            }
-            Request::ScratchCreate { .. } => {
-                self.close_modal();
-                self.status = "Scratchpad angelegt (source, environment, temporary, results).".into();
             }
             Request::SessionRelease { .. } => {
                 self.close_modal();

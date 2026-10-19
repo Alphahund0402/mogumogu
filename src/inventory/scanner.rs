@@ -104,7 +104,9 @@ impl ProjectScan<'_> {
             .find_map(|a| a.claim_dir(&pending.name, &pending.parent_names, &child_names).map(|c| (*a, c)));
         match claim {
             Some((adapter, claim)) => {
-                self.result.items.extend(super::discovery::inspect_directory(&pending.rel, &entries, Some("")).items);
+                self.result
+                    .items
+                    .extend(super::discovery::inspect_directory(&pending.rel, &entries, Some(""), false).items);
                 let mut errors = Vec::new();
                 let mut access =
                     HandleAccess { base: child, rel: pending.rel.clone(), budget: self.budget, errors: &mut errors };
@@ -121,7 +123,7 @@ impl ProjectScan<'_> {
     }
 
     fn process(&mut self, dir: Rc<DirHandle>, rel: String, depth: u32, entries: &[DirEntryInfo]) {
-        self.result.items.extend(super::discovery::inspect_directory(&rel, entries, Some("")).items);
+        self.result.items.extend(super::discovery::inspect_directory(&rel, entries, Some(""), false).items);
         let names = Rc::new(entries.iter().filter_map(|e| e.name_str().map(str::to_string)).collect::<Vec<_>>());
         for entry in entries {
             if !self.budget.entry() {

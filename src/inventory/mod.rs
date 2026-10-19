@@ -61,11 +61,13 @@ pub fn scan(request: &ScanRequest) -> ScanOutcome {
             return ScanOutcome { result, failure: Some(failure) };
         }
     };
+    // Only a names-only search can be approved for a whole drive.
+    let drive = crate::validation::drive_root(&request.path.to_string_lossy()).is_ok();
     let mut budget = Budget::with_control(request.limits, request.control.clone());
     let root = Rc::new(root.into_handle());
     let mut result = match request.kind {
         ScopeKind::Project => scanner::scan_project(Rc::clone(&root), &mut budget),
-        ScopeKind::ProjectSearch => discovery::scan(Rc::clone(&root), &mut budget),
+        ScopeKind::ProjectSearch => discovery::scan(Rc::clone(&root), &mut budget, drive),
         ScopeKind::Scoop | ScopeKind::Chocolatey => {
             scanner::scan_system_root(request.kind, Rc::clone(&root), &mut budget)
         }

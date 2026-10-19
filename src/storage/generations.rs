@@ -50,6 +50,12 @@ pub struct PublishReport {
 const ITEM_COLUMNS: &str =
     "category, ecosystem, name, version, install_state, source, source_host, rel_path, detail, bytes, evidence";
 
+/// Projects and scratchpads before what lies in them: a drive search finds
+/// far more environments and caches than one dashboard page holds.
+const DISCOVERY_ORDER: &str = "CASE json_extract(evidence, '$.discovery.kind')
+    WHEN 'project' THEN 0 WHEN 'scratchpad' THEN 1 WHEN 'notebook' THEN 2 WHEN 'script' THEN 3
+    WHEN 'test_data' THEN 4 WHEN 'database' THEN 5 ELSE 6 END";
+
 fn map_item(row: &Row<'_>, offset: usize) -> rusqlite::Result<InventoryItem> {
     Ok(InventoryItem {
         category: row.get(offset)?,
@@ -166,7 +172,7 @@ impl Repository {
             &format!(
                 "SELECT {ITEM_COLUMNS} FROM inventory_items WHERE generation_id =
                    (SELECT id FROM generations WHERE scope_id = ?1 AND state = 'complete' ORDER BY id DESC LIMIT 1)
-                   AND ecosystem = 'discovery' ORDER BY item_key LIMIT ?2"
+                   AND ecosystem = 'discovery' ORDER BY {DISCOVERY_ORDER}, item_key LIMIT ?2"
             ),
             params![scope_id, limit.min(limits::UI_PAGE as usize) as i64],
             |row| map_item(row, 0),

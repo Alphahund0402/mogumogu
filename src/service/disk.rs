@@ -56,6 +56,8 @@ impl Core {
                     used_bytes: None,
                     project_bytes: None,
                     status: "Laufwerk nicht verfügbar oder nicht unterstützt".into(),
+                    searchable: false,
+                    search: None,
                 });
             }
         }
@@ -66,6 +68,20 @@ impl Core {
             } else {
                 members.iter().try_fold(0_u64, |sum, p| sum.checked_add(p.bytes?))
             };
+            drive.search = scopes
+                .iter()
+                .find(|s| {
+                    s.kind == ScopeKind::ProjectSearch
+                        && s.status != ScopeStatus::Revoked
+                        && s.path.eq_ignore_ascii_case(&drive.root)
+                })
+                .map(|s| DriveSearch {
+                    scope_id: s.id,
+                    status: s.status,
+                    findings: s.published.as_ref().map(|g| g.items),
+                    checked_at: s.latest.as_ref().and_then(|g| g.finished_at),
+                    partial: s.latest.is_some() && !s.current(),
+                });
         }
         overview.scopes = if self.is_demo() {
             projects
@@ -355,6 +371,8 @@ fn demo_drives() -> Vec<DriveUsage> {
             used_bytes: Some(total - free),
             project_bytes: None,
             status: "Synthetische Beispieldaten".into(),
+            searchable: true,
+            search: None,
         })
         .collect()
 }

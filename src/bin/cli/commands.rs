@@ -19,7 +19,7 @@ Projekte und Lesefreigaben (Registrierung ≠ Lesefreigabe)
   project register --name NAME --path C:\dev\projekt
   project approve --project ID           Ordner identitätsgebunden zum Lesen freigeben
   system approve --kind scoop|chocolatey|winget|npm-global|uv-tools|python|cargo-tools|nuget-cache [--path PFAD]
-  system approve --kind projects --path PFAD   Projektsuche, nur Dateinamen
+  system approve --kind projects --path PFAD   Projektsuche, nur Dateinamen; PFAD auch D:\ für eine lokale Festplatte
   system approve --kind user-ai --path PFAD    bekannter KI-Benutzerordner, z. B. %USERPROFILE%\.claude
   system findings [--refresh]            Suchpfad und bekannte Orte, nur Metadaten, nichts gestartet
   search TEXT                            Projekte, Pakete, Ressourcen, KI und System

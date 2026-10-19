@@ -2,18 +2,18 @@ import { ListView } from "std-widgets.slint";
 import "../assets/fonts/zen-maru-gothic/ZenMaruGothic-Regular.ttf";
 import "../assets/fonts/zen-maru-gothic/ZenMaruGothic-Bold.ttf";
 import { Theme, Icons } from "theme.slint";
-import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, SessionRow, PlanRow,
+import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, PlanRow,
          DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
-         ExperimentRow, FolderRow, ChainStep } from "store.slint";
+         ChainStep } from "store.slint";
 import { Icon, NavItem, UiButton, Mascot, MascotPlate, SpeechBubble, PillField, Card, StatusChip, Activatable } from "components.slint";
 import { OverviewPage } from "pages/overview.slint";
 import { StoragePage } from "pages/storage.slint";
-import { ProjectsPage, PackagesPage, AiPage, ExperimentsPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
+import { ProjectsPage, PackagesPage, AiPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
 import { DialogLayer } from "dialogs.slint";
 
-export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, SessionRow, PlanRow,
+export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, PlanRow,
          DetailRow, DetailAction, SourceToggle, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
-         ExperimentRow, FolderRow, ChainStep }
+         ChainStep }
 
 component Sidebar inherits Rectangle {
     width: 188px;
@@ -30,8 +30,7 @@ component Sidebar inherits Rectangle {
         NavItem { label: "Projekte"; icon: Icons.folder; selected: Store.page == 1; activated => { Store.page = 1; } }
         NavItem { label: "Pakete"; icon: Icons.package; selected: Store.page == 2; activated => { Store.page = 2; } }
         NavItem { label: "KI-Konfiguration"; icon: Icons.spark; selected: Store.page == 3; activated => { Store.page = 3; } }
-        NavItem { label: "Experimente"; icon: Icons.flask; badge: Store.stalled-count > 0 ? Store.stalled-count : ""; selected: Store.page == 4; activated => { Store.page = 4; } }
-        NavItem { label: "Speicher"; icon: Icons.drive; selected: Store.page == 5; activated => { Store.page = 5; } }
+        NavItem { label: "Speicher"; icon: Icons.drive; selected: Store.page == 4; activated => { Store.page = 4; } }
         // Mochi takes the space that is left. Fixed layout constants keep the
         // area's size independent of its absolutely placed contents.
         mochi-area := Rectangle {
@@ -50,7 +49,7 @@ component Sidebar inherits Rectangle {
             Mascot { x: 4px; y: parent.height - parent.figure; width: parent.figure; height: parent.figure; pose: Store.mascot-pose; }
         }
         Rectangle { height: 1.5px; background: Theme.edge; }
-        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 6; activated => { Store.page = 6; } }
+        NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 5; activated => { Store.page = 5; } }
         HorizontalLayout {
             height: 24px; padding-left: 10px; padding-right: 4px;
             Text { text: "v" + Store.version; font-size: 10.5px; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; }
@@ -145,6 +144,10 @@ component ScanStrip inherits Rectangle {
             Rectangle { x: 0; width: parent.width * clamp(Store.scan-progress, 0.04, 1.0); background: Theme.chart-blue; border-radius: 4px; }
         }
         if !root.done : UiButton { y: (parent.height - self.height) / 2; small: true; label: Store.scan-cancelling ? "Wird angehalten …" : "Abbrechen"; available: !Store.scan-cancelling; activated => { Actions.cancel-scan(); } }
+        if root.done && Store.scan-notice-link != "" : UiButton {
+            y: (parent.height - self.height) / 2; small: true; label: Store.scan-notice-link; available: true;
+            activated => { Store.open(Store.scan-notice-page, Store.scan-notice-tab); Store.scan-notice = ""; }
+        }
         if root.done : UiButton { y: (parent.height - self.height) / 2; small: true; label: "Schließen"; available: true; activated => { Store.scan-notice = ""; } }
     }
 }
@@ -201,7 +204,6 @@ export component Dashboard inherits Window {
                     if event.text == "4" { Store.page = 3; return accept; }
                     if event.text == "5" { Store.page = 4; return accept; }
                     if event.text == "6" { Store.page = 5; return accept; }
-                    if event.text == "7" { Store.page = 6; return accept; }
                 }
             }
             return reject;
@@ -219,9 +221,8 @@ export component Dashboard inherits Window {
                         if Store.page == 1 : ProjectsPage { }
                         if Store.page == 2 : PackagesPage { }
                         if Store.page == 3 : AiPage { }
-                        if Store.page == 4 : ExperimentsPage { }
-                        if Store.page == 5 : StoragePage { }
-                        if Store.page == 6 : SettingsPage { }
+                        if Store.page == 4 : StoragePage { }
+                        if Store.page == 5 : SettingsPage { }
                     }
                     if Store.guide-open : GuideOverlay { width: parent.width; height: parent.height; }
                 }
@@ -281,7 +282,7 @@ export component MoguTray inherits SystemTrayIcon {
             MenuSeparator { }
             MenuItem { title: root.monitoring ? "Ausschalten" : "Einschalten"; activated => { root.set-monitoring(!root.monitoring); } }
         }
-        MenuItem { title: "Einstellungen …"; activated => { root.show-page(6); } }
+        MenuItem { title: "Einstellungen …"; activated => { root.show-page(5); } }
         MenuSeparator { }
         MenuItem { title: "mogumogu beenden"; activated => { root.exit-app(); } }
     }

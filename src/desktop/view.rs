@@ -13,7 +13,6 @@ use std::rc::Rc;
 #[derive(Debug)]
 pub struct ViewState<'a> {
     pub package_key: Option<&'a str>,
-    pub experiment: Option<i64>,
     pub scanning: bool,
 }
 
@@ -69,14 +68,6 @@ fn stalled(snapshot: &Snapshot, now: i64) -> Vec<(i64, &Session, Stall)> {
         .collect()
 }
 
-pub fn default_experiment(snapshot: &Snapshot) -> Option<i64> {
-    let now = SystemClock.now();
-    stalled(snapshot, now)
-        .first()
-        .map(|(id, ..)| *id)
-        .or_else(|| snapshot.resources.iter().find(|r| r.kind == ResourceKind::Scratchpad).map(|r| r.id))
-}
-
 pub fn candidate_owner(candidate: &ProjectCandidate) -> String {
     if !candidate.project.is_empty() {
         if candidate.resource_id.is_some() {
@@ -106,6 +97,7 @@ pub fn render_candidates(ui: &Dashboard, snapshot: &Snapshot) {
             let kind_matches = match filter {
                 1 => !c.registered,
                 2 => matches!(c.kind, DiscoveryKind::Scratchpad | DiscoveryKind::Notebook | DiscoveryKind::Script),
+                5 => c.kind == DiscoveryKind::Project,
                 3 => matches!(
                     c.kind,
                     DiscoveryKind::Environment
@@ -180,8 +172,18 @@ fn candidate_name(snapshot: &Snapshot, c: &ProjectCandidate) -> String {
 }
 
 /// Last component of a Windows path, for titles that must not lose it.
+/// A search folder by its name, a whole drive as `Laufwerk D:`.
+pub fn search_label(path: &str) -> String {
+    let label = folder_label(path);
+    if label.starts_with("Laufwerk ") { label } else { format!("Suchordner {label}") }
+}
+
 pub fn folder_label(path: &str) -> String {
-    path.trim_end_matches('\\').rsplit('\\').next().filter(|n| !n.is_empty()).unwrap_or(path).to_string()
+    let trimmed = path.trim_end_matches('\\');
+    if trimmed.len() == 2 && trimmed.ends_with(':') {
+        return format!("Laufwerk {trimmed}");
+    }
+    trimmed.rsplit('\\').next().filter(|n| !n.is_empty()).unwrap_or(path).to_string()
 }
 
 pub fn artifact_label(category: ItemCategory) -> &'static str {
@@ -238,14 +240,12 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
     let stalls = stalled(snapshot, now);
     let stalled_ids: Vec<i64> =
         stalls.iter().filter(|(.., st)| *st != Stall::LongRunning).map(|(id, ..)| *id).collect();
-    store.set_stalled_count(stalls.iter().filter(|(.., st)| *st != Stall::LongRunning).count() as i32);
 
     render_mascot(&store, snapshot, &settings, state, stalled_ids.len(), now);
     render_attention(&store, snapshot, &stalls);
     render_projects(ui, snapshot);
     render_resources(ui, snapshot);
     render_packages(ui, &snapshot.packages, state.package_key);
-    render_experiments(ui, snapshot, state.experiment);
     render_system(&store, snapshot, now);
     super::disk::render(ui, &snapshot.disks);
 
@@ -358,7 +358,13 @@ fn render_mascot(
     } else if let Some(until) = settings.pause_pending(now).filter(|_| !snapshot.demo) {
         (5, format!("Überwachung pausiert bis {}.", display_time(until)))
     } else if stalled > 0 && !snapshot.demo {
-        (6, format!("{stalled} Experiment{} wartet auf deine Entscheidung.", if stalled == 1 { "" } else { "e" }))
+        (
+            6,
+            match stalled {
+                1 => "Eine Scratchpad-Session wartet auf deine Entscheidung.".to_string(),
+                n => format!("{n} Scratchpad-Sessions warten auf deine Entscheidung."),
+            },
+        )
     } else if partial {
         (6, "Ein Ordner ist nur teilweise erfasst.".to_string())
     } else if !snapshot.demo && snapshot.projects.is_empty() {
@@ -411,13 +417,13 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot, stalls: &[(i64, &Ses
     if !stuck.is_empty() {
         cards.push(card(
             "alert",
-            "Experiment hängt",
+            "Session hängt",
             stuck.len(),
             names(stuck.iter().map(|(id, ..)| name_of(*id)).collect()),
-            format!("{} · prüfe die Ergebnisse und gib die Session frei", stuck[0].2.label()),
-            "Öffnen",
-            4,
-            0,
+            format!("{} · öffne das Scratchpad, prüfe die Ergebnisse und gib die Session frei", stuck[0].2.label()),
+            "Ressourcen ansehen",
+            1,
+            1,
         ));
     }
     if snapshot.packages.counts.deprecated > 0 {
@@ -678,124 +684,6 @@ pub fn render_packages(ui: &Dashboard, report: &PackageReport, selected: Option<
     }
 }
 
-fn experiment_state(snapshot: &Snapshot, scratch: &Resource, now: i64) -> (&'static str, &'static str) {
-    let sessions: Vec<&Session> = snapshot.sessions.iter().filter(|s| s.scratch_id == scratch.id).collect();
-    if sessions.iter().any(|s| s.stall(now).is_some_and(|st| st != Stall::LongRunning)) {
-        ("Hängt", "alert")
-    } else if sessions.iter().any(|s| matches!(s.state, SessionState::Starting | SessionState::Running)) {
-        ("Läuft", "running")
-    } else if scratch.review_at.is_some_and(|at| at <= now) {
-        ("Prüftermin", "review")
-    } else if sessions.iter().any(|s| s.state == SessionState::CompletedVerified) {
-        ("Geprüft", "ok")
-    } else {
-        ("Ruhig", "neutral")
-    }
-}
-
-pub fn render_experiments(ui: &Dashboard, snapshot: &Snapshot, selected: Option<i64>) {
-    let store = ui.global::<Store>();
-    let now = SystemClock.now();
-    let project_name = |id: Option<i64>| {
-        id.and_then(|id| snapshot.projects.iter().find(|p| p.id == id))
-            .map_or("ohne Projekt".to_string(), |p| p.name.clone())
-    };
-    let scratches: Vec<&Resource> = snapshot.resources.iter().filter(|r| r.kind == ResourceKind::Scratchpad).collect();
-    store.set_experiments(model(
-        scratches
-            .iter()
-            .map(|r| {
-                let (state, kind) = experiment_state(snapshot, r, now);
-                ExperimentRow {
-                    id: r.id as i32,
-                    name: s(&r.name),
-                    project: s(project_name(r.project_id)),
-                    purpose: s(r.purpose.clone().unwrap_or_else(|| "ohne Zweck".into())),
-                    state: s(state),
-                    state_kind: s(kind),
-                }
-            })
-            .collect(),
-    ));
-    let Some(scratch) = selected.and_then(|id| scratches.iter().find(|r| r.id == id)) else {
-        store.set_experiment_id(-1);
-        return;
-    };
-    store.set_experiment_id(scratch.id as i32);
-    store.set_experiment_name(s(&scratch.name));
-    store.set_experiment_path(s(&scratch.path));
-    let (review, review_kind) = match scratch.review_at {
-        Some(at) if at <= now => {
-            (format!("Prüftermin {}", display_relative(at, now).replace("vor ", "seit ")), "review")
-        }
-        Some(at) => (format!("Prüftermin in {} Tagen", ((at - now) / DAY).max(0)), "neutral"),
-        None => (String::new(), "neutral"),
-    };
-    store.set_experiment_review(s(review));
-    store.set_experiment_review_kind(s(review_kind));
-    let sessions: Vec<&Session> = snapshot.sessions.iter().filter(|s| s.scratch_id == scratch.id).collect();
-    let mut stall_text = String::new();
-    store.set_experiment_sessions(model(
-        sessions
-            .iter()
-            .map(|session| {
-                let stall = session.stall(now);
-                let releasable = stall.is_some_and(|st| st != Stall::LongRunning);
-                if releasable && stall_text.is_empty() {
-                    stall_text = format!(
-                        "Session {}: {} ({}). Die Sperre bleibt; prüfe results\\ und gib sie begründet frei oder führe erneut aus.",
-                        session.id,
-                        stall.map_or("", Stall::label),
-                        display_relative(now - session.quiet_for(now), now)
-                    );
-                }
-                SessionRow {
-                    id: session.id as i32,
-                    scratch: s(&scratch.name),
-                    scratch_id: scratch.id as i32,
-                    purpose: s(&session.purpose),
-                    state: s(session.state.label()),
-                    state_kind: s(match session.state {
-                        _ if releasable => "alert",
-                        SessionState::Starting | SessionState::Running | SessionState::CompletionRequested => "running",
-                        SessionState::CompletedVerified | SessionState::ReleasedAfterReview => "ok",
-                        SessionState::InterruptedUnknown => "alert",
-                    }),
-                    started: s(display_relative(session.started_at, now)),
-                    stall: s(stall.map_or("", Stall::label)),
-                    releasable,
-                    note: s(session.note.clone().unwrap_or_default()),
-                }
-            })
-            .collect(),
-    ));
-    store.set_experiment_stall(s(stall_text));
-    let children: Vec<&Resource> = snapshot.resources.iter().filter(|r| r.parent_id == Some(scratch.id)).collect();
-    let locked = sessions.iter().any(|s| s.state.locks_resources());
-    store.set_experiment_plannable(
-        !locked && children.iter().any(|c| c.kind == ResourceKind::Temporary && c.expendable && !c.protected),
-    );
-    store.set_experiment_folders(model(
-        children
-            .iter()
-            .map(|c| {
-                let (fate, kind) = match c.kind {
-                    ResourceKind::Source | ResourceKind::Results => ("Bleibt", "ok"),
-                    ResourceKind::Temporary if c.expendable => ("Entbehrlich markiert", "review"),
-                    ResourceKind::Temporary => ("Bleibt, bis markiert", "neutral"),
-                    _ => ("Separat prüfen", "neutral"),
-                };
-                FolderRow {
-                    name: s(format!("{}\\", c.path.rsplit('\\').next().unwrap_or(&c.name))),
-                    size: s(format_bytes(c.bytes)),
-                    fate: s(fate),
-                    fate_kind: s(kind),
-                }
-            })
-            .collect(),
-    ));
-}
-
 fn render_system(store: &Store<'_>, snapshot: &Snapshot, now: i64) {
     let row = |f: &SystemFinding| {
         let evidence_kind = match f.evidence {
@@ -874,6 +762,7 @@ pub fn scan_notice(value: &Value, snapshot: &Snapshot) -> (String, &'static str)
     let name = |report: &Value| {
         let id = report["scope_id"].as_i64();
         match snapshot.scopes.iter().find(|scope| Some(scope.id) == id) {
+            Some(scope) if scope.kind == ScopeKind::ProjectSearch => search_label(&scope.path),
             Some(scope) => scope
                 .project_id
                 .and_then(|project| snapshot.projects.iter().find(|p| p.id == project))
@@ -902,7 +791,15 @@ pub fn scan_notice(value: &Value, snapshot: &Snapshot) -> (String, &'static str)
     };
     let sum = |key: &str| reports.iter().filter_map(|r| r[key].as_u64()).sum::<u64>();
     let (added, removed, changed) = (sum("added"), sum("removed"), sum("changed"));
-    let text = if reports.iter().all(|r| r["baseline"] == true) {
+    let searches = reports.iter().all(|r| {
+        snapshot.scopes.iter().any(|s| Some(s.id) == r["scope_id"].as_i64() && s.kind == ScopeKind::ProjectSearch)
+    });
+    let text = if searches {
+        match sum("items") {
+            1 => format!("{subject} durchsucht · 1 Fund."),
+            n => format!("{subject} durchsucht · {n} Funde."),
+        }
+    } else if reports.iter().all(|r| r["baseline"] == true) {
         format!("{subject} erfasst · Vergleichsbasis erstellt.")
     } else if added + removed + changed == 0 {
         format!("{subject} erfasst · keine Änderungen seit der letzten Erfassung.")
@@ -916,6 +813,28 @@ pub fn render_scan_notice(ui: &Dashboard, text: &str, kind: &str) {
     let store = ui.global::<Store>();
     store.set_scan_notice_kind(s(kind));
     store.set_scan_notice(s(text));
+    store.set_scan_notice_link(s(""));
+}
+
+/// A button in the result strip that opens where the result lives.
+pub fn render_scan_link(ui: &Dashboard, label: &str, page: i32, tab: i32) {
+    let store = ui.global::<Store>();
+    store.set_scan_notice_link(s(label));
+    store.set_scan_notice_page(page);
+    store.set_scan_notice_tab(tab);
+}
+
+/// A completed pass over a search folder or drive: its findings are new.
+pub fn searched(value: &Value, snapshot: &Snapshot) -> bool {
+    value.as_array().is_some_and(|reports| {
+        reports.iter().any(|r| {
+            r["state"] == "complete"
+                && snapshot
+                    .scopes
+                    .iter()
+                    .any(|s| Some(s.id) == r["scope_id"].as_i64() && s.kind == ScopeKind::ProjectSearch)
+        })
+    })
 }
 
 /// Status changes leave the data models and their scroll/focus state intact.
@@ -954,5 +873,4 @@ fn render_settings(store: &Store<'_>, snapshot: &Snapshot, settings: &Settings, 
             .map(|host| SourceToggle { host: s(*host), enabled: settings.update_sources.iter().any(|h| h == host) })
             .collect(),
     ));
-    store.set_scratch_root(s(settings.scratch_root.clone().unwrap_or_default()));
 }

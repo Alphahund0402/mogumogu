@@ -286,3 +286,34 @@ fn global_npm_versions_and_cargo_install_records_are_static_evidence() {
     assert_eq!(items[0].source_host.as_deref(), Some("crates.io"));
     assert!(items[0].detail.contains("nicht geprüft"));
 }
+
+#[test]
+fn projects_and_scratchpads_lead_the_findings_page() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("projects");
+    for index in 0..30 {
+        write(&root, &format!("aaa-{index:02}/run.py"), "never read");
+        write(&root, &format!("aaa-{index:02}/node_modules/dep/index.js"), "dependency");
+    }
+    write(&root, "zzz-app/Cargo.toml", "never read");
+    write(&root, "zzz-tools/a.ps1", "never read");
+    write(&root, "zzz-tools/b.ps1", "never read");
+    write(&root, "zzz-poc/main.py", "never read");
+    let mut core = core(temp.path());
+    let scope = core.approve_system(ScopeKind::ProjectSearch, Some(&path_text(&root))).unwrap();
+    assert_eq!(core.scan(scope).unwrap().state, Some(GenerationState::Complete));
+    let candidates = core.project_candidates().unwrap();
+    let kinds: Vec<(&str, DiscoveryKind)> = candidates.iter().take(3).map(|c| (c.rel_path.as_str(), c.kind)).collect();
+    assert_eq!(
+        kinds,
+        [
+            ("zzz-app", DiscoveryKind::Project),
+            ("zzz-poc", DiscoveryKind::Scratchpad),
+            ("zzz-tools", DiscoveryKind::Scratchpad)
+        ]
+    );
+    let tools = candidates.iter().find(|c| c.rel_path == "zzz-tools").unwrap();
+    assert!(tools.evidence.contains("2 lose Skripte"), "{}", tools.evidence);
+    assert!(candidates.iter().any(|c| c.rel_path == "zzz-tools/a.ps1" && c.kind == DiscoveryKind::Script));
+    assert!(candidates.iter().any(|c| c.kind == DiscoveryKind::Dependencies));
+}

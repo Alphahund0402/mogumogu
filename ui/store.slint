@@ -7,7 +7,6 @@ export struct AiRow { index: int, client: string, kind: string, detail: string, 
 export struct EventRow { title: string, detail: string, time: string, kind: string }
 export struct HintRow { id: int, name: string, kind: string, trigger: string, evidence: string, size: string, protected: bool, plannable: bool, stalled: bool }
 export struct ScopeRow { id: int, name: string, kind: string, path: string, status: string, coverage: string, last: string, watched: bool, healthy: bool }
-export struct SessionRow { id: int, scratch: string, scratch-id: int, purpose: string, state: string, state-kind: string, started: string, stall: string, releasable: bool, note: string }
 export struct PlanRow { id: int, state: string, created: string, summary: string, fingerprint: string }
 export struct DetailRow { label: string, value: string }
 export struct DetailAction { id: string, label: string, primary: bool }
@@ -21,12 +20,8 @@ export struct AttentionCard { kind: string, label: string, count: string, title:
 export struct SystemRow { id: string, name: string, location: string, evidence: string, evidence-kind: string, note: string, approvable: bool, approved: bool, coverage: string, scope-id: int }
 // One hit of the global search.
 export struct SearchRow { area: string, area-label: string, key: string, title: string, detail: string }
-// A scratchpad as an experiment, with the state of its sessions.
-export struct ExperimentRow { id: int, name: string, project: string, purpose: string, state: string, state-kind: string }
-// One managed folder of an experiment.
-export struct FolderRow { name: string, size: string, fate: string, fate-kind: string }
 export struct ChainStep { label: string, detail: string, warn: bool }
-export struct DriveRow { root: string, label: string, kind: string, total: string, used: string, free: string, projects: string, usage: float, project-share: float, note: string }
+export struct DriveRow { root: string, label: string, kind: string, total: string, used: string, free: string, projects: string, usage: float, project-share: float, note: string, search: string, search-id: int, searchable: bool }
 export struct DiskProjectRow { id: int, name: string, path: string, drive: string, size: string, share: string, fraction: float, scope-id: int, note: string }
 export struct TreeScopeRow { id: int, label: string, path: string }
 export struct TreeRow { index: int, name: string, path: string, size: string, is-dir: bool, note: string }
@@ -103,19 +98,6 @@ export global Store {
     in property <string> ai-user-count: "0";
     in property <string> ai-project-count: "0";
 
-    // Experiments
-    in property <[ExperimentRow]> experiments;
-    in property <int> experiment-id: -1;
-    in property <string> experiment-name;
-    in property <string> experiment-path;
-    in property <string> experiment-review;
-    in property <string> experiment-review-kind;
-    in property <[SessionRow]> experiment-sessions;
-    in property <[FolderRow]> experiment-folders;
-    in property <string> experiment-stall;
-    in property <bool> experiment-plannable;
-    in property <int> stalled-count: 0;
-
     // System findings (packages tab 1 and AI tab 1)
     in property <[SystemRow]> system-tools;
     in property <[SystemRow]> system-stores;
@@ -150,7 +132,6 @@ export global Store {
     in property <string> autostart-note;
     in property <string> pause-text;
     in property <[SourceToggle]> sources;
-    in property <string> scratch-root;
     // 0 general, 1 read approvals
     in-out property <int> settings-tab: 0;
 
@@ -162,6 +143,10 @@ export global Store {
     // Empty once closed or timed out.
     in-out property <string> scan-notice;
     in property <string> scan-notice-kind;
+    // Optional button that opens where the result lives (page and tab).
+    in property <string> scan-notice-link;
+    in property <int> scan-notice-page;
+    in property <int> scan-notice-tab;
 
     // Guided start: 0 welcome, 1 folder, 2 approval, 3 scanning, 4 done
     in-out property <bool> guide-open: false;
@@ -177,8 +162,8 @@ export global Store {
     in property <[SearchRow]> search-results;
     in-out property <bool> search-open: false;
 
-    // Navigation: 0 overview, 1 projects, 2 packages, 3 AI, 4 experiments,
-    // 5 storage, 6 settings.
+    // Navigation: 0 overview, 1 projects, 2 packages, 3 AI, 4 storage,
+    // 5 settings.
     in-out property <int> page: 0;
     // Stable keys keep the last opened row visible across view/model rebuilds.
     in-out property <string> selection-kind;
@@ -213,7 +198,7 @@ export global Store {
         if target == 1 { self.project-tab = tab; }
         if target == 2 { self.package-tab = tab; }
         if target == 3 { self.ai-tab = tab; }
-        if target == 6 { self.settings-tab = tab; }
+        if target == 5 { self.settings-tab = tab; }
     }
 }
 
@@ -241,17 +226,13 @@ export global Actions {
     callback add-store();
     callback storage-refresh();
     callback storage-drive(string);
+    callback search-drive(string);
     callback tree-open(int, string);
     callback tree-enter(int);
     callback tree-parent();
-    callback new-scratch();
     callback show-help();
     callback detail-action(string);
     callback submit-form(string, string);
-    // Experiments
-    callback select-experiment(int);
-    callback release-session(int);
-    callback experiment-action(string, int);
     // System
     callback system-refresh();
     callback system-approve(string);
@@ -274,8 +255,6 @@ export global Actions {
     callback set-summary-hour(int);
     callback set-quiet(bool, int, int);
     callback set-autostart(bool);
-    callback save-scratch-root(string);
-    callback browse-scratch-root();
     callback check-updates();
     callback backup-now();
     callback export-now();

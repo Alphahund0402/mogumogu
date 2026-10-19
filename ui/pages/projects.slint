@@ -7,7 +7,7 @@ import { DiscoveryFilters, DiscoveryList } from "discoveries.slint";
 
 export component ProjectsPage inherits PageCard {
     title: "Projekte";
-    description: "Deine Projektordner, die Ressourcen darin und was die Suche in freigegebenen Ordnern gefunden hat.";
+    description: "Deine Projektordner, die Ressourcen darin und was die Suche in Ordnern und Laufwerken gefunden hat.";
     HorizontalLayout {
         spacing: 6px; alignment: start;
         FilterChip { label: "Projekte"; count: Store.project-count; selected: Store.project-tab == 0; activated => { Store.project-tab = 0; } }
@@ -24,7 +24,7 @@ export component ProjectsPage inherits PageCard {
     if Store.project-tab == 1 && Store.resources.length == 0 : VerticalLayout {
         vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
         Text { text: "Noch keine Ressourcen."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
-        Text { text: "Ressourcen entstehen, wenn du ein Scratchpad anlegst oder einen Fund einem Projekt zuordnest."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Ressourcen entstehen, wenn du einen Fund einem Projekt zuordnest."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
     }
     if Store.project-tab == 1 && Store.resources.length > 0 : ListView {
         vertical-stretch: 1;

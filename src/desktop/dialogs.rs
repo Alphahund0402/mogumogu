@@ -1,7 +1,7 @@
 //! Content of the generic detail dialog. Each builder explains *why*
 //! something is shown and offers only the actions that the core allows;
 //! the core still re-checks every action.
-use mogumogu::clock::display_local;
+use mogumogu::clock::{Clock, SystemClock, display_local};
 use mogumogu::domain::*;
 
 #[derive(Debug, Default)]
@@ -147,7 +147,7 @@ pub fn candidate(snapshot: &Snapshot, index: usize) -> Dialog {
 
 pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
     let scope = snapshot.scopes.iter().find(|s| s.project_id == Some(project.id));
-    let mut dialog = Dialog::new(&project.name)
+    let dialog = Dialog::new(&project.name)
         .path(&project.path)
         .row("Technologie", &project.ecosystem)
         .row("Beobachtung", format!("{} – {}", project.state.label(), project.evidence))
@@ -161,14 +161,13 @@ pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
     if snapshot.demo {
         return dialog.body("Dies sind Beispieldaten. Der Demomodus ist schreibgeschützt.");
     }
-    dialog = match scope {
+    match scope {
         None => dialog.action(format!("approve-project:{}", project.id), "Lesefreigabe erteilen", true),
         Some(scope) => dialog
             .action(format!("scan-scope:{}", scope.id), "Jetzt erfassen", true)
             .action(format!("measure-scope:{}", scope.id), "Größe messen", false)
             .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false),
-    };
-    dialog.action(format!("new-scratch:{}", project.id), "Scratchpad anlegen", false)
+    }
 }
 
 pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
@@ -214,12 +213,18 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
     if let Some(purpose) = &resource.purpose {
         dialog = dialog.row("Zweck", purpose);
     }
+    let now = SystemClock.now();
     if !sessions.is_empty() {
         let lines: Vec<String> = sessions
             .iter()
             .map(|s| {
                 let exit = s.exit_code.map_or(String::new(), |c| format!(", Exitcode {c}"));
-                format!("#{} {} – {}{exit}", s.id, s.purpose, s.state.label())
+                let stall = s
+                    .stall(now)
+                    .map(Stall::label)
+                    .filter(|label| *label != s.state.label())
+                    .map_or(String::new(), |label| format!(" · {label}"));
+                format!("#{} {} – {}{exit}{stall}", s.id, s.purpose, s.state.label())
             })
             .collect();
         dialog = dialog.row("Sessions", lines.join("\n"));
@@ -229,6 +234,10 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
     }
     if snapshot.demo || resource.origin == Origin::Demo {
         return dialog.body("Beispieldaten. Der Prototyp erzeugt hier keine ausführbare Freigabe.");
+    }
+    // A stuck session ends only with a reason; nothing is stopped.
+    for session in sessions.iter().filter(|s| s.stall(now).is_some_and(|st| st != Stall::LongRunning)) {
+        dialog = dialog.action(format!("release-session:{}", session.id), "Session begründet freigeben", true);
     }
     let managed_temp = resource.kind == ResourceKind::Temporary && resource.acquisition == Acquisition::Managed;
     if managed_temp && resource.expendable {
@@ -362,7 +371,7 @@ pub const HELP: &str = "Tastenkürzel\n\
 Strg+K  Inventar durchsuchen\n\
 Strg+N  Projekt hinzufügen\n\
 F5  Ansicht neu laden\n\
-Alt+1 … Alt+7  Bereiche in der Reihenfolge der Seitenleiste\n\
+Alt+1 … Alt+6  Bereiche in der Reihenfolge der Seitenleiste\n\
 Esc  Dialog, Suche oder Einstieg schließen\n\n\
 Das Fenster zu schließen beendet mogumogu nicht; es läuft im Tray weiter.\n\n\
 Kommandozeile (mogumogu-cli)\n\

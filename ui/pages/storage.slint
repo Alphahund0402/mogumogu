@@ -7,7 +7,7 @@ import { Card, PageHeader, UiButton, FilterChip, Icon, RowCard } from "../compon
 component DriveCard inherits Card {
     in property <DriveRow> data;
     width: 250px;
-    height: 158px;
+    height: 180px;
     border-color: Store.selected-drive == root.data.root ? Theme.focus : Theme.edge;
     drive-content := VerticalLayout {
         x: 0px; y: 0px; width: root.width; height: self.preferred-height;
@@ -31,9 +31,17 @@ component DriveCard inherits Card {
             text: root.data.used == "Unbekannt" ? root.data.note : root.data.free + " frei · Projekte: " + root.data.projects;
             font-size: 11.5px; color: root.data.used == "Unbekannt" ? Theme.muted : Theme.text; overflow: elide;
         }
+        Text { text: root.data.search; font-size: 11px; color: Theme.muted; overflow: elide; }
         HorizontalLayout {
-            alignment: start;
-            UiButton { small: true; selected: Store.selected-drive == root.data.root; label: Store.selected-drive == root.data.root ? "Ausgewählt" : "Nur dieses Laufwerk"; available: true; activated => { Actions.storage-drive(root.data.root); } }
+            alignment: start; spacing: 6px;
+            UiButton { small: true; selected: Store.selected-drive == root.data.root; label: Store.selected-drive == root.data.root ? "Ausgewählt" : "Auswählen"; available: true; activated => { Actions.storage-drive(root.data.root); } }
+            // One click approves a names-only search of this drive.
+            if root.data.searchable : UiButton {
+                small: true; has-icon: true; icon: Icons.search;
+                label: root.data.search-id > 0 ? "Erneut suchen" : "Projekte suchen";
+                available: !Store.demo && !Store.busy;
+                activated => { Actions.search-drive(root.data.root); }
+            }
         }
     }
 }
@@ -66,7 +74,7 @@ export component StoragePage inherits VerticalLayout {
     min-width: 0px; preferred-width: 0px; spacing: Theme.gap;
     PageHeader {
         title: "Speicher";
-        description: "Belegung deiner Laufwerke, Größe deiner Projekte und ihre Ordnerstruktur.";
+        description: "Belegung deiner Laufwerke, Größe deiner Projekte und ihre Ordnerstruktur. „Projekte suchen“ durchsucht ein ganzes Laufwerk nach Projekten und Scratchpads – nur nach Namen.";
     }
     ScrollView {
         vertical-stretch: 1; content-width: self.visible-width;
@@ -82,11 +90,11 @@ export component StoragePage inherits VerticalLayout {
             drive-grid := Rectangle {
                 property <length> available: Store.window-width - 188px - 2 * Theme.page-padding - 16px;
                 property <int> columns: max(1, floor((self.available + Theme.gap) / (250px + Theme.gap)));
-                height: Store.drives.length == 0 ? 0px : ceil(Store.drives.length / self.columns) * (158px + Theme.gap) - Theme.gap;
+                height: Store.drives.length == 0 ? 0px : ceil(Store.drives.length / self.columns) * (180px + Theme.gap) - Theme.gap;
                 for drive[index] in Store.drives : DriveCard {
                     data: drive;
                     x: mod(index, parent.columns) * (250px + Theme.gap);
-                    y: floor(index / parent.columns) * (158px + Theme.gap);
+                    y: floor(index / parent.columns) * (180px + Theme.gap);
                 }
             }
             if Store.drives.length == 0 : Text { text: "Laufwerksinformationen sind noch nicht verfügbar."; color: Theme.muted; font-size: 12px; wrap: word-wrap; }

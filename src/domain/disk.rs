@@ -1,6 +1,6 @@
 //! Read-only storage observations. Logical file sizes are separate from the
 //! operating system's volume usage and never represent reclaimable space.
-use super::ScopeKind;
+use super::{ScopeKind, ScopeStatus};
 use crate::clock::Timestamp;
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +25,23 @@ pub struct DriveUsage {
     /// if at least one uncovered project has no measurement.
     pub project_bytes: Option<u64>,
     pub status: String,
+    /// A local disk, which may be searched as a whole for projects.
+    #[serde(default)]
+    pub searchable: bool,
+    #[serde(default)]
+    pub search: Option<DriveSearch>,
+}
+
+/// The names-only search of a whole drive, once approved.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct DriveSearch {
+    pub scope_id: i64,
+    pub status: ScopeStatus,
+    /// Findings of the last complete pass; None before the first one.
+    pub findings: Option<i64>,
+    pub checked_at: Option<Timestamp>,
+    /// The newest pass stopped early or met reading errors.
+    pub partial: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

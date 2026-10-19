@@ -73,7 +73,7 @@ export component OverviewPage inherits VerticalLayout {
         FigureTile { value: Store.project-count; caption: "Projekte"; icon: Icons.folder; target: 1; }
         FigureTile { value: Store.package-count; caption: "Paketversionen"; icon: Icons.package; target: 2; }
         FigureTile { value: Store.ai-count; caption: "KI-Dateien"; icon: Icons.spark; target: 3; }
-        FigureTile { value: Store.storage-total; caption: Store.storage-caption; icon: Icons.drive; target: 5; }
+        FigureTile { value: Store.storage-total; caption: Store.storage-caption; icon: Icons.drive; target: 4; }
     }
     if Store.attention.length > 0 : VerticalLayout {
         spacing: 6px;
@@ -111,7 +111,7 @@ export component OverviewPage inherits VerticalLayout {
                     pill: hint.stalled ? "Hängt" : hint.plannable ? "Planbar" : hint.protected ? "Geschützt" : "Prüfen";
                     pill-kind: hint.stalled ? "alert" : hint.plannable ? "review" : hint.protected ? "protected" : "review";
                     label: hint.name + ", " + hint.kind;
-                    activated => { if hint.stalled { Store.open(4, 0); Actions.select-experiment(hint.id); } else { Actions.open-hint(hint.id); } }
+                    activated => { if hint.stalled { Actions.open-resource(hint.id); } else { Actions.open-hint(hint.id); } }
                 }
             }
             if Store.overview-tab == 1 && Store.events.length == 0 : EmptyState {
