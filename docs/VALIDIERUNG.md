@@ -33,6 +33,21 @@ Projektwurzel als „Projekt · .“ und ein per Name gefundener Ordner zusätzl
 als erfasste Umgebung; Lesefreigaben schnitten den Ordnernamen am Pfadende ab;
 der Exportdialog sagte „1 Projekte“. Narrator und Windows 11 bleiben offen.
 
+Windows-CI (19. Oktober): End-to-End-Tests scheiterten zeitweise mit
+„All pipe instances are busy“ nach 120 s. Ein IPC-Mitschnitt auf dem Runner
+zeigte, dass der Server nie eine Verbindung annahm: Die Owner-Prüfung der CLI
+verband und schloss, bevor der Server erstmals `ConnectNamedPipe` aufrief, und
+`accept()` setzte die einzige Instanz danach nicht zurück. Behoben in
+`PipeListener::accept`; außerdem gilt eine belegte Pipe jetzt als laufender
+Owner, statt einen zweiten zu starten. Zwei Plattformtests stellen beide Fälle
+deterministisch nach. Vorher scheiterte 1 von 16 wiederholten Gesamtläufen auf
+dem Runner (zuvor 3 von 3 CI-Läufen); mit der Korrektur trat in 32 Gesamtläufen
+kein Pipe-Stau mehr auf. Davon unabhängig scheiterte
+einmal `windows_cleanup::crash_after_a_completed_batch_reports_partial_success`
+(alle 100 Dateien noch vorhanden); vermutlich hält auf dem Runner kurz ein
+anderer Prozess die frisch erzeugten Dateien offen. Das Bereinigungsmodul
+wurde nicht verändert; der Test braucht den zweiten Review (G5).
+
 ## Ergänzung vom 18. Oktober: UI/UX und Informationsdarstellung
 
 Alle elf nativen Seiten sowie Tabs, Details, Formulare, Einstieg und Statusanzeigen
