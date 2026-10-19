@@ -820,6 +820,13 @@ impl PipeListener {
         if ok == 0 {
             let error = io::Error::last_os_error();
             if error.raw_os_error() != Some(ERROR_PIPE_CONNECTED as i32) {
+                // A client that connected and closed before this call (the
+                // CLI's liveness probe right after the owner started) leaves
+                // the instance closing: every later ConnectNamedPipe fails
+                // with ERROR_NO_DATA and clients only see ERROR_PIPE_BUSY.
+                // Disconnecting makes the instance listen again.
+                // SAFETY: the listener owns this valid pipe handle.
+                unsafe { DisconnectNamedPipe(raw(&self.handle)) };
                 return Err(error);
             }
         }
@@ -888,6 +895,11 @@ impl Drop for PipeConnection<'_> {
             DisconnectNamedPipe(self.handle);
         }
     }
+}
+
+/// Whether `pipe_connect` gave up because every instance stayed busy.
+pub fn pipe_busy(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(ERROR_PIPE_BUSY as i32)
 }
 
 /// Connects to the owner pipe. `Ok(None)` means no owner is running. The

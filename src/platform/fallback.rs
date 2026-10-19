@@ -137,6 +137,9 @@ impl io::Write for PipeConnection<'_> {
 pub fn pipe_connect(_: &str, _: Duration) -> io::Result<Option<File>> {
     unsupported()
 }
+pub fn pipe_busy(_: &io::Error) -> bool {
+    false
+}
 pub fn uninstall_entries(_: usize) -> io::Result<(Vec<UninstallEntry>, bool)> {
     unsupported()
 }

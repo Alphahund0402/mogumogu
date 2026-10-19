@@ -23,9 +23,14 @@ impl Client {
         Ok(Self { pipe: config.pipe_name()?, timeout: IPC_CLIENT_TIMEOUT })
     }
 
-    /// True if an owner process answers on the pipe.
+    /// True if an owner process holds the pipe. A busy pipe counts: the
+    /// owner is serving another request, and starting a second owner would
+    /// only fail. Its identity is still verified when a call connects.
     pub fn owner_running(&self) -> bool {
-        matches!(crate::platform::pipe_connect(&self.pipe, Duration::from_millis(500)), Ok(Some(_)))
+        match crate::platform::pipe_connect(&self.pipe, Duration::from_millis(500)) {
+            Ok(found) => found.is_some(),
+            Err(error) => crate::platform::pipe_busy(&error),
+        }
     }
 
     pub fn call(&self, request: Request) -> Result<Value> {
