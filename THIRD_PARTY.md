@@ -31,5 +31,8 @@
   Der native Build legt die vollständige Fontlizenz als `FONT-LICENSE.txt` bei.
   Der handgeschriebene mogumogu-Schriftzug ist Rasterkunst, keine Fontdatei.
 - `docs/screenshots/` zeigen die native Anwendung mit Demodaten bzw. diesem Repository.
+- Der Docker-Build (`--target windows-exe`) linkt mit mingw-w64; dessen Start- und
+  Laufzeitobjekte sowie libgcc stehen unter freizügigen Lizenzen bzw. der
+  GCC-Runtime-Library-Exception und sind mit GPL-3.0-only vereinbar.
 
 Dokumentation der verwendeten APIs: `docs/QUELLEN.md`.

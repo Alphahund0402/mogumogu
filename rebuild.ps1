@@ -6,13 +6,18 @@ CLI geordnet beendet (gleicher Modus, gleiches Datenverzeichnis) und danach
 mit ihren Argumenten wieder im Tray gestartet; ein Prozess wird nie hart
 beendet. Installiert nichts und ändert keine Einstellungen.
 
+Ohne installiertes Rust baut es im Docker-Container (nur Docker Desktop nötig):
+die GNU-Toolchain kompiliert dort die Windows-Programme, die danach wie gewohnt
+nativ unter Windows laufen.
+
   .\rebuild.ps1               Release-Build ohne Tests (schnell)
-  .\rebuild.ps1 -Test         vorher die Testsuite
+  .\rebuild.ps1 -Docker       im Container bauen, auch wenn Rust installiert ist
+  .\rebuild.ps1 -Test         vorher die Testsuite (im Container: die Kernprüfungen)
   .\rebuild.ps1 -Open         danach den Ausgabeordner im Explorer öffnen
   .\rebuild.ps1 -NoRestart    beendete Instanzen nicht wieder starten
 #>
 [CmdletBinding()]
-param([switch]$Test, [switch]$Open, [switch]$NoRestart)
+param([switch]$Test, [switch]$Open, [switch]$NoRestart, [switch]$Docker)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
@@ -45,7 +50,16 @@ function Get-CliFlags([string]$Arguments) {
 $Started = Get-Date
 $Restart = @()
 $Failed = $false
+$UseDocker = $Docker -or -not (Get-Command cargo -ErrorAction SilentlyContinue)
 try {
+    if ($UseDocker) {
+        if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+            throw 'Weder Rust noch Docker gefunden. Docker Desktop installieren (oder Rust, siehe README) und erneut bauen.'
+        }
+        & docker info --format '{{.OSType}}' *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'Docker läuft nicht. Docker Desktop starten und erneut bauen.' }
+        Write-Host 'mogumogu · Build im Docker-Container (GNU-Toolchain)' -ForegroundColor Cyan
+    }
     foreach ($Owner in Get-DistOwners) {
         Write-Host "mogumogu läuft (PID $($Owner.Id)) und wird für den Build geordnet beendet …" -ForegroundColor Yellow
         $Flags = @(Get-CliFlags $Owner.Arguments)
@@ -59,9 +73,19 @@ try {
         throw "mogumogu aus dist läuft noch (PID $($Left.Id -join ', ')). Bitte über das Tray-Menü beenden und erneut bauen."
     }
 
-    $Build = @{ NoRun = $true }
-    if (-not $Test) { $Build.SkipTests = $true }
-    & (Join-Path $Root 'build.ps1') @Build
+    if ($UseDocker) {
+        if ($Test) {
+            & docker build --target validated $Root
+            if ($LASTEXITCODE -ne 0) { throw "Kernprüfungen im Container fehlgeschlagen (Exit $LASTEXITCODE)." }
+        }
+        & docker build --target windows-exe --output "type=local,dest=$OutDir" $Root
+        if ($LASTEXITCODE -ne 0) { throw "docker build fehlgeschlagen (Exit $LASTEXITCODE)." }
+    }
+    else {
+        $Build = @{ NoRun = $true }
+        if (-not $Test) { $Build.SkipTests = $true }
+        & (Join-Path $Root 'build.ps1') @Build
+    }
 }
 catch {
     $Failed = $true
@@ -84,7 +108,8 @@ if ($Failed) { exit 1 }
 $Seconds = [int]((Get-Date) - $Started).TotalSeconds
 $Item = Get-Item -LiteralPath $Exe
 Write-Host ''
-Write-Host ("Fertig in {0} s (Release, {1}). Ergebnis:" -f $Seconds, $(if ($Test) { 'mit Tests' } else { 'ohne Tests' })) -ForegroundColor Green
+$Way = if ($UseDocker) { 'Docker' } else { 'lokal' }
+Write-Host ("Fertig in {0} s (Release, {1}, {2}). Ergebnis:" -f $Seconds, $Way, $(if ($Test) { 'mit Tests' } else { 'ohne Tests' })) -ForegroundColor Green
 Write-Output $Exe
 Write-Host ("  {0:N1} MB · gebaut {1:g}" -f ($Item.Length / 1MB), $Item.LastWriteTime)
 Write-Host "  CLI:    $Cli"

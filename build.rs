@@ -15,9 +15,12 @@ fn main() {
             .embed_resources(slint_build::EmbedResourcesKind::EmbedFiles);
         slint_build::compile_with_config("ui/app.slint", config)
             .expect("Slint UI could not be compiled; inspect the diagnostic above.");
-        #[cfg(windows)]
-        embed_resource::compile_for("assets/windows.rc", ["mogumogu"], embed_resource::NONE)
-            .manifest_required()
-            .expect("Windows icon resources could not be compiled; check the Windows SDK.");
+        // The target decides, not the build host: a Linux container that
+        // cross-compiles the Windows build embeds icon and manifest as well.
+        if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+            embed_resource::compile_for("assets/windows.rc", ["mogumogu"], embed_resource::NONE)
+                .manifest_required()
+                .expect("Windows icon resources could not be compiled; check the Windows SDK or mingw windres.");
+        }
     }
 }

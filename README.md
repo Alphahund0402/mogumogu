@@ -37,7 +37,9 @@ Die Basis des [Implementierungsplans](docs/IMPLEMENTIERUNGSPLAN.md) ist innerhal
 
 Die neuen Ansichten und ihre Grenzen beschreibt [Entwicklungsfunde, Speicher und Skill-Inhalte](docs/ENTWICKLUNGSFUNDE.md).
 
-Voraussetzungen: Windows 10/11 x64, [rustup](https://rustup.rs) mit MSVC-Toolchain (die Version legt `rust-toolchain.toml` fest), Visual Studio C++ Build Tools mit Windows SDK.
+Voraussetzungen: Windows 10/11 x64 und **entweder** nur [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Linux-Container) **oder** [rustup](https://rustup.rs) mit MSVC-Toolchain (die Version legt `rust-toolchain.toml` fest) samt Visual Studio C++ Build Tools und Windows SDK.
+
+**Ohne Rust, nur mit Docker:** `rebuild.cmd` doppelklicken. Fehlt Rust, baut es die Windows-Programme im Container mit der GNU-Toolchain (mingw-w64) und legt sie nach `dist\mogumogu`; erzwingen lässt sich das mit `.\rebuild.ps1 -Docker`, direkt mit `docker build --target windows-exe --output dist/mogumogu .`. mogumogu selbst läuft danach wie immer nativ unter Windows, nicht im Container. Details: [Docker](docs/DOCKER.md#windows-programme-im-container-bauen).
 
 ```powershell
 .\build.ps1                          # testen, Release bauen, lokales Inventar im Tray starten
@@ -87,8 +89,8 @@ Linux: portabler Kern). Reproduzierbar mit der festgelegten Rust-Toolchain im Co
 docker compose run --build --rm checks
 ```
 
-Docker dient der Entwicklung und den Kernprüfungen. Tray, Dashboard und die
-Windows-Sicherheitsgrenzen werden weiterhin nativ geprüft. Details und
+Docker dient den Kernprüfungen und baut auf Wunsch die Windows-Programme.
+Tray, Dashboard und die Windows-Sicherheitsgrenzen werden weiterhin nativ geprüft. Details und
 Cache-Nutzung: [Docker](docs/DOCKER.md); Änderungswege und UI-Modulaufbau:
 [Entwicklung](docs/ENTWICKLUNG.md).
 

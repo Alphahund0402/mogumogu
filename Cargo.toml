@@ -66,8 +66,7 @@ windows-sys = { version = "0.61", features = [
 
 [build-dependencies]
 slint-build = { version = "=1.18.1", optional = true }
-
-[target.'cfg(windows)'.build-dependencies]
+# Used only when the target is Windows, also when cross-compiling from Linux.
 embed-resource = { version = "=3.0.11", optional = true }
 
 [dev-dependencies]

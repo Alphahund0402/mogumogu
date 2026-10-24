@@ -5,7 +5,7 @@ Stand: 18. Oktober 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experim
 
 Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 1.98.0, Slint 1.18.1 (winit, Software-Renderer), SQLite 3.53.2 (gebündelt über rusqlite 0.40.2). Windows 11 ist **nicht** abgenommen.
 
-Linux/Docker unterstützt die portablen Entwicklungsprüfungen, keine Inventar-Laufzeit.
+Linux/Docker unterstützt die portablen Entwicklungsprüfungen und baut die Windows-Programme mit der GNU-Toolchain (experimentell; maßgeblich bleibt der native MSVC-Build), keine Inventar-Laufzeit.
 Tray, Named Pipes, Job Objects und Windows-Lese-/Löschgrenzen bleiben dort nicht
 unterstützt. Anleitung: [DOCKER.md](DOCKER.md).
 

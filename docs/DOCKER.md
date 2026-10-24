@@ -1,9 +1,39 @@
-# Docker für Entwicklung und Prüfungen
+# Docker für Entwicklung, Prüfungen und den Windows-Build
 
-Das Linux-Image prüft den portablen Rust-Kern. Tray, Dashboard, Named Pipes,
-Papierkorb und die identitätsgebundene Windows-Lesegrenze werden weiterhin
-nativ auf Windows 10/11 gebaut und geprüft. Docker stellt keinen Zugriff auf
-das Inventar des Hostrechners bereit.
+Das Linux-Image prüft den portablen Rust-Kern und baut auf Wunsch die
+Windows-Programme, ohne dass auf dem Rechner Rust, Visual Studio oder ein
+Windows SDK installiert sein muss. Tray, Dashboard, Named Pipes, Papierkorb und
+die identitätsgebundene Windows-Lesegrenze laufen und werden geprüft nur nativ
+auf Windows 10/11. Docker stellt keinen Zugriff auf das Inventar des
+Hostrechners bereit.
+
+## Windows-Programme im Container bauen
+
+Voraussetzung ist nur Docker Desktop mit Linux-Containern. Am einfachsten
+`rebuild.cmd` doppelklicken: Ist kein Rust installiert, baut es im Container,
+beendet vorher eine laufende Instanz aus `dist` geordnet, startet sie danach
+wieder und zeigt den Pfad der EXE. Mit Rust erzwingt `.\rebuild.ps1 -Docker`
+den Container; `-Test` führt dort zuerst die Kernprüfungen (`validated`) aus.
+Ohne Skript:
+
+```powershell
+docker build --target windows-exe --output dist/mogumogu .
+```
+
+Die Stufe `windows` installiert mingw-w64 und das Rust-Ziel
+`x86_64-pc-windows-gnu` und kompiliert `mogumogu.exe` und `mogumogu-cli.exe` im
+Release-Profil, Icon eingeschlossen (`windres`). `windows-exe` enthält nur die
+fertigen Dateien samt Lizenztexten, `Cargo.lock` und `FONT-LICENSE.txt`, also
+denselben Inhalt wie `build.ps1 -NoRun`. Der erste Build lädt die Crates und
+dauert einige Minuten; danach liegen Downloads und Kompilat im BuildKit-Cache
+(`mogumogu-cargo`, `mogumogu-target-windows`).
+
+Unterschiede zum nativen Build: GNU- statt MSVC-Toolchain, SQLite mit gcc statt
+MSVC kompiliert, die Windows-spezifischen Tests (Lesegrenze, Pipe, Papierkorb)
+laufen nicht. Die EXE lädt nur Windows-Systembibliotheken (keine mingw-DLLs);
+am 24. Oktober 2026 liefen damit Besitzer, CLI, Erfassung, Aufräumbericht,
+Kontextfilter und das Dashboard auf Windows 10. Für Abnahmen und Releases
+bleibt der native MSVC-Build (`build.ps1`, `scripts/release.ps1`) maßgeblich.
 
 ## Lokal ausführen
 
@@ -40,8 +70,8 @@ docker build --target validated --progress plain -t mogumogu-checks .
 ```
 
 `checks` ist das ausführbare Entwicklungsimage; `validated` führt dieselben
-Prüfungen zusätzlich während des Builds aus und ist das Standardziel des
-Dockerfiles. BuildKit speichert Compiler- und Registry-Caches außerhalb des
+Prüfungen zusätzlich während des Builds aus und ist als letzte Stufe das
+Standardziel des Dockerfiles. BuildKit speichert Compiler- und Registry-Caches außerhalb des
 Images. Ein gecachter erfolgreicher Build gilt für denselben Quellstand;
 Compose führt die Prüfungen bei jedem Aufruf erneut aus.
 
