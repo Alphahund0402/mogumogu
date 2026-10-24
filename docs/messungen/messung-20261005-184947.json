@@ -1,0 +1,63 @@
+﻿{
+    "measured_at":  "2026-10-05T18:49:47",
+    "windows":  "Microsoft Windows 10 Pro 10.0.19045 (Build 19045)",
+    "cpu":  "AMD Ryzen 7 9800X3D 8-Core Processor           ",
+    "memory_gib":  31,
+    "build":  "release (dist\\mogumogu)",
+    "mode":  "Demo",
+    "cycles":  100,
+    "idle_seconds":  60,
+    "idle_cpu_percent_of_one_core":  0,
+    "show_request_p95_ms":  10.7,
+    "note":  "show_request misst die IPC-Anfrage bis zur Bestätigung, nicht das vollständige Zeichnen.",
+    "samples":  [
+                    {
+                        "phase":  "tray_settled",
+                        "private_mib":  3.2,
+                        "working_set_mib":  13.4,
+                        "handles":  176,
+                        "threads":  6,
+                        "cpu_seconds":  0.062
+                    },
+                    {
+                        "phase":  "tray_idle",
+                        "private_mib":  3.2,
+                        "working_set_mib":  33.5,
+                        "handles":  177,
+                        "threads":  5,
+                        "cpu_seconds":  0.062
+                    },
+                    {
+                        "phase":  "dashboard_open",
+                        "private_mib":  27.5,
+                        "working_set_mib":  61.6,
+                        "handles":  268,
+                        "threads":  12,
+                        "cpu_seconds":  0.141
+                    },
+                    {
+                        "phase":  "tray_after_10_cycles",
+                        "private_mib":  6.9,
+                        "working_set_mib":  40.9,
+                        "handles":  266,
+                        "threads":  12,
+                        "cpu_seconds":  0.578
+                    },
+                    {
+                        "phase":  "tray_after_50_cycles",
+                        "private_mib":  7.6,
+                        "working_set_mib":  41.4,
+                        "handles":  266,
+                        "threads":  12,
+                        "cpu_seconds":  2.438
+                    },
+                    {
+                        "phase":  "tray_after_100_cycles",
+                        "private_mib":  7.5,
+                        "working_set_mib":  41.5,
+                        "handles":  265,
+                        "threads":  12,
+                        "cpu_seconds":  4.688
+                    }
+                ]
+}

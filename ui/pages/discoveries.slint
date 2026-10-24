@@ -1,0 +1,75 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { FilterChip, PillField, RowCard, UiButton } from "../components.slint";
+import { PlaceLine } from "system.slint";
+
+export component DiscoveryFilters inherits VerticalLayout {
+    spacing: 8px;
+    vertical-stretch: 0;
+    FlexboxLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Alle"; selected: Store.candidate-filter == 0; activated => { Store.candidate-filter = 0; Actions.filter-candidates(); } }
+        FilterChip { label: "Projekte"; selected: Store.candidate-filter == 5; activated => { Store.candidate-filter = 5; Actions.filter-candidates(); } }
+        FilterChip { label: "Scratchpads & Skripte"; selected: Store.candidate-filter == 2; activated => { Store.candidate-filter = 2; Actions.filter-candidates(); } }
+        FilterChip { label: "Umgebungen & Builds"; selected: Store.candidate-filter == 3; activated => { Store.candidate-filter = 3; Actions.filter-candidates(); } }
+        FilterChip { label: "Testdaten & Datenbanken"; selected: Store.candidate-filter == 4; activated => { Store.candidate-filter = 4; Actions.filter-candidates(); } }
+        FilterChip { label: "Ohne Zuordnung"; selected: Store.candidate-filter == 1; activated => { Store.candidate-filter = 1; Actions.filter-candidates(); } }
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        PillField { horizontal-stretch: 1; text <=> Store.candidate-search; placeholder: "Name, Pfad oder Projekt"; label: "Funde filtern"; enabled: Store.modal == 0; edited => { Actions.filter-candidates(); } }
+        Text { text: Store.candidates.length + " angezeigt"; font-size: 11.5px; color: Theme.muted; vertical-alignment: center; }
+        // Certain outer projects at once: registered and approved after a preview.
+        if Store.candidate-filter == 5 && Store.projects-unadopted > 0 : UiButton {
+            small: true; has-icon: true; icon: Icons.check;
+            label: "Alle übernehmen (" + Store.projects-unadopted + ") …";
+            available: !Store.demo && !Store.busy;
+            activated => { Actions.detail-action("found-preview:0"); }
+        }
+        if Store.candidate-filter == 2 && Store.scratch-unadopted > 0 : UiButton {
+            small: true; has-icon: true; icon: Icons.check;
+            label: "Alle übernehmen (" + Store.scratch-unadopted + ")";
+            available: !Store.demo && !Store.busy;
+            activated => { Actions.adopt-scratchpads(); }
+        }
+        if Store.candidate-search != "" || Store.candidate-filter != 0 : UiButton { small: true; label: "Zurücksetzen"; available: true; activated => { Store.candidate-search = ""; Store.candidate-filter = 0; Actions.filter-candidates(); } }
+    }
+    // Tool folders outside every drive search, each with its own approval.
+    // Bounded, so the list below keeps its room in small windows.
+    if Store.candidate-filter == 2 && Store.system-scratch.length > 0 : VerticalLayout {
+        spacing: 2px; vertical-stretch: 0; alignment: start;
+        Text { text: "Bekannte Ablageorte von Werkzeugen – nur nach Freigabe durchsucht"; font-size: 11px; font-weight: 700; color: Theme.muted; }
+        ScrollView {
+            height: min(places.preferred-height, 118px);
+            vertical-stretch: 0;
+            horizontal-scrollbar-policy: always-off;
+            content-width: self.visible-width;
+            content-height: places.preferred-height;
+            places := VerticalLayout {
+                height: self.preferred-height;
+                padding-right: 12px;
+                for place in Store.system-scratch : PlaceLine { data: place; }
+            }
+        }
+    }
+}
+
+export component DiscoveryList inherits VerticalLayout {
+    vertical-stretch: 1;
+    if Store.candidates.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+        Text { text: Store.candidate-search != "" || Store.candidate-filter != 0 ? "Keine Funde passen zum Filter." : "Noch keine Funde."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: Store.candidate-search != "" || Store.candidate-filter != 0 ? "Passe die Suche an oder setze die Filter zurück." : "Füge einen Suchordner hinzu, zum Beispiel C:\\dev, oder durchsuche unter Speicher ein ganzes Laufwerk. mogumogu sucht nach Projekten, Scratchpads, Umgebungen und Testdaten – nur nach Namen, ohne Inhalte zu lesen."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.candidates.length > 0 : ListView {
+        vertical-stretch: 1;
+        for candidate in Store.candidates : RowCard {
+            icon: candidate.artifact ? Icons.package : Icons.search;
+            title: candidate.path; subtitle: candidate.evidence;
+            pill: candidate.status; pill-kind: candidate.status == "Prüfen" ? "review" : "protected";
+            selection-kind: candidate.artifact ? "artifact" : "candidate"; selection-key: "" + candidate.index;
+            activated => { if candidate.artifact { Actions.open-artifact(candidate.index); } else { Actions.open-candidate(candidate.index); } }
+        }
+    }
+}

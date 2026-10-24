@@ -1,0 +1,81 @@
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { FilterChip, RowCard, UiButton } from "../components.slint";
+import { PageCard } from "page-card.slint";
+import { PlaceLine } from "system.slint";
+
+export component AiPage inherits PageCard {
+    title: "KI-Konfiguration";
+    description: "Skills, Instruktionen, MCP-Server und Hooks. mogumogu liest sie als Text und führt nichts davon aus.";
+    HorizontalLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Gefunden"; count: Store.ai-count; selected: Store.ai-tab == 0; activated => { Store.ai-tab = 0; } }
+        personal-tab := FilterChip { label: "Persönliche Ordner"; count: Store.system-ai.length; selected: Store.ai-tab == 1; activated => { Store.ai-tab = 1; } }
+        access-tab := FilterChip { label: "Zugriff"; count: Store.ai-access-attention > 0 ? "" + Store.ai-access-attention : ""; selected: Store.ai-tab == 2; activated => { Store.ai-tab = 2; } }
+    }
+    if Store.ai-tab == 0 && Store.ai.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;
+        Text { text: "Noch keine KI-Dateien erfasst."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Sie erscheinen nach der Erfassung eines Projekts oder eines persönlichen Ordners wie .claude."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.ai-tab == 0 && Store.ai.length > 0 : ListView {
+        vertical-stretch: 1;
+        for row in Store.ai : RowCard {
+            selection-kind: "ai";
+            selection-key: row.path + "|" + row.client + "|" + row.kind;
+            icon: Icons.spark;
+            title: row.detail != "" ? row.detail : row.client + " · " + row.kind;
+            subtitle: row.detail != "" ? row.client + " · " + row.kind + (row.path != "" ? " · " + row.path : "") : row.path;
+            meta: row.references > 0 ? row.references + " Verweise" : "";
+            pill: row.scope;
+            pill-kind: row.scope == "Benutzer" ? "next" : "protected";
+            label: row.client + ", " + row.kind + ", " + row.scope;
+            activated => { Actions.open-ai(row.index); }
+        }
+    }
+    if Store.ai-tab == 1 : Text {
+        text: "Persönliche Konfiguration gilt oft für alle Projekte. Zugangsdaten, Sitzungen und Chatverläufe werden nie gelesen.";
+        font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+    }
+    if Store.ai-tab == 1 && Store.system-ai.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; padding: 16px;
+        Text { text: Store.demo ? "Im Demomodus wird das System nicht geprüft." : "Keine bekannten persönlichen KI-Ordner gefunden."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.ai-tab == 1 && Store.system-ai.length > 0 : ListView {
+        vertical-stretch: 1;
+        for row in Store.system-ai : PlaceLine { data: row; }
+    }
+    if Store.ai-tab == 2 : HorizontalLayout {
+        spacing: 8px;
+        Text {
+            horizontal-stretch: 1;
+            text: "Wie weit KI-Werkzeuge laut ihren Einstellungen reichen. Weitreichend: Bestätigungen oder Sandbox aus, Ordner außerhalb freigegeben. Ohne Filter: nichts hält Dateien vom Agenten fern. Eine Einstellung zeigt die Absicht; ob das Werkzeug sie durchsetzt, steht im Detail.";
+            font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+        }
+        if Store.ai-access.length > 0 : UiButton {
+            small: true; has-icon: true; icon: Icons.shield;
+            label: "Kontextfilter für alle …";
+            available: !Store.demo && !Store.busy;
+            activated => { Actions.detail-action("filter-all-preview:0"); }
+        }
+    }
+    if Store.ai-tab == 2 && Store.ai-access.length == 0 : VerticalLayout {
+        vertical-stretch: 1; alignment: center; padding: 16px;
+        Text { text: "Noch keine KI-Einstellungen erfasst. Sie erscheinen nach der Erfassung eines Projekts mit KI-Dateien."; font-size: 12px; color: Theme.muted; horizontal-alignment: center; wrap: word-wrap; }
+    }
+    if Store.ai-tab == 2 && Store.ai-access.length > 0 : ListView {
+        vertical-stretch: 1;
+        for row in Store.ai-access : RowCard {
+            selection-kind: "access";
+            selection-key: "" + row.index;
+            icon: Icons.shield;
+            title: row.name;
+            subtitle: row.tools + " · " + row.summary;
+            pill: row.level;
+            pill-kind: row.level-kind;
+            label: row.name + ", " + row.level;
+            activated => { Actions.open-access(row.index); }
+        }
+    }
+}

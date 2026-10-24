@@ -1,0 +1,75 @@
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Card, UiButton, FilterChip, PageHeader, PillField } from "../components.slint";
+import { PackageInventory, PackagePanel } from "package-inventory.slint";
+import { SystemOverview } from "system.slint";
+
+export component PackagesPage inherits VerticalLayout {
+    min-width: 0px;
+    preferred-width: 0px;
+    property <bool> compact: Store.window-width < 1060px + 188px + 2 * Theme.page-padding;
+    spacing: Theme.gap;
+    HorizontalLayout {
+        spacing: 10px;
+        PageHeader {
+            horizontal-stretch: 1;
+            title: "Pakete";
+            description: "Paketversionen aus deinen Projekten, globale Bestände und Werkzeuge.";
+        }
+    }
+    VerticalLayout {
+        spacing: 6px;
+        vertical-stretch: 0;
+        HorizontalLayout {
+            spacing: 6px;
+            FilterChip { label: "Pakete"; count: Store.package-counts[0]; selected: Store.package-tab == 0; activated => { Store.package-tab = 0; } }
+            system-tab := FilterChip { label: "Werkzeuge & globale Bestände"; selected: Store.package-tab == 1; activated => { Store.package-tab = 1; } }
+            Rectangle { horizontal-stretch: 1; vertical-stretch: 0; }
+            if Store.package-tab == 0 && (!Store.package-panel || !root.compact) : PillField {
+                width: 220px;
+                placeholder: "Paket oder Version";
+                label: "Pakete filtern";
+                text <=> Store.package-search;
+                enabled: Store.modal == 0;
+                edited => { Actions.package-query(); }
+            }
+        }
+        // These bounded status filters fit the minimum window width.
+        if Store.package-tab == 0 && (!Store.package-panel || !root.compact) : HorizontalLayout {
+            spacing: 6px; alignment: start;
+            FilterChip { label: "Alle"; selected: Store.package-filter == 0; activated => { Store.package-filter = 0; Actions.package-query(); } }
+            FilterChip { label: "Prüfen"; count: Store.package-counts[1]; selected: Store.package-filter == 1; activated => { Store.package-filter = 1; Actions.package-query(); } }
+            FilterChip { label: "Abgekündigt"; count: Store.package-counts[2]; selected: Store.package-filter == 2; activated => { Store.package-filter = 2; Actions.package-query(); } }
+            FilterChip { label: "Ohne Projektbeleg"; count: Store.package-counts[3]; selected: Store.package-filter == 3; activated => { Store.package-filter = 3; Actions.package-query(); } }
+            FilterChip { label: "Behalten"; count: Store.package-counts[4]; selected: Store.package-filter == 4; activated => { Store.package-filter = 4; Actions.package-query(); } }
+        }
+    }
+    if Store.package-tab == 0 : GridLayout {
+        spacing: Theme.gap;
+        vertical-stretch: 1;
+        if !Store.package-panel || !root.compact : Card {
+            col: 0; row: 0;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            VerticalLayout {
+                padding: 8px; padding-top: 4px;
+                HorizontalLayout {
+                    padding-left: 6px; height: 24px;
+                    Text { text: Store.package-coverage; font-size: 11px; color: Theme.muted; overflow: elide; vertical-alignment: center; }
+                }
+                PackageInventory { vertical-stretch: 1; }
+            }
+        }
+        if Store.package-panel : PackagePanel {
+            col: root.compact ? 0 : 1;
+            row: 0;
+            min-width: 0px;
+            preferred-width: 292px;
+            max-width: root.compact ? 100000px : 320px;
+            min-height: 0px;
+            preferred-height: 0px;
+            vertical-stretch: 1;
+        }
+    }
+    if Store.package-tab == 1 : SystemOverview { vertical-stretch: 1; }
+}

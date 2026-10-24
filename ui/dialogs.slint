@@ -1,0 +1,165 @@
+import { ScrollView, TextEdit, ComboBox } from "std-widgets.slint";
+import { Theme, Icons } from "theme.slint";
+import { Store, Actions, DetailRow } from "store.slint";
+import { Card, UiButton, PillField } from "components.slint";
+
+// Repeated rows must contribute their wrapped height to the scroll extent.
+component DetailEntry inherits Rectangle {
+    in property <DetailRow> data;
+    min-width: 0px;
+    preferred-width: 0px;
+    height: max(label.preferred-height, value.preferred-height);
+    label := Text {
+        x: 0px; y: 0px; width: 140px; height: self.preferred-height;
+        text: root.data.label; font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+    }
+    value := Text {
+        x: 152px; y: 0px; width: max(0px, root.width - 152px); height: self.preferred-height;
+        text: root.data.value; font-size: 11.5px; color: Theme.ink; wrap: word-wrap;
+    }
+}
+
+// Created with the form so focus is set inside the conditional component.
+component FormFields inherits VerticalLayout {
+    init => { if Store.form-project-picker { project-picker.focus(); } else { first.focus-input(); } }
+    spacing: 9px; vertical-stretch: 1; alignment: start;
+    Text { text: Store.form-text; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+    Text { text: Store.form-label-1; font-size: 12px; font-weight: 700; color: Theme.ink; }
+    first := PillField {
+        visible: !Store.form-project-picker;
+        height: Store.form-project-picker ? 0px : 32px;
+        icon: Icons.arrow;
+        text <=> Store.form-value-1;
+        placeholder: Store.form-hint-1;
+        label: Store.form-label-1;
+        enabled: !Store.busy;
+        edited => { Store.form-error = ""; }
+        accepted => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
+    }
+    project-picker := ComboBox {
+        visible: Store.form-project-picker;
+        height: Store.form-project-picker ? 32px : 0px;
+        model: Store.form-project-names;
+        current-index <=> Store.form-project-index;
+        accessible-label: Store.form-label-1;
+        enabled: !Store.busy;
+    }
+    if Store.form-label-2 != "" : Text { text: Store.form-label-2; font-size: 12px; font-weight: 700; color: Theme.ink; }
+    if Store.form-label-2 != "" : PillField {
+        icon: Icons.arrow;
+        text <=> Store.form-value-2;
+        placeholder: Store.form-hint-2;
+        label: Store.form-label-2;
+        enabled: !Store.busy;
+        edited => { Store.form-error = ""; }
+        accepted => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
+    }
+    if Store.form-error != "" : Text {
+        text: Store.form-error; font-size: 11.5px; color: Theme.alert-ink; wrap: word-wrap;
+        accessible-role: text;
+    }
+}
+
+// One generic detail dialog ("Warum ist das hier?", plans, hints, help)
+// and one generic two-field form. Content is prepared in Rust.
+export component DialogLayer inherits Rectangle {
+    callback dismissed();
+    background: #2f364066;
+    accessible-role: none;
+    public function focus-first() {
+        if Store.modal != 2 { close-button.grab-focus(); }
+    }
+    TouchArea { }
+    Card {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(Store.modal == 3 ? 850px : 620px, parent.width - 32px);
+        // Detail sheets follow their content up to 500px, then scroll.
+        height: min(Store.modal == 3 ? 620px : Store.modal == 2 ? 360px
+            : Store.detail-rows.length == 0 && Store.detail-path == ""
+                ? clamp(message-measure.preferred-height + dialog-title.preferred-height
+                    + dialog-footer.preferred-height + 64px, 220px, 500px)
+                : clamp(detail-measure.preferred-height + dialog-title.preferred-height
+                    + dialog-footer.preferred-height + 64px, 220px, 500px), parent.height - 32px);
+        border-width: Theme.stroke;
+        border-color: Theme.ink;
+        // A simple message needs no full-height detail sheet. This hidden
+        // measurement mirrors the wrapped body without joining the layout.
+        message-measure := Text {
+            visible: false; accessible-role: none;
+            width: parent.width - 52px;
+            text: Store.detail-body; font-size: 12px; wrap: word-wrap;
+        }
+        // The same for detail sheets: rows, path and body at the text width.
+        detail-measure := VerticalLayout {
+            visible: false; accessible-role: none;
+            width: parent.width - 36px;
+            spacing: 8px; padding-right: 16px; padding-bottom: 8px;
+            if Store.detail-path != "" : HorizontalLayout {
+                padding: 9px;
+                Text { text: Store.detail-path; font-family: "Consolas"; font-size: 11px; wrap: word-wrap; }
+            }
+            for row in Store.detail-rows : DetailEntry { data: row; }
+            if Store.detail-body != "" : Text { text: Store.detail-body; font-size: 12px; wrap: word-wrap; }
+        }
+        VerticalLayout {
+            padding: 18px; spacing: 10px;
+            dialog-title := Text {
+                text: Store.modal == 2 ? Store.form-title : Store.detail-title;
+                font-size: 17px; font-weight: 700; color: Theme.ink; wrap: word-wrap;
+                accessible-role: AccessibleRole.text;
+            }
+            if Store.modal == 1 : ScrollView {
+                vertical-stretch: 1;
+                content-width: self.visible-width;
+                content-height: detail-content.preferred-height;
+                detail-content := VerticalLayout {
+                    height: self.preferred-height;
+                    spacing: 8px; alignment: start; padding-right: 16px; padding-bottom: 8px;
+                    if Store.detail-path != "" : Rectangle {
+                        border-radius: Theme.radius-small; background: Theme.canvas;
+                        vertical-stretch: 0;
+                        HorizontalLayout {
+                            padding: 9px;
+                            Text { text: Store.detail-path; font-family: "Consolas"; font-size: 11px; color: Theme.ink; wrap: word-wrap; }
+                        }
+                    }
+                    for row in Store.detail-rows : DetailEntry { data: row; }
+                    if Store.detail-body != "" : Text { text: Store.detail-body; font-size: 12px; color: Theme.text; wrap: word-wrap; }
+                }
+            }
+            if Store.modal == 2 : ScrollView {
+                vertical-stretch: 1;
+                content-width: self.visible-width;
+                content-height: form-content.preferred-height;
+                form-content := FormFields { height: self.preferred-height; padding-right: 16px; padding-bottom: 8px; }
+            }
+            if Store.modal == 3 : Text {
+                text: Store.detail-path; font-size: 11px; color: Theme.muted; wrap: word-wrap;
+            }
+            if Store.modal == 3 : Text {
+                text: Store.content-note; font-size: 11px; color: Theme.muted; wrap: word-wrap;
+            }
+            if Store.modal == 3 : TextEdit {
+                vertical-stretch: 1;
+                text <=> Store.content-text;
+                read-only: true;
+                wrap: word-wrap;
+                font-family: "Consolas";
+                font-size: 12px;
+            }
+            dialog-footer := FlexboxLayout {
+                spacing: 8px; alignment: end;
+                for action in (Store.modal == 1 ? Store.detail-actions : []) : UiButton {
+                    label: action.label; primary: action.primary; in-dialog: true; available: !Store.busy;
+                    activated => { Actions.detail-action(action.id); }
+                }
+                if Store.modal == 2 : UiButton {
+                    label: Store.form-submit; primary: true; in-dialog: true; available: !Store.busy;
+                    activated => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
+                }
+                close-button := UiButton { label: Store.modal == 2 ? "Abbrechen" : "Schließen"; in-dialog: true; available: true; activated => { root.dismissed(); } }
+            }
+        }
+    }
+}

@@ -1,0 +1,26 @@
+# Build output
+/target/
+/dist/
+
+# Local data: never commit inventories, databases or exports
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
+*.log
+*.dmp
+mogumogu-export*.json
+
+# Secrets and personal client settings
+.env
+.env.*
+!.env.example
+.vscode/*.local.json
+.claude/settings.local.json
+.claude/*.local.*
+
+__pycache__/
+.DS_Store
+# Shared rules and skills (.agents/, .claude/skills/, AGENTS.md, CLAUDE.md) stay tracked.

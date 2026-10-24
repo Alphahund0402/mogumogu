@@ -1,0 +1,173 @@
+import { CheckBox, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Card, Icon, UiButton, StatusChip, MascotPlate, SpeechBubble, PillField, Callout } from "../components.slint";
+
+component Step inherits HorizontalLayout {
+    in property <int> number;
+    in property <string> label;
+    property <bool> done: (Store.guide-step > root.number || Store.guide-step == 4)
+        && (root.number != 3 || Store.guide-scan-now);
+    property <bool> current: Store.guide-step == root.number;
+    spacing: 8px;
+    Rectangle {
+        width: 28px; height: 28px; y: (parent.height - self.height) / 2;
+        border-radius: 14px;
+        background: root.done ? Theme.sage : root.current ? Theme.sky-soft : Theme.fog;
+        border-width: root.current ? Theme.stroke : 0px;
+        border-color: Theme.protected-ink;
+        if root.done : Icon { source: Icons.paw; width: 16px; height: 16px; x: 6px; y: 6px; tone: Theme.ok-ink; }
+        if !root.done : Text { text: root.number; font-size: 12px; font-weight: 700; color: root.current ? Theme.protected-ink : Theme.muted; horizontal-alignment: center; vertical-alignment: center; }
+    }
+    Text { text: root.label; font-size: 12.5px; font-weight: root.current ? 700 : 400; color: root.current ? Theme.ink : Theme.muted; vertical-alignment: center; }
+}
+
+component Folder inherits Card {
+    VerticalLayout {
+        padding: 20px; spacing: 10px;
+        Text { text: "Projektordner auswählen"; wrap: word-wrap; font-size: 19px; font-weight: 700; color: Theme.ink; }
+        Text { text: "Gelesen wird erst, wenn du es im nächsten Schritt erlaubst."; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+        Text { text: "Projektordner"; font-size: 12px; font-weight: 700; color: Theme.ink; }
+        HorizontalLayout {
+            spacing: 8px;
+            path-field := PillField { icon: Icons.folder; placeholder: "C:\\dev\\mein-projekt"; label: "Projektordner"; text <=> Store.guide-path; horizontal-stretch: 1; enabled: Store.modal == 0; }
+            UiButton { label: "Durchsuchen …"; available: !Store.busy; activated => { Actions.guide-browse(); } }
+        }
+        Text { text: "Anzeigename"; font-size: 12px; font-weight: 700; color: Theme.ink; }
+        PillField { width: 320px; icon: Icons.spark; placeholder: "Leer = Ordnername"; label: "Anzeigename"; text <=> Store.guide-name; enabled: Store.modal == 0; }
+        if Store.guide-error != "" : Callout { kind: "alert"; icon: Icons.warning; text: Store.guide-error; }
+        Rectangle { vertical-stretch: 1; }
+        FlexboxLayout {
+            spacing: 8px; alignment: start;
+            UiButton { label: "Abbrechen"; available: true; activated => { Actions.guide-skip(); } }
+            UiButton { primary: true; label: "Weiter"; available: Store.guide-path != ""; activated => { Store.guide-step = 2; } }
+        }
+    }
+}
+
+component Approve inherits Card {
+    VerticalLayout {
+        padding: 20px; spacing: 10px;
+        FlexboxLayout {
+            spacing: 8px; alignment: start;
+            Text { text: "Darf ich diesen Ordner lesen?"; wrap: word-wrap; font-size: 19px; font-weight: 700; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; }
+            StatusChip { label: "An diesen Ordner gebunden"; kind: "protected"; }
+        }
+        Text { text: Store.guide-path; font-size: 12px; color: Theme.protected-ink; wrap: word-wrap; }
+        HorizontalLayout {
+            spacing: Theme.gap;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 14px;
+                background: Theme.sage-soft;
+                VerticalLayout {
+                    padding: 12px; spacing: 4px; alignment: start;
+                    Text { text: "Ich lese"; font-size: 13px; font-weight: 700; color: Theme.ok-ink; }
+                    Text { text: "• Datei- und Ordnernamen"; font-size: 12px; color: Theme.ink; wrap: word-wrap; }
+                    Text { text: "• Manifeste und Lockdateien, bis 32 MiB"; font-size: 12px; color: Theme.ink; wrap: word-wrap; }
+                    Text { text: "• KI-Konfiguration als Daten, bis 1 MiB"; font-size: 12px; color: Theme.ink; wrap: word-wrap; }
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 14px;
+                background: Theme.blush-soft;
+                VerticalLayout {
+                    padding: 12px; spacing: 4px; alignment: start;
+                    Text { text: "Ich lese oder tue nie"; font-size: 13px; font-weight: 700; color: Theme.alert-ink; }
+                    Text { text: "• Inhalte hinter Verknüpfungen oder Cloud-Platzhaltern"; font-size: 12px; color: Theme.ink; wrap: word-wrap; }
+                    Text { text: "• .git, Zugangsdaten, Programme, Skripte, Hooks"; font-size: 12px; color: Theme.ink; wrap: word-wrap; }
+                    Text { text: "• Netzwerk, Installationen, Löschen"; font-size: 12px; color: Theme.ink; wrap: word-wrap; }
+                }
+            }
+        }
+        CheckBox { text: "Nach der Freigabe sofort erfassen"; checked <=> Store.guide-scan-now; enabled: Store.modal == 0; }
+        Text { text: "Die Freigabe lässt sich unter Einstellungen jederzeit widerrufen."; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        if Store.guide-error != "" : Callout { kind: "alert"; icon: Icons.warning; text: Store.guide-error; }
+        Rectangle { vertical-stretch: 1; }
+        FlexboxLayout {
+            spacing: 8px; alignment: start;
+            UiButton { label: "Zurück"; available: !Store.busy; activated => { Store.guide-step = 1; } }
+            UiButton { primary: true; has-icon: true; icon: Icons.shield; label: Store.guide-scan-now ? "Freigeben und erfassen" : "Lesefreigabe erteilen"; available: !Store.busy; activated => { Actions.guide-approve(); } }
+        }
+    }
+}
+
+component Scanning inherits Card {
+    VerticalLayout {
+        padding: 20px; spacing: 12px;
+        HorizontalLayout {
+            spacing: 16px;
+            MascotPlate { pose: 4; width: 88px; height: 88px; }
+            VerticalLayout {
+                alignment: center; spacing: 4px; horizontal-stretch: 1;
+                Text { text: Store.scan-cancelling ? "Mochi hält an der nächsten sicheren Stelle an …" : "Mochi erfasst " + Store.guide-name + " …"; font-size: 19px; font-weight: 700; color: Theme.ink; wrap: word-wrap; }
+                Text { text: "Du kannst weiterarbeiten. Beim Abbrechen bleibt der letzte vollständige Stand erhalten."; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+            }
+        }
+        Rectangle {
+            height: 12px; border-radius: 6px; background: Theme.fog; clip: true;
+            Rectangle { x: 0; width: parent.width * clamp(Store.scan-progress, 0.04, 1.0); border-radius: 6px; background: Theme.chart-blue; }
+        }
+        Text { text: Store.scan-text; wrap: word-wrap; font-size: 12px; color: Theme.text; }
+        Rectangle { vertical-stretch: 1; }
+        FlexboxLayout {
+            spacing: 8px; alignment: start;
+            UiButton { label: "Abbrechen"; available: Store.scan-running && !Store.scan-cancelling; activated => { Actions.cancel-scan(); } }
+            UiButton { label: "Im Hintergrund weiter"; available: true; activated => { Actions.guide-skip(); } }
+        }
+    }
+}
+
+component Done inherits Card {
+    VerticalLayout {
+        padding: 20px; spacing: 12px;
+        HorizontalLayout {
+            spacing: 14px;
+            MascotPlate { pose: 2; width: 88px; height: 88px; }
+            VerticalLayout {
+                alignment: center; horizontal-stretch: 1;
+                SpeechBubble { max-width: 470px; font-size: 13px; text: Store.guide-scan-now ? "Dein Projekt ist aufgenommen." : "Lesefreigabe steht. Du kannst das Projekt später erfassen."; }
+            }
+        }
+        Text { text: Store.guide-result; font-size: 12.5px; color: Theme.text; wrap: word-wrap; }
+        Callout { text: "Die Projektgröße misst du bei Bedarf unter „Speicher“."; }
+        Rectangle { vertical-stretch: 1; }
+        FlexboxLayout {
+            spacing: 8px; alignment: start;
+            UiButton { label: "Weiteren Ordner hinzufügen"; available: true; activated => { Store.guide-path = ""; Store.guide-name = ""; Store.guide-step = 1; } }
+            UiButton { primary: true; label: "Zur Übersicht"; available: true; activated => { Actions.guide-finish(); } }
+        }
+    }
+}
+
+// Covers the content area while open; navigation stays visible.
+export component GuideOverlay inherits Rectangle {
+    background: Theme.canvas;
+    TouchArea { }
+    VerticalLayout {
+        padding: Theme.page-padding; spacing: Theme.gap;
+        HorizontalLayout {
+            spacing: 12px;
+            Step { number: 1; label: "Ordner wählen"; }
+            Rectangle { width: 30px; height: 2px; y: (parent.height - self.height) / 2; background: Theme.chart-fog; }
+            Step { number: 2; label: "Lesefreigabe"; }
+            Rectangle { width: 30px; height: 2px; y: (parent.height - self.height) / 2; background: Theme.chart-fog; }
+            Step { number: 3; label: "Erfassen"; }
+            Rectangle { horizontal-stretch: 1; }
+            UiButton { quiet: true; small: true; has-icon: true; icon: Icons.close; label: "Schließen"; available: true; activated => { Actions.guide-skip(); } }
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            horizontal-scrollbar-policy: always-off;
+            content-width: self.visible-width;
+            VerticalLayout {
+                padding-right: 16px; padding-bottom: 12px;
+                if Store.guide-step == 1 : Folder { }
+                if Store.guide-step == 2 : Approve { }
+                if Store.guide-step == 3 : Scanning { }
+                if Store.guide-step == 4 : Done { }
+            }
+        }
+    }
+}

@@ -1,0 +1,68 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { UiButton, Panel, PageHeader, RowCard, FilterChip, Card } from "../components.slint";
+
+export component SettingsPage inherits VerticalLayout {
+    min-width: 0px;
+    preferred-width: 0px;
+    spacing: Theme.gap;
+    PageHeader {
+        title: "Einstellungen";
+        description: "Datenort, Sicherung und die Ordner, die mogumogu lesen darf.";
+    }
+    HorizontalLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Allgemein"; selected: Store.settings-tab == 0; activated => { Store.settings-tab = 0; } }
+        scopes-tab := FilterChip { label: "Lesefreigaben"; count: Store.scopes.length; selected: Store.settings-tab == 1; activated => { Store.settings-tab = 1; } }
+    }
+    if Store.settings-tab == 1 : Card {
+        vertical-stretch: 1;
+        VerticalLayout {
+            padding: 8px; spacing: 4px;
+            HorizontalLayout {
+                padding-left: 6px; padding-right: 6px; spacing: 8px;
+                Text { text: "Diese Ordner darf mogumogu lesen. Öffne einen Eintrag, um ihn zu erfassen, seine Größe zu messen oder die Freigabe zu widerrufen."; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+            }
+            if Store.scopes.length == 0 : VerticalLayout {
+                vertical-stretch: 1; alignment: center; spacing: 10px; padding: 16px;
+                Text { text: "Noch keine Lesefreigaben."; font-size: 13px; font-weight: 700; color: Theme.ink; horizontal-alignment: center; }
+                HorizontalLayout { alignment: center; UiButton { label: "Projekt hinzufügen"; primary: true; available: !Store.demo && !Store.busy; activated => { Actions.guide-start(); } } }
+            }
+            if Store.scopes.length > 0 : ListView {
+                vertical-stretch: 1;
+                for scope in Store.scopes : RowCard {
+                    selection-kind: "scope";
+                    selection-key: "" + scope.id;
+                    icon: Icons.shield;
+                    title: scope.name;
+                    subtitle: scope.kind + " · " + scope.coverage + (scope.last != "" ? " · " + scope.last : "") + " · " + scope.path;
+                    pill: scope.healthy ? "" : scope.status;
+                    pill-kind: "warn";
+                    label: scope.path + ", " + scope.kind + ", " + scope.status;
+                    activated => { Actions.open-scope(scope.id); }
+                }
+            }
+        }
+    }
+    if Store.settings-tab == 0 : ScrollView {
+        vertical-stretch: 1;
+        horizontal-scrollbar-policy: always-off;
+        content-width: self.visible-width;
+        VerticalLayout {
+            spacing: Theme.gap; alignment: start; padding-right: 16px; padding-bottom: 12px;
+            Panel {
+                title: "Daten";
+                Text { text: (Store.demo ? "Demo-Datenbank, schreibgeschützt: " : "Lokale Datenbank: ") + Store.data-path; font-size: 11.5px; color: Theme.muted; wrap: word-wrap; }
+                FlexboxLayout {
+                    spacing: 8px; alignment: start;
+                    UiButton { small: true; label: "Sicherung erstellen …"; available: !Store.demo && !Store.busy; activated => { Actions.backup-now(); } }
+                }
+            }
+            Text {
+                text: "mogumogu stellt keine Netzwerkverbindungen her und läuft nur, solange es geöffnet ist oder im Tray steht. Erfasst wird auf Klick oder über „Jetzt erfassen“.";
+                font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+            }
+        }
+    }
+}
