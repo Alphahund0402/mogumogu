@@ -76,10 +76,10 @@ class Contracts(unittest.TestCase):
         self.assertEqual(sum(r['state'] == 'review' for r in FIXTURE['resources']), 3)
         self.assertTrue(all(x['protected'] for x in FIXTURE['resources'] + FIXTURE['projects']))
 
-    def test_eleven_adapters_without_cleanup_capability(self):
+    def test_forty_adapters_without_cleanup_capability(self):
         sources = list((ROOT / 'src/adapters').glob('*.rs'))
         descriptors = [p.read_text(encoding='utf-8') for p in sources if 'static DESCRIPTOR' in p.read_text(encoding='utf-8')]
-        self.assertEqual(len(descriptors), 11)
+        self.assertEqual(len(descriptors), 40)
         for text in descriptors:
             self.assertIn('cleanup: Support::Unsupported', text)
 

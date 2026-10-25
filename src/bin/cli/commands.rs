@@ -34,7 +34,7 @@ Projekte und Lesefreigaben (Registrierung ≠ Lesefreigabe)
   measure --resource ID | --scope ID     Größe messen (unbekannt bleibt unbekannt)
   storage                               Laufwerke, Projektgrößen und Speicheranteile
   tidy [--project ID]                    Aufräumbericht: wiederherstellbar, prüfen (nur freigegebene Projekte)
-  discoveries                           Projekte, Experimente, Umgebungen und Testdaten
+  discoveries                           Projekte, Experimente, Tests, Umgebungen und Testdaten
   resource adopt --scope ID --relative PFAD --project ID [--purpose TEXT]
   ai content --scope ID --relative PFAD  Skill-/Instruktionstext schreibgeschützt ansehen
   ai filter --scope ID|--all [--confirm FINGERABDRUCK]   Kontextfilter für Claude Code (.claude/settings.local.json): Vorschau, mit --confirm schreiben

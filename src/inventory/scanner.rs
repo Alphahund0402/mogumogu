@@ -2,8 +2,11 @@
 //!
 //! Depth-first and lazy: a subdirectory is opened (relative to its parent
 //! handle) only when it is processed, so open handles stay bounded by the
-//! depth of the tree, not its width.
+//! depth of the tree, not its width. Environments, stores and outputs that
+//! no adapter claims are recorded as findings but not entered: manifests in
+//! `dist/` or `vendor/` are not the project's own.
 use super::access::{HandleAccess, ScopeRefCheck};
+use super::discovery::{Census, Lineage};
 use crate::adapters::{self, Adapter, AdapterScope, FoundFile};
 use crate::domain::ScopeKind;
 use crate::fsread::{self, Budget};
@@ -47,6 +50,8 @@ struct Pending {
     name: String,
     rel: String,
     depth: u32,
+    /// Nearest project and test folder above, for the test census.
+    lineage: Lineage,
 }
 
 struct ProjectScan<'a> {
@@ -57,6 +62,7 @@ struct ProjectScan<'a> {
     refs: ScopeRefCheck,
     adapters: Vec<&'static dyn Adapter>,
     stack: Vec<Pending>,
+    census: Census,
 }
 
 pub(super) fn scan_project(root: Rc<DirHandle>, budget: &mut Budget) -> GenerationResult {
@@ -68,9 +74,12 @@ pub(super) fn scan_project(root: Rc<DirHandle>, budget: &mut Budget) -> Generati
         refs: ScopeRefCheck { root: Rc::clone(&root) },
         adapters: adapters::all().iter().copied().filter(|a| a.descriptor().scope == AdapterScope::Project).collect(),
         stack: Vec::new(),
+        census: Census::default(),
     };
+    // The approved root is the project everything below belongs to.
+    let lineage = Lineage { project: Some(String::new()), ..Lineage::default() };
     match fsread::list(&root, scan.budget) {
-        Ok((entries, _)) => scan.process(root, String::new(), 0, &entries),
+        Ok((entries, _)) => scan.process(root, String::new(), 0, &entries, &lineage),
         Err(e) => {
             scan.result.failed = true;
             scan.result.errors.push(format!("Wurzel nicht lesbar: {e}"));
@@ -83,6 +92,7 @@ pub(super) fn scan_project(root: Rc<DirHandle>, budget: &mut Budget) -> Generati
         }
         scan.open_pending(pending);
     }
+    std::mem::take(&mut scan.census).finish(&mut scan.result.items);
     add_notes(&mut scan.result, &scan.notes);
     scan.result
 }
@@ -103,10 +113,11 @@ impl ProjectScan<'_> {
             .iter()
             .find_map(|a| a.claim_dir(&pending.name, &pending.parent_names, &child_names).map(|c| (*a, c)));
         match claim {
+            // Claims come first; nothing in a claimed folder counts as a test.
             Some((adapter, claim)) => {
                 self.result
                     .items
-                    .extend(super::discovery::inspect_directory(&pending.rel, &entries, Some(""), false).items);
+                    .extend(super::discovery::inspect_directory(&pending.rel, &entries, &pending.lineage, false).items);
                 let mut errors = Vec::new();
                 let mut access =
                     HandleAccess { base: child, rel: pending.rel.clone(), budget: self.budget, errors: &mut errors };
@@ -118,12 +129,20 @@ impl ProjectScan<'_> {
                     self.report("", error);
                 }
             }
-            None => self.process(child, pending.rel, pending.depth, &entries),
+            None => self.process(child, pending.rel, pending.depth, &entries, &pending.lineage),
         }
     }
 
-    fn process(&mut self, dir: Rc<DirHandle>, rel: String, depth: u32, entries: &[DirEntryInfo]) {
-        self.result.items.extend(super::discovery::inspect_directory(&rel, entries, Some(""), false).items);
+    fn process(&mut self, dir: Rc<DirHandle>, rel: String, depth: u32, entries: &[DirEntryInfo], above: &Lineage) {
+        let mut inspection = super::discovery::inspect_directory(&rel, entries, above, false);
+        self.census.record(&rel, &mut inspection);
+        self.result.items.append(&mut inspection.items);
+        // A leaf is recorded, never listed further or parsed; the approved
+        // root itself is always walked, whatever its name.
+        if inspection.leaf && !rel.is_empty() {
+            return;
+        }
+        let lineage = inspection.lineage;
         let names = Rc::new(entries.iter().filter_map(|e| e.name_str().map(str::to_string)).collect::<Vec<_>>());
         for entry in entries {
             if !self.budget.entry() {
@@ -160,6 +179,7 @@ impl ProjectScan<'_> {
                     name: name.to_string(),
                     rel: rel_child,
                     depth: depth + 1,
+                    lineage: lineage.clone(),
                 });
             }
         }
@@ -184,6 +204,10 @@ impl ProjectScan<'_> {
         };
         if workflow {
             self.result.items.push(adapters::commands::workflow(rel_child, &content));
+            match adapters::github_actions::workflow_uses(rel_child, &content) {
+                Ok(items) => self.result.items.extend(items),
+                Err(e) => self.report(rel_child, e),
+            }
         }
         for adapter in wanting {
             let file = FoundFile { name, rel_dir: rel, content: &content, siblings: names };
@@ -193,6 +217,11 @@ impl ProjectScan<'_> {
             }
         }
         for (profile, detection) in ai {
+            // A package adapter may have read more than the profile allows.
+            if content.len() as u64 > profile.max_bytes() {
+                self.report(rel_child, "Datei überschreitet das Größenlimit des KI-Profils");
+                continue;
+            }
             match profiles::parse_detection(profile, detection, rel_child, &content, &mut self.refs) {
                 Ok(items) => self.result.items.extend(items),
                 Err(e) => self.report(rel_child, e),

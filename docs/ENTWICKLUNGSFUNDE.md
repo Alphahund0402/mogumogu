@@ -1,18 +1,29 @@
 # Entwicklungsfunde, Speicher und Skill-Inhalte
 
-Stand: 20. Oktober 2026. Die neuen Fähigkeiten sind experimentell. Tests verwenden
+Stand: 25. Oktober 2026. Die neuen Fähigkeiten sind experimentell. Tests verwenden
 synthetische Windows-Verzeichnisse; eine Windows-11-Abnahme steht aus.
 
 ## Fundliste
 
 Die Dateinamensuche (`projects`) und freigegebene Projektbereiche erkennen
-Projektmarker, mögliche Scratchpads, einzelne Skripte ohne Projektmarker, Notebooks, Python-Umgebungen, Abhängigkeitsordner, typische
+Projektmarker, mögliche Scratchpads, einzelne Skripte ohne Projektmarker,
+Notebooks, Testordner, Python-Umgebungen, Abhängigkeitsordner, typische
 Build-/Testausgaben, Testdaten, lokale Datenbanken, bekannte Cache-Namen und
-Ordner mit `CACHEDIR.TAG`, deren Inhalt nicht betreten wird.
-Diese Erkennung liest nur Verzeichniseinträge. Große erkannte Speicher und
-Ausgabeordner werden als Funde erfasst und in der Suche nicht weiter betreten.
-Der bestehende Projektadapter kann nach Projektfreigabe eng begrenzte
-Manifest-/Installationsmetadaten lesen.
+Ordner mit `CACHEDIR.TAG`, deren Inhalt nicht betreten wird. Diese Erkennung
+liest nur Verzeichniseinträge. Große erkannte Speicher und Ausgabeordner werden
+als Funde erfasst und in der Suche nicht weiter betreten. Die Paketadapter
+können nach Projektfreigabe eng begrenzte Manifest-/Installationsmetadaten
+lesen.
+
+Dieselbe Regel gilt in der Projekterfassung: Ordner, die die Erkennung als
+Blatt einstuft (Umgebungen wie `.venv` auch ohne `pyvenv.cfg`, Ausgaben wie
+`dist`, `out`, `build`, mitgelieferter Fremdcode wie `vendor`, `third_party`,
+`deps`, Test-Ausgaben wie `coverage`, Caches), erscheinen als Fund, werden aber
+nicht weiter betreten; ihre Manifeste zählen nicht als eigene des Projekts.
+Ausnahme ist ein Ordner, den ein Paketadapter beansprucht (etwa `node_modules`,
+`vendor` neben `composer.json`, `Pods` neben dem `Podfile`); der Adapter liest
+ihn eng begrenzt. Die freigegebene Wurzel selbst wird immer durchlaufen, auch
+wenn sie `build` heißt.
 
 Jeder Fund zeigt Typ, Beleg, Pfad, Scanabdeckung, mögliche Projektzuordnung und
 bekannte Dateigröße/Änderungszeit. Ein Änderungsdatum ist kein Nutzungsnachweis.
@@ -22,13 +33,27 @@ bleiben unbekannt; Editor-Backups werden nicht als Scratchpads übernommen.
 ### Projekte
 
 Ein Projekt erkennt mogumogu an Manifesten (`Cargo.toml`, `package.json`,
-`pyproject.toml`, `go.mod`, `pom.xml`, Gradle, `.csproj`/`.sln`/`.vcxproj`,
-`composer.json`, `Gemfile`, `mix.exs`, `pubspec.yaml`, `deno.json`,
-`Package.swift`, `build.zig`, `build.sbt`, `stack.yaml`/`*.cabal`,
-`meson.build`, `project.godot`, `*.uproject`, `flake.nix`), an `.git`/`.hg`/`.svn`
-und an schwächeren Markern (`requirements.txt`, `setup.cfg`, `Pipfile`,
-`Makefile`, `CMakeLists.txt`, `environment.yml`, `Dockerfile`, Compose-Dateien,
-`*.code-workspace`, `*.Rproj`). Jeder Projektfund trägt eine Sicherheit:
+`pyproject.toml`, `setup.py`, `pixi.toml`, `go.mod`/`go.work`, `pom.xml`,
+Gradle-Build- und -Settings-Dateien, `build.sbt`, `deps.edn`, `project.clj`,
+`composer.json`, `Gemfile`, `mix.exs`, `rebar.config`, `gleam.toml`,
+`pubspec.yaml`, `deno.json(c)`, `Package.swift`, `Podfile`, `Cartfile`,
+`build.zig`/`build.zig.zon`, `stack.yaml`/`cabal.project`/`*.cabal`,
+`Project.toml`, `shard.yml`, `elm.json`, `dub.json`/`dub.sdl`, `dune-project`,
+`cpanfile`, `Makefile.PL`, `vcpkg.json`, `conanfile.txt`/`conanfile.py`,
+`meson.build`, `MODULE.bazel`/`WORKSPACE`, `pants.toml`, `rush.json`,
+`platformio.ini`, `project.godot`, `flake.nix`, Projektdateien wie
+`.csproj`/`.sln`/`.vcxproj`/`.sqlproj`/`.pyproj`, `*.gemspec`, `*.podspec`,
+`*.nimble`, `*.opam`, `*.rockspec`, `*.dproj`, `*.lpi`, `*.uproject`), an
+Xcode-Bündeln (`*.xcodeproj`, `*.xcworkspace`), an Unity-Projekten (`Assets`
+neben `ProjectSettings`), an `.git`/`.hg`/`.svn` und an schwächeren Markern
+(`requirements.txt`, `setup.cfg`, `Pipfile`, `uv.lock`, `tox.ini`,
+`noxfile.py`, `manage.py`, `environment.yml`, `Makefile`, `justfile`,
+`Taskfile.yml`, `CMakeLists.txt`, `CMakePresets.json`, `configure.ac`,
+`xmake.lua`, `premake5.lua`, `packages.config`, `Directory.Build.props`,
+`global.json`, `tsconfig.json`, `lerna.json`, `nx.json`, `turbo.json`,
+`melos.yaml`, `.tool-versions`, `mise.toml`, `devbox.json`, `Dockerfile`,
+Compose-Dateien, `Chart.yaml`, `Pulumi.yaml`, `wrangler.toml`, `mkdocs.yml`,
+`*.code-workspace`, `*.Rproj`, `*.tf`). Jeder Projektfund trägt eine Sicherheit:
 
 | Sicherheit | Namen im Projektordner |
 |---|---|
@@ -38,16 +63,38 @@ und an schwächeren Markern (`requirements.txt`, `setup.cfg`, `Pipfile`,
 
 Liegt ein Projekt unter `Downloads`, ist die Sicherheit höchstens mittel. Bei
 gleicher Sicherheit stehen Teilprojekte nach den äußeren Projekten. Daneben
-nennt der Fund Hinweise: Versionsverwaltung, Lockfile, Quellcode, Tests, CI
-(`.github`, `.gitlab-ci.yml` …), Editor-Einstellungen und KI-Dateien
-(`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.claude`, `.cursor`, `.codex` …). Ein
+nennt der Fund Hinweise, in dieser Reihenfolge:
+
+- „Paketmanager: …“ nach Dateien, die nur ein Manager schreibt oder liest
+  (`pnpm-lock.yaml` → pnpm, `poetry.lock` → Poetry, `Gemfile` → Bundler,
+  `*.csproj` → NuGet, `*.tf` → Terraform …), höchstens fünf, dann „+N“; eine
+  bloße `package.json` nennt keinen Manager;
+- „Workspace (…)“ für Werkzeuge mehrteiliger Projekte (`pnpm-workspace.yaml`,
+  Lerna, Nx, Turborepo, Rush, `go.work`, Gradle-Settings, Cabal, Melos, Bazel,
+  Pants);
+- „Tests (N Testdateien · Frameworks)“ aus der Zählung unten, „Tests“ allein,
+  wenn ein Testordner direkt im Projekt liegt, aber nichts gezählt wurde;
+- „Testprojekt“ für eine .NET-Projektdatei mit Testnamen (`App.Tests.csproj`,
+  `AppUnitTests.fsproj`, `App.Specs.csproj`);
+- Versionsverwaltung, Lockfile, Quellcode, CI (`.github`, `.gitlab-ci.yml` …),
+  KI-Dateien (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.claude`, `.cursor`,
+  `.codex` …) und Editor-Einstellungen.
+
+Die Hinweise stammen nur aus Dateinamen; kein Manifest wird dafür gelesen. Ein
 Projekt in einem anderen Projekt derselben Suche ist ein **Teilprojekt**; sein
 Projektbezug zeigt auf das äußere Projekt, und der Filter **Projekte** zeigt nur
-die äußeren. Mitgelieferter Fremdcode (`vendor`, `third_party`,
-`bower_components`, `Pods` …) ist in einem Projekt ein Abhängigkeitsfund und
-wird nicht betreten. Als Aktivität zeigt der Fund das neueste Änderungsdatum der
-Einträge des Ordners, auf den Tag gerundet. Sicherheit und Datum ordnen die
-Liste; sie belegen weder Nutzung noch Entbehrlichkeit.
+die äußeren. Innerhalb eines Projekts machen `tsconfig.json` und
+`Directory.Build.props` kein Teilprojekt, ebenso wenig `CMakeLists.txt`,
+`Makefile`, `meson.build` oder nur schwache Marker in einem Testordner; ein
+Xcode-Bündel gehört zum Projekt um es herum. Bei einer Laufwerkssuche machen
+`.tool-versions`, `mise.toml` und `.mise.toml` an Laufwerks- oder Profilwurzel
+kein Projekt. Mitgelieferter Fremdcode (`vendor`, `third_party`,
+`bower_components`, `Pods`, `deps`, `vcpkg_installed`, `.terraform` …) ist in
+einem Projekt ein Abhängigkeitsfund und wird nicht betreten; Unitys `Library`
+mit `PackageCache` oder `ScriptAssemblies` ist ein Cache-Fund, damit ihre Pakete
+nicht als Teilprojekte erscheinen. Als Aktivität zeigt der Fund das neueste
+Änderungsdatum der Einträge des Ordners, auf den Tag gerundet. Sicherheit und
+Datum ordnen die Liste; sie belegen weder Nutzung noch Entbehrlichkeit.
 
 ### Scratchpads
 
@@ -83,17 +130,65 @@ Teil einer Laufwerkssuche, die AppData auslässt. Unter **Projekte → Funde →
 Scratchpads & Skripte** erlaubt **Lesen erlauben** je Ort eine eigene
 Namenssuche.
 
+### Tests
+
+Ein Ordner mit testtypischem Namen (`tests`, `test`, `__tests__`, `spec`,
+`specs`, `e2e`, `e2e-tests`, `integration-tests`, `integration_tests`,
+`integration_test`, `unittests`, `unit_tests`, `unit-tests`, `androidTest`,
+`cypress`; `testing` nur in einem Projekt) wird als Fund **Tests** gemeldet,
+wenn er selbst keinen Projektmarker trägt, nicht in Testdaten liegt und
+entweder in einem Projekt liegt oder selbst Skripte, Testdateien oder Ordner
+wie `.venv` oder `node_modules` enthält. Gemeldet wird nur der äußerste
+Testordner; dazu zählen auch Mavens `src/test` und SwiftPMs `Tests`. Der Fund
+ist kein Blatt: Die Suche läuft weiter hinein, um zu zählen.
+
+Gezählt werden Testdateien nach ihren Namen, in einem Testordner zusätzlich
+jede Quelldatei:
+
+| Sprache | Testdateien |
+|---|---|
+| Python | `test_*.py`, `*_test.py`, `tests.py`, `conftest.py` (pytest) |
+| JavaScript/TypeScript | `*.test.*`, `*.spec.*`, `*.e2e-spec.*`, `*.cy.*` (Cypress) |
+| Go, Rust | `*_test.go` (Go test); `*_test.rs`, `*_tests.rs` |
+| Java, Kotlin, Scala, Groovy | Endung `Test`, `Tests`, `IT` oder `Spec` in der geschriebenen Groß-/Kleinschreibung (`Edit.java` ist kein `IT`-Test) |
+| C#, F#, VB | Endung `Test` oder `Tests` |
+| Ruby, PHP | `*_spec.rb` (RSpec), `*_test.rb`; `*Test.php` |
+| Elixir, Erlang, Dart, Swift | `*_test.exs` (ExUnit), `*_SUITE.erl` (Common Test), `*_test.dart`, `*Tests.swift` |
+| C, C++ | `*_test.c`/`.cc`/`.cpp`/`.cxx`, `*_unittest.cc`/`.cpp`, `test_*.c`/`.cpp` |
+| Weitere | `*Spec.hs` (Hspec), `*.Tests.ps1` (Pester), `*_spec.lua` (busted), `test-*.R`/`test_*.R` (testthat), `runtests.jl`, `*.bats` (Bats), `*.robot` (Robot Framework), `*.feature` (Gherkin) |
+
+Frameworks ergeben sich aus diesen Konventionen und aus Konfigurationsdateien
+der Testwerkzeuge (`pytest.ini`, `tox.ini`, `noxfile.py`, `behave.ini`,
+`.coveragerc`, `jest.config.*`, `vitest.config.*`, `.mocharc*`,
+`ava.config.*`, `karma.conf.*`, `playwright.config.*`, `cypress.config.*`,
+`wdio.conf.*`, `nightwatch.conf.*`, `stryker.conf.*`, `.nycrc*`, `.c8rc*`,
+`nextest.toml`, `testng.xml`, `*.runsettings`, `xunit.runner.json`,
+`phpunit.xml(.dist)`, `.rspec`, `dart_test.yaml`, `codecov.yml` …). Der Fund
+nennt etwa „Testordnertypischer Name · 37 Testdateien · pytest, Playwright;
+Inhalt nicht gelesen“, mit höchstens vier Frameworks und danach „+N“. Das
+Projekt trägt die Summe aller Testdateien, deren nächstes Projekt es ist, als
+Hinweis „Tests (…)“. Dateien in Testdaten, in Blättern (Umgebungen, Ausgaben,
+Fremdcode) und in Ordnern, die ein Paketadapter beansprucht, zählen nicht.
+
+Gelesen werden nur Namen. Ob Tests laufen, bestehen oder genutzt werden, bleibt
+unbekannt. Testcode gehört zum Projekt: Testordner und Testdateien werden nie
+ein Eintrag im Aufräumbericht und nie eine Regel des Kontextfilters; beides
+entsteht nur für Testdaten und Test-Ausgaben.
+
 ### Liste
 
-Unter **Projekte → Funde** lassen sich Funde nach Projekten, Scratchpads/Skripten,
-Umgebungen/Builds, Testdaten/Datenbanken und fehlendem Projektbezug filtern.
-Projekte (nach Sicherheit) und Scratchpads stehen vor Notebooks, Skripten,
-Testdaten und Datenbanken, danach folgen Umgebungen, Ausgaben und Caches.
-Dieselbe Liste zeigt auch die bei der Projekterfassung erkannten Umgebungen,
-Build-Ausgaben und Caches. Die Ansicht ist auf 200 Funde begrenzt. Die globale Suche
-fragt gespeicherte Fundmetadaten unabhängig von dieser Grenze ab und öffnet auch
-Funde außerhalb der ersten Seite. Für große Bestände die Suchwurzeln sinnvoll
-aufteilen. Teilläufe ersetzen den letzten vollständigen Stand nicht.
+Unter **Projekte → Funde** lassen sich Funde nach Projekten,
+Scratchpads/Skripten, Umgebungen/Builds, **Tests & Daten** (Testordner,
+Testdaten, Test-Ausgaben und Datenbanken; Test-Ausgaben stehen auch unter
+Umgebungen/Builds) und fehlendem Projektbezug filtern. Projekte (nach
+Sicherheit) und Scratchpads stehen vor Notebooks, Skripten, Testdaten,
+Datenbanken und Testordnern, danach folgen Umgebungen, Ausgaben und Caches.
+Dieselbe Liste zeigt auch die bei der Projekterfassung erkannten Testordner,
+Umgebungen, Build-Ausgaben und Caches. Die Ansicht ist auf 200 Funde begrenzt.
+Die globale Suche fragt gespeicherte Fundmetadaten unabhängig von dieser Grenze
+ab und öffnet auch Funde außerhalb der ersten Seite. Für große Bestände die
+Suchwurzeln sinnvoll aufteilen. Teilläufe ersetzen den letzten vollständigen
+Stand nicht.
 
 Eine Zuordnung über **Projekt zuordnen** ist ausdrücklich, speichert einen
 optionalen Zweck und lässt den Schutz aktiv. Sie gewährt keine zusätzlichen
@@ -172,17 +267,19 @@ Ordner wird mit seinen Nachbardateien gelesen
 | Wiederherstellbar | `build` | Gradle-Datei daneben und `tmp`, `classes`, `libs` … darin; `CMakeLists.txt` daneben und `CMakeCache.txt` darin; `setup.py`/`pyproject.toml` daneben und `lib.*`, `bdist.*` oder `temp.*` darin (ein bloßes `lib` reicht nicht). Neben `package.json` nie: dort liegen oft selbst gepflegte Dateien (electron-builder, alte Vue-Vorlagen) |
 | Wiederherstellbar | `dist`, `out`, `.next`, `.nuxt`, `.svelte-kit`, `.output` | Build-Datei daneben (`package.json`, `pyproject.toml`, Gradle, CMake …) |
 | Wiederherstellbar | `.tox`, `.nox` | `tox.ini` oder `noxfile.py` daneben |
-| Wiederherstellbar | `__pycache__`; `.pytest_cache`, `.mypy_cache`, `.ruff_cache` mit `CACHEDIR.TAG`; `.gradle`, `.turbo`, `.parcel-cache`, `.angular` mit der Spur ihres Werkzeugs | Das Werkzeug legt sie beim nächsten Lauf neu an |
-| Wiederherstellbar | `coverage` mit `lcov.info`, `coverage-final.json`, `clover.xml` …; `htmlcov` mit `status.json`; `test-results` mit `.last-run.json`; `test-output` mit `testng-results.xml`; `playwright-report` mit `data`; `.nyc_output` mit `processinfo` | Der nächste Testlauf legt sie neu an |
+| Wiederherstellbar | `__pycache__`; `.pytest_cache`, `.mypy_cache`, `.ruff_cache` mit `CACHEDIR.TAG`; `.gradle`, `.turbo`, `.parcel-cache`, `.angular` mit der Spur ihres Werkzeugs; `.phpunit.cache` mit `test-results` oder `code-coverage` | Das Werkzeug legt sie beim nächsten Lauf neu an |
+| Wiederherstellbar | `coverage` mit `lcov.info`, `coverage-final.json`, `clover.xml` …; `htmlcov` mit `status.json`; `test-results` mit `.last-run.json`; `test-output` mit `testng-results.xml`; `playwright-report` mit `data`; `.nyc_output` mit `processinfo`; `TestResults` mit `*.trx` oder `*.coverage`; `allure-results` mit `*-result.json` oder `*-container.json`; `blob-report` mit `report-*.zip` oder `report.zip`; `mutants.out` mit `outcomes.json` oder `mutants.json` | Der nächste Testlauf legt sie neu an |
+| Wiederherstellbar | `lcov-report` mit Build-Datei daneben (`package.json`, `pyproject.toml` …) und `sorter.js`, `prettify.js` oder `block-navigation.js` darin; `surefire-reports` mit `pom.xml` daneben und `test-*.xml` darin, `failsafe-reports` mit `pom.xml` daneben und `failsafe-summary.xml` oder `test-*.xml` darin | Ohne die Datei daneben sind es oft Kopien oder veröffentlichte Berichte; Maven legt sie sonst in `target` an |
 | Prüfen | Dieselben Ordner ohne ihren Beleg oder ohne die Spur darin; `.cache`; `build` neben `package.json` | Name allein kann auch Handarbeit sein (`coverage/` als Python-Paket) |
-| Prüfen (Testdaten) | `testdata`, `test-data`, `test_data`, `testfiles`, `fixtures`, `__fixtures__`, `__snapshots__`; `data`, `resources`, `samples`, `assets` direkt in `test`, `tests`, `spec` oder `__tests__` | Kann selbst gepflegt sein; eigene Summe, „Viele Testdaten“ ab 1 GB oder ab 100 MB bei mindestens der Hälfte des eigenen Projektinhalts |
+| Prüfen | `allure-report`, `test-reports`, `.stryker-tmp`, `.hypothesis` | Der Allure-Bericht hält den Verlauf früherer Läufe; Erzeuger von `test-reports` unbekannt; der Stryker-Arbeitsordner kann nach einem abgebrochenen Lauf Originaldateien enthalten; gefundene Hypothesis-Beispiele entstehen nicht sicher neu |
+| Prüfen (Testdaten) | `testdata`, `test-data`, `test_data`, `testfiles`, `test-files`, `test-fixtures`, `test_fixtures`, `test-resources`, `test_resources`, `fixtures`, `__fixtures__`, `__snapshots__`, `cassettes` überall; `data`, `resources`, `samples`, `assets`, `fixtures`, `snapshots`, `golden`, `goldens` nur direkt in einem Testordner (`test`, `tests`, `spec`, `specs`, `__tests__`, `e2e`, `cypress`, `testing` … wie unter [Tests](#tests)) | Kann selbst gepflegt sein; eigene Summe, „Viele Testdaten“ ab 1 GB oder ab 100 MB bei mindestens der Hälfte des eigenen Projektinhalts |
 | Prüfen | `logs`, Datenbankdateien, Logs ab 10 MB, jede Datei ab 100 MB | Zweck unbekannt |
 
-Alles andere zählt zum Projekt; `.git`, `.hg` und `.svn` erscheinen getrennt
-als Versionsverwaltung. Als letzte Änderung gilt die neueste Datei außerhalb
-von Ausgaben, Caches und Versionsverwaltung. Ein Projekt, das seit über 180
-Tagen unverändert ist und Wiederherstellbares enthält, trägt „Ruht“. Name und
-Alter allein machen nichts wiederherstellbar.
+Alles andere zählt zum Projekt, auch Testordner und Testdateien; `.git`, `.hg`
+und `.svn` erscheinen getrennt als Versionsverwaltung. Als letzte Änderung gilt
+die neueste Datei außerhalb von Ausgaben, Caches und Versionsverwaltung. Ein
+Projekt, das seit über 180 Tagen unverändert ist und Wiederherstellbares
+enthält, trägt „Ruht“. Name und Alter allein machen nichts wiederherstellbar.
 
 Freigegebene globale Bestände werden als Ganzes gemessen: der NuGet-
 Paketspeicher als wiederherstellbar (Pakete werden neu geladen), installierte
@@ -265,7 +362,10 @@ mogumogu-cli ai content --scope 1 --relative .agents/skills/beispiel/SKILL.md
 ## Prüfnachweise und Grenzen
 
 `tests/package_scopes.rs` prüft Erkennung, Kontext, Zuordnung, Schutz,
-Idempotenz, Teilläufe und den Zugriff außerhalb des Seitenlimits.
+Idempotenz, Teilläufe, die Reihenfolge samt Testordnern und den Zugriff
+außerhalb des Seitenlimits. Testkonventionen, Blattregel und Aufräumregeln
+prüfen die Windows-Tests in `src/inventory/discovery.rs` und
+`src/inventory/tidy.rs`.
 `tests/disk.rs` prüft Freigaben, Austausch, Widerruf, Junctions, Limits,
 Summierung und Demotrennung. `tests/ai_content.rs` prüft flüchtige Inhalte,
 Redaktion, Austausch, Widerruf, Pfadausbruch und Format-/Größenlimits.

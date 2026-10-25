@@ -2,26 +2,55 @@
 //! (PROJEKTPLAN §8.1). Adapters are *static*: they parse files handed to
 //! them by the scanner and never start programs, restore, build or fetch.
 //! Inventory support grants no update or cleanup capability.
+mod bazel;
 mod bun;
+mod bundler;
 mod cargo;
+mod carthage;
+mod cocoapods;
 pub(crate) mod commands;
+mod composer;
+mod conan;
+mod conda;
+mod dart_pub;
+mod deno;
+mod docker;
+mod elm;
+mod git_submodule;
+pub(crate) mod github_actions;
 mod global;
 mod go;
 mod gradle;
+mod helm;
+mod julia;
 mod maven;
+mod mix;
+mod nix;
 mod npm;
 mod nuget;
+mod paket;
+mod pdm;
 mod pip;
+mod pipenv;
 mod pnpm;
+mod poetry;
+mod pre_commit;
+mod renv;
+mod sbt;
+mod swiftpm;
+mod terraform;
+mod toolchain;
 mod uv;
+mod vcpkg;
 mod yarn;
+mod zig;
 pub use global::inventory_global;
 
 use crate::domain::{InventoryItem, ItemCategory, SourceClass};
 use serde::Serialize;
 
 /// Version of the adapter set; part of the comparison basis of generations.
-pub const ADAPTERS_VERSION: &str = "adapters-4";
+pub const ADAPTERS_VERSION: &str = "adapters-5";
 
 /// Support level per capability (published support matrix, §8.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
@@ -141,8 +170,10 @@ pub trait Adapter: Send + Sync {
 }
 
 /// The first adapter that claims a directory inspects it, so the node
-/// managers check their own lockfile beside node_modules.
-static ALL: [&dyn Adapter; 11] = [
+/// managers check their own lockfile beside node_modules and Go's vendor
+/// (with modules.txt) comes before Composer's and Bundler's. Runtime pins
+/// claim nothing and come last.
+static ALL: &[&dyn Adapter] = &[
     &npm::Npm,
     &pnpm::Pnpm,
     &bun::Bun,
@@ -154,10 +185,39 @@ static ALL: [&dyn Adapter; 11] = [
     &go::Go,
     &gradle::Gradle,
     &maven::Maven,
+    &poetry::Poetry,
+    &pipenv::Pipenv,
+    &pdm::Pdm,
+    &conda::Conda,
+    &paket::Paket,
+    &sbt::Sbt,
+    &deno::Deno,
+    &composer::Composer,
+    &elm::Elm,
+    &bundler::Bundler,
+    &dart_pub::Pub,
+    &mix::Mix,
+    &swiftpm::SwiftPm,
+    &cocoapods::CocoaPods,
+    &carthage::Carthage,
+    &vcpkg::Vcpkg,
+    &conan::Conan,
+    &zig::Zig,
+    &docker::Docker,
+    &github_actions::GitHubActions,
+    &pre_commit::PreCommit,
+    &git_submodule::GitSubmodule,
+    &terraform::Terraform,
+    &helm::Helm,
+    &nix::Nix,
+    &bazel::Bazel,
+    &renv::Renv,
+    &julia::Julia,
+    &toolchain::Toolchain,
 ];
 
 pub fn all() -> &'static [&'static dyn Adapter] {
-    &ALL
+    ALL
 }
 
 pub fn by_id(id: &str) -> Option<&'static dyn Adapter> {
@@ -236,18 +296,74 @@ mod tests {
     use super::*;
 
     #[test]
-    fn eleven_adapters_without_cleanup_capability() {
-        assert_eq!(all().len(), 11);
+    fn adapters_without_cleanup_capability() {
         assert!(descriptors().iter().all(|d| d.cleanup == Support::Unsupported));
-        assert_eq!(recognize_filename("uv.lock"), vec!["uv"]);
-        assert_eq!(recognize_filename("App.csproj"), vec!["nuget"]);
-        assert_eq!(recognize_filename("requirements.txt"), vec!["pip"]);
-        assert_eq!(recognize_filename("requirements-dev.txt"), vec!["pip"]);
-        assert_eq!(recognize_filename("bun.lock"), vec!["bun"]);
-        assert_eq!(recognize_filename("yarn.lock"), vec!["yarn"]);
-        assert_eq!(recognize_filename("go.sum"), vec!["go"]);
-        assert_eq!(recognize_filename("build.gradle.kts"), vec!["gradle"]);
-        assert_eq!(recognize_filename("pom.xml"), vec!["maven"]);
+        // Runtime pins may read any manifest; every other dependency has
+        // exactly the owners listed here.
+        let owners = |name: &str| {
+            recognize_filename(name).into_iter().filter(|id| *id != "toolchain").collect::<Vec<_>>().join(",")
+        };
+        for (names, expected) in [
+            (&["uv.lock"][..], "uv"),
+            (&["App.csproj", "Directory.Build.props", "Directory.Build.targets", "dotnet-tools.json"], "nuget"),
+            (&["App.sln", "App.slnx", "NuGet.Config"], "nuget"),
+            (
+                &["requirements.txt", "requirements-dev.txt", "requirements-dev.in", "constraints.txt", "setup.cfg"],
+                "pip",
+            ),
+            (&["pyproject.toml"], "pip,uv,poetry,pdm"),
+            (&["package.json", "package-lock.json"], "npm"),
+            (&["bun.lock"], "bun"),
+            (&["yarn.lock"], "yarn"),
+            (&["go.mod", "go.sum", "go.work", "go.work.sum"], "go"),
+            (&["build.gradle.kts", "settings.gradle", "settings.gradle.kts"], "gradle"),
+            (&["pom.xml", "extensions.xml"], "maven"),
+            (&["poetry.lock"], "poetry"),
+            (&["Pipfile", "Pipfile.lock"], "pipenv"),
+            (&["pdm.lock"], "pdm"),
+            (&["environment.yml", "environment.yaml", "conda-lock.yml", "prod.conda-lock.yml"], "conda"),
+            (&["paket.dependencies", "paket.lock", "paket.references", "App.fsproj.paket.references"], "paket"),
+            (&["build.sbt", "plugins.sbt"], "sbt"),
+            (&["deno.json", "deno.jsonc", "deno.lock"], "deno"),
+            (&["composer.json", "composer.lock"], "composer"),
+            (&["elm.json"], "elm"),
+            (&["Gemfile", "Gemfile.lock", "gems.rb", "gems.locked", "rails.gemspec"], "bundler"),
+            (&["pubspec.yaml", "pubspec.lock", "pubspec_overrides.yaml"], "pub"),
+            (&["mix.exs", "mix.lock"], "mix"),
+            (&["Package.swift", "Package.resolved"], "swiftpm"),
+            (&["Podfile", "Podfile.lock"], "cocoapods"),
+            (&["Cartfile", "Cartfile.private", "Cartfile.resolved"], "carthage"),
+            (&["vcpkg.json", "vcpkg-configuration.json"], "vcpkg"),
+            (&["conanfile.txt", "conanfile.py", "conan.lock"], "conan"),
+            (&["build.zig.zon"], "zig"),
+            (&["Dockerfile", "Dockerfile.dev", "api.Dockerfile", "Containerfile", "compose.yaml"], "docker"),
+            (
+                &["compose.override.yml", "docker-compose.yml", "docker-compose.prod.yaml", "devcontainer.json"],
+                "docker",
+            ),
+            (&[".devcontainer.json", ".gitlab-ci.yml", "build.gitlab-ci.yml", "bitbucket-pipelines.yml"], "docker"),
+            (&["action.yml", "action.yaml"], "github-actions"),
+            (&[".pre-commit-config.yaml", "prek.toml"], "pre-commit"),
+            (&[".gitmodules"], "git-submodule"),
+            (&[".terraform.lock.hcl", "main.tf", "main.tofu"], "terraform"),
+            (&["Chart.yaml", "Chart.lock"], "helm"),
+            (&["flake.nix", "flake.lock"], "nix"),
+            (&["MODULE.bazel", "MODULE.bazel.lock"], "bazel"),
+            (&["renv.lock"], "renv"),
+            (&["Project.toml", "JuliaManifest.toml", "Manifest-v1.11.toml"], "julia"),
+            (&[".nvmrc", ".tool-versions", "mise.local.toml", "rust-toolchain.toml", "global.json"], ""),
+            (&["gradle-wrapper.properties"], ""),
+        ] {
+            for name in names {
+                assert_eq!(owners(name), expected, "{name}");
+            }
+        }
+        for pinned in [".nvmrc", "global.json", "package.json", "go.mod", "main.tf"] {
+            assert!(recognize_filename(pinned).contains(&"toolchain"), "{pinned}");
+        }
+        for unread in ["random.txt", "terraform.tfstate", "prod.tfvars", "compose.json", "docker-compose.txt"] {
+            assert!(recognize_filename(unread).is_empty(), "{unread}");
+        }
         let ids: Vec<&str> = descriptors().iter().map(|d| d.id).collect();
         let mut unique = ids.clone();
         unique.sort_unstable();

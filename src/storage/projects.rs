@@ -22,7 +22,9 @@ const PROJECT_QUERY: &str = "
         SELECT pid, group_concat(e, ' · ') AS e FROM (
             SELECT DISTINCT c.pid AS pid, i.ecosystem AS e
             FROM complete c CROSS JOIN inventory_items i ON i.generation_id = c.gid
-            WHERE i.category = 'manifest' AND i.ecosystem <> 'discovery' ORDER BY c.pid, e)
+            WHERE i.category = 'manifest' AND i.ecosystem NOT IN
+                ('discovery','toolchain','docker','github-actions','pre-commit','git-submodule')
+            ORDER BY c.pid, e)
         GROUP BY pid)
     SELECT p.id, p.name, p.path, p.ecosystem, p.state, p.evidence, p.bytes, p.packages, p.protected, p.origin,
       IFNULL(packages.n, 0) AS inventory_packages,

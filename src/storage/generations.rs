@@ -55,7 +55,7 @@ const ITEM_COLUMNS: &str =
 /// of a workspace (context is the outer project) follow the outer projects.
 const DISCOVERY_ORDER: &str = "CASE json_extract(evidence, '$.discovery.kind')
     WHEN 'project' THEN 0 WHEN 'scratchpad' THEN 1 WHEN 'notebook' THEN 2 WHEN 'script' THEN 3
-    WHEN 'test_data' THEN 4 WHEN 'database' THEN 5 ELSE 6 END,
+    WHEN 'test_data' THEN 4 WHEN 'database' THEN 5 WHEN 'tests' THEN 6 ELSE 7 END,
     json_extract(evidence, '$.discovery.confidence') DESC,
     COALESCE(json_extract(evidence, '$.context'), '') <> rel_path";
 

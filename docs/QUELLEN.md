@@ -31,6 +31,13 @@ Offizielle Dokumentation, die der Umsetzung zugrunde liegt (Stand Oktober 2026).
 - uv-Lockfile: https://docs.astral.sh/uv/concepts/projects/layout/#the-lockfile
 - Cargo.lock und Quellen: https://doc.rust-lang.org/cargo/reference/resolver.html
 - NuGet-Lockfile und zentrale Paketverwaltung: https://learn.microsoft.com/nuget/consume-packages/central-package-management
+- Python-Manager: Poetry https://python-poetry.org/docs/pyproject/ · Pipfile https://pipenv.pypa.io/en/latest/pipfile.html · PDM-Lockfile https://pdm-project.org/latest/usage/lockfile/ · conda-Umgebungen https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
+- Deno, PHP, Ruby, Dart und Elixir: Deno-Module https://docs.deno.com/runtime/fundamentals/modules/ · Composer-Schema https://getcomposer.org/doc/04-schema.md · Gemfile https://bundler.io/guides/gemfile.html · pubspec https://dart.dev/tools/pub/pubspec · Mix-Abhängigkeiten https://hexdocs.pm/mix/Mix.Tasks.Deps.html
+- .NET und JVM: Paket https://fsprojects.github.io/Paket/ · sbt-Abhängigkeiten https://www.scala-sbt.org/1.x/docs/Library-Dependencies.html
+- Apple, C/C++ und Zig: SwiftPM https://docs.swift.org/package-manager/ · Podfile https://guides.cocoapods.org/using/the-podfile.html · Carthage-Artefakte https://github.com/Carthage/Carthage/blob/master/Documentation/Artifacts.md · vcpkg.json https://learn.microsoft.com/vcpkg/reference/vcpkg-json · conanfile.txt https://docs.conan.io/2/reference/conanfile_txt.html · build.zig.zon (Zig 0.14) https://ziglang.org/download/0.14.0/release-notes.html
+- Infrastruktur, R und Julia: Terraform-Lockfile https://developer.hashicorp.com/terraform/language/files/dependency-lock · Helm-Charts https://helm.sh/docs/topics/charts/ · Nix-Flakes https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake · Bazel-Module https://bazel.build/external/module · renv-Lockfile https://rstudio.github.io/renv/articles/lockfile.html · Project.toml/Manifest.toml https://pkgdocs.julialang.org/v1/toml-files/
+- Weitere Abhängigkeiten: Dockerfile https://docs.docker.com/reference/dockerfile/ · Workflow-Syntax https://docs.github.com/actions/writing-workflows/workflow-syntax-for-github-actions · pre-commit https://pre-commit.com/ · `.gitmodules` https://git-scm.com/docs/gitmodules
+- Laufzeitvorgaben: mise https://mise.jdx.dev/configuration.html · global.json https://learn.microsoft.com/dotnet/core/tools/global-json
 - Agent-Skills-Format: https://agentskills.io/specification
 - Die Quellen je KI-Profil stehen im Katalog `profiles/ai-catalog.toml` (Feld `source`).
 

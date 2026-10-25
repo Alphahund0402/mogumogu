@@ -24,9 +24,13 @@ impl PackageId {
 
 pub fn package_ecosystem(ecosystem: &str) -> &str {
     match ecosystem {
-        "pip" | "uv" | "python" => "python",
+        "pip" | "uv" | "python" | "poetry" | "pdm" | "pipenv" => "python",
         "npm" | "pnpm" | "bun" | "yarn" => "npm",
-        "gradle" | "maven" => "maven",
+        "gradle" | "maven" | "sbt" => "maven",
+        "paket" => "nuget",
+        "bundler" => "rubygems",
+        "mix" => "hex",
+        "renv" => "cran",
         other => other,
     }
 }
@@ -206,6 +210,8 @@ string_enum! {
         TestData => "test_data",
         Database => "database",
         Cache => "cache",
+        /// The outermost folder of a project's tests, by its name.
+        Tests => "tests",
     }
 }
 
@@ -223,6 +229,7 @@ impl DiscoveryKind {
             Self::TestData => "Testdaten",
             Self::Database => "Lokale Datenbank",
             Self::Cache => "Cache",
+            Self::Tests => "Tests",
         }
     }
 
@@ -236,7 +243,7 @@ impl DiscoveryKind {
             Self::Cache => super::ResourceKind::Cache,
             Self::BuildOutput | Self::TestOutput => super::ResourceKind::Output,
             Self::TestData | Self::Database => super::ResourceKind::Results,
-            Self::Script | Self::Notebook => super::ResourceKind::Source,
+            Self::Script | Self::Notebook | Self::Tests => super::ResourceKind::Source,
             Self::Project | Self::Scratchpad => super::ResourceKind::Scratchpad,
         }
     }

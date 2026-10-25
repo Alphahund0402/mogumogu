@@ -52,9 +52,46 @@ const TOOLS: &[Tool] = &[
     Tool { id: "yarn", name: "Yarn", files: &["yarn.cmd", "yarn.exe"] },
     Tool { id: "gradle", name: "Gradle", files: &["gradle.bat", "gradle.exe"] },
     Tool { id: "mvn", name: "Maven (mvn)", files: &["mvn.cmd", "mvn.exe"] },
+    Tool { id: "corepack", name: "Corepack", files: &["corepack.cmd"] },
+    Tool { id: "nvm", name: "nvm-windows", files: &["nvm.exe"] },
+    Tool { id: "fnm", name: "fnm", files: &["fnm.exe"] },
+    Tool { id: "volta", name: "Volta", files: &["volta.exe"] },
+    Tool { id: "mise", name: "mise", files: &["mise.exe"] },
+    Tool { id: "deno", name: "Deno", files: &["deno.exe"] },
+    Tool { id: "pipx", name: "pipx", files: &["pipx.exe"] },
+    Tool { id: "poetry", name: "Poetry", files: &["poetry.exe"] },
+    Tool { id: "pdm", name: "PDM", files: &["pdm.exe"] },
+    Tool { id: "pipenv", name: "Pipenv", files: &["pipenv.exe"] },
+    Tool { id: "hatch", name: "Hatch", files: &["hatch.exe"] },
+    Tool { id: "pixi", name: "pixi", files: &["pixi.exe"] },
+    Tool { id: "conda", name: "conda", files: &["conda.exe", "conda.bat"] },
+    Tool { id: "mamba", name: "mamba", files: &["mamba.exe", "mamba.bat"] },
+    Tool { id: "micromamba", name: "micromamba", files: &["micromamba.exe"] },
+    Tool { id: "nuget", name: "NuGet-CLI", files: &["nuget.exe"] },
+    Tool { id: "java", name: "Java (java)", files: &["java.exe"] },
+    Tool { id: "sbt", name: "sbt", files: &["sbt.bat"] },
+    Tool { id: "php", name: "PHP", files: &["php.exe"] },
+    Tool { id: "composer", name: "Composer", files: &["composer.bat", "composer.cmd", "composer.exe"] },
+    Tool { id: "ruby", name: "Ruby", files: &["ruby.exe"] },
+    Tool { id: "gem", name: "RubyGems (gem)", files: &["gem.cmd", "gem.bat"] },
+    Tool { id: "bundle", name: "Bundler (bundle)", files: &["bundle.bat", "bundle.cmd"] },
+    Tool { id: "dart", name: "Dart", files: &["dart.exe", "dart.bat"] },
+    Tool { id: "flutter", name: "Flutter", files: &["flutter.bat"] },
+    Tool { id: "swift", name: "Swift", files: &["swift.exe"] },
+    Tool { id: "elixir", name: "Elixir", files: &["elixir.bat", "elixir.ps1"] },
+    Tool { id: "mix", name: "Mix (Elixir)", files: &["mix.bat", "mix.ps1"] },
+    Tool { id: "julia", name: "Julia", files: &["julia.exe"] },
+    Tool { id: "zig", name: "Zig", files: &["zig.exe"] },
+    Tool { id: "cmake", name: "CMake", files: &["cmake.exe"] },
+    Tool { id: "vcpkg", name: "vcpkg", files: &["vcpkg.exe"] },
+    Tool { id: "conan", name: "Conan", files: &["conan.exe"] },
+    Tool { id: "bazel", name: "Bazel (Bazelisk)", files: &["bazel.exe", "bazelisk.exe"] },
+    Tool { id: "terraform", name: "Terraform", files: &["terraform.exe"] },
     Tool { id: "git", name: "Git", files: &["git.exe"] },
     Tool { id: "gh", name: "GitHub CLI", files: &["gh.exe"] },
     Tool { id: "docker", name: "Docker", files: &["docker.exe"] },
+    Tool { id: "podman", name: "Podman", files: &["podman.exe"] },
+    Tool { id: "helm", name: "Helm", files: &["helm.exe"] },
     Tool { id: "code", name: "VS Code", files: &["code.cmd"] },
     Tool { id: "codex", name: "Codex", files: &["codex.cmd", "codex.exe"] },
     Tool { id: "claude", name: "Claude Code", files: &["claude.exe", "claude.cmd"] },
@@ -68,6 +105,7 @@ const SHIM_DIRS: &[(&[&str], &str)] = &[
     (&["scoop", "shims"], "Scoop-Shim"),
     (&["chocolatey", "bin"], "Chocolatey-Shim"),
     (&[".volta", "bin"], "Volta-Shim"),
+    (&["Volta", "bin"], "Volta-Shim"),
     (&["mise", "shims"], "mise-Shim"),
     (&[".cargo", "bin"], "rustup-Proxy oder Cargo-Tool"),
     (&["Microsoft", "WindowsApps"], "App-Ausführungsalias"),
@@ -302,6 +340,362 @@ const STORES: &[Place] = &[
         scope: Some(ScopeKind::YarnCache),
         note: "Heruntergeladene Pakete; wird nur gemessen",
     },
+    // Location only from here on: no read approval exists for these places.
+    Place {
+        id: "bun-cache",
+        group: FindingGroup::Store,
+        name: "Bun-Cache",
+        moved_by: Some("BUN_INSTALL_CACHE_DIR"),
+        candidates: &[(Base::UserProfile, &[".bun", "install", "cache"])],
+        markers: &[],
+        scope: None,
+        note: "Heruntergeladene Pakete; Inhalt ungelesen",
+    },
+    Place {
+        id: "deno-dir",
+        group: FindingGroup::Store,
+        name: "Deno-Cache",
+        moved_by: Some("DENO_DIR"),
+        candidates: &[(Base::LocalAppData, &["deno"])],
+        markers: &[],
+        scope: None,
+        note: "Module, npm-Pakete und Übersetzungen; Inhalt ungelesen",
+    },
+    Place {
+        id: "volta-home",
+        group: FindingGroup::Store,
+        name: "Volta",
+        moved_by: Some("VOLTA_HOME"),
+        candidates: &[(Base::LocalAppData, &["Volta"])],
+        markers: &[],
+        scope: None,
+        note: "Node-Versionen, Paketmanager und Shims; Inhalt ungelesen",
+    },
+    Place {
+        id: "nvm-home",
+        group: FindingGroup::Store,
+        name: "nvm-windows",
+        moved_by: Some("NVM_HOME"),
+        candidates: &[(Base::AppData, &["nvm"])],
+        markers: &["settings.txt"],
+        scope: None,
+        note: "Node-Versionen; die aktive Version bleibt ungeprüft",
+    },
+    Place {
+        id: "fnm-dir",
+        group: FindingGroup::Store,
+        name: "fnm",
+        moved_by: Some("FNM_DIR"),
+        candidates: &[(Base::AppData, &["fnm"]), (Base::UserProfile, &[".fnm"])],
+        markers: &[],
+        scope: None,
+        note: "Node-Versionen; die aktive Version bleibt ungeprüft",
+    },
+    Place {
+        id: "mise-data",
+        group: FindingGroup::Store,
+        name: "mise",
+        moved_by: Some("MISE_DATA_DIR"),
+        candidates: &[(Base::LocalAppData, &["mise"])],
+        markers: &["installs"],
+        scope: None,
+        note: "Werkzeugversionen und Shims; Inhalt ungelesen",
+    },
+    Place {
+        id: "pipx-home",
+        group: FindingGroup::Store,
+        name: "pipx-Umgebungen",
+        moved_by: Some("PIPX_HOME"),
+        candidates: &[
+            (Base::LocalAppData, &["pipx", "pipx"]),
+            (Base::UserProfile, &["pipx"]),
+            (Base::UserProfile, &[".local", "pipx"]),
+        ],
+        markers: &["venvs"],
+        scope: None,
+        note: "Toolumgebungen; Inhalt ungelesen",
+    },
+    Place {
+        id: "poetry-cache",
+        group: FindingGroup::Store,
+        name: "Poetry-Cache",
+        moved_by: Some("POETRY_CACHE_DIR"),
+        candidates: &[(Base::LocalAppData, &["pypoetry", "Cache"])],
+        markers: &[],
+        scope: None,
+        note: "Pakete und virtuelle Umgebungen; Inhalt ungelesen",
+    },
+    Place {
+        id: "pipenv-venvs",
+        group: FindingGroup::Store,
+        name: "Pipenv-Umgebungen",
+        moved_by: Some("WORKON_HOME"),
+        candidates: &[(Base::UserProfile, &[".virtualenvs"])],
+        markers: &[],
+        scope: None,
+        note: "Zentrale virtuelle Umgebungen; Inhalt ungelesen",
+    },
+    Place {
+        id: "miniconda",
+        group: FindingGroup::Store,
+        name: "Miniconda",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &["miniconda3"])],
+        markers: &["conda-meta"],
+        scope: None,
+        note: "conda-Installation mit Umgebungen und Paketcache; nichts wird gestartet",
+    },
+    Place {
+        id: "anaconda",
+        group: FindingGroup::Store,
+        name: "Anaconda",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &["anaconda3"])],
+        markers: &["conda-meta"],
+        scope: None,
+        note: "conda-Installation mit Umgebungen und Paketcache; nichts wird gestartet",
+    },
+    Place {
+        id: "miniforge",
+        group: FindingGroup::Store,
+        name: "Miniforge",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &["miniforge3"])],
+        markers: &["conda-meta"],
+        scope: None,
+        note: "conda-Installation mit Umgebungen und Paketcache; nichts wird gestartet",
+    },
+    Place {
+        id: "conda-user",
+        group: FindingGroup::Store,
+        name: "conda-Benutzerordner",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &[".conda"])],
+        markers: &[],
+        scope: None,
+        note: "Umgebungsliste und Benutzerumgebungen; Inhalt ungelesen",
+    },
+    Place {
+        id: "micromamba-root",
+        group: FindingGroup::Store,
+        name: "micromamba",
+        moved_by: Some("MAMBA_ROOT_PREFIX"),
+        candidates: &[],
+        markers: &[],
+        scope: None,
+        note: "Umgebungen und Paketcache; Inhalt ungelesen",
+    },
+    Place {
+        id: "pixi-home",
+        group: FindingGroup::Store,
+        name: "pixi (global)",
+        moved_by: Some("PIXI_HOME"),
+        candidates: &[(Base::UserProfile, &[".pixi"])],
+        markers: &[],
+        scope: None,
+        note: "Globale Werkzeugumgebungen; Inhalt ungelesen",
+    },
+    Place {
+        id: "rattler-cache",
+        group: FindingGroup::Store,
+        name: "pixi-Paketcache",
+        moved_by: Some("PIXI_CACHE_DIR"),
+        candidates: &[(Base::LocalAppData, &["rattler", "cache"])],
+        markers: &[],
+        scope: None,
+        note: "Heruntergeladene conda-Pakete; Inhalt ungelesen",
+    },
+    Place {
+        id: "composer-home",
+        group: FindingGroup::Store,
+        name: "Globale Composer-Pakete",
+        moved_by: Some("COMPOSER_HOME"),
+        candidates: &[(Base::AppData, &["Composer"])],
+        markers: &["vendor"],
+        scope: None,
+        note: "Globale Pakete (vendor) und Konfiguration; Inhalt ungelesen",
+    },
+    Place {
+        id: "composer-cache",
+        group: FindingGroup::Store,
+        name: "Composer-Cache",
+        moved_by: Some("COMPOSER_CACHE_DIR"),
+        candidates: &[(Base::LocalAppData, &["Composer"])],
+        markers: &[],
+        scope: None,
+        note: "Heruntergeladene Pakete; Inhalt ungelesen",
+    },
+    Place {
+        id: "gem-user",
+        group: FindingGroup::Store,
+        name: "RubyGems-Benutzerinstallationen",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &[".gem"])],
+        markers: &[],
+        scope: None,
+        note: "Gems aus --user-install; Gems der Ruby-Installation liegen dort nicht",
+    },
+    Place {
+        id: "go-modcache",
+        group: FindingGroup::Store,
+        name: "Go-Modulcache",
+        moved_by: Some("GOMODCACHE"),
+        candidates: &[(Base::UserProfile, &["go", "pkg", "mod"])],
+        markers: &[],
+        scope: None,
+        note: "Heruntergeladene Module; Inhalt ungelesen",
+    },
+    Place {
+        id: "go-build-cache",
+        group: FindingGroup::Store,
+        name: "Go-Build-Cache",
+        moved_by: Some("GOCACHE"),
+        candidates: &[(Base::LocalAppData, &["go-build"])],
+        markers: &[],
+        scope: None,
+        note: "Übersetzte Pakete und Testergebnisse; Inhalt ungelesen",
+    },
+    Place {
+        id: "pub-cache",
+        group: FindingGroup::Store,
+        name: "Pub-Cache (Dart/Flutter)",
+        moved_by: Some("PUB_CACHE"),
+        candidates: &[(Base::LocalAppData, &["Pub", "Cache"])],
+        markers: &[],
+        scope: None,
+        note: "Heruntergeladene Dart- und Flutter-Pakete; Inhalt ungelesen",
+    },
+    Place {
+        id: "hex-home",
+        group: FindingGroup::Store,
+        name: "Hex (Elixir)",
+        moved_by: Some("HEX_HOME"),
+        candidates: &[(Base::UserProfile, &[".hex"])],
+        markers: &[],
+        scope: None,
+        note: "Paketcache und Konfiguration; Inhalt ungelesen",
+    },
+    Place {
+        id: "mix-home",
+        group: FindingGroup::Store,
+        name: "Mix (Elixir)",
+        moved_by: Some("MIX_HOME"),
+        candidates: &[(Base::UserProfile, &[".mix"])],
+        markers: &[],
+        scope: None,
+        note: "Archive und Escripts; Inhalt ungelesen",
+    },
+    Place {
+        id: "julia-depot",
+        group: FindingGroup::Store,
+        name: "Julia-Depot",
+        moved_by: Some("JULIA_DEPOT_PATH"),
+        candidates: &[(Base::UserProfile, &[".julia"])],
+        markers: &[],
+        scope: None,
+        note: "Pakete, Artefakte und Registries; Inhalt ungelesen",
+    },
+    Place {
+        id: "r-user-library",
+        group: FindingGroup::Store,
+        name: "R-Benutzerbibliothek",
+        moved_by: Some("R_LIBS_USER"),
+        candidates: &[
+            (Base::LocalAppData, &["R", "win-library"]),
+            (Base::UserProfile, &["Documents", "R", "win-library"]),
+        ],
+        markers: &[],
+        scope: None,
+        note: "R-Pakete je R-Version; Inhalt ungelesen",
+    },
+    Place {
+        id: "renv-cache",
+        group: FindingGroup::Store,
+        name: "renv-Cache",
+        moved_by: Some("RENV_PATHS_CACHE"),
+        candidates: &[(Base::LocalAppData, &["renv", "cache"])],
+        markers: &[],
+        scope: None,
+        note: "Gemeinsamer Paketcache der Projekte; Inhalt ungelesen",
+    },
+    Place {
+        id: "vcpkg-archives",
+        group: FindingGroup::Store,
+        name: "vcpkg-Binärcache",
+        moved_by: Some("VCPKG_DEFAULT_BINARY_CACHE"),
+        candidates: &[(Base::LocalAppData, &["vcpkg", "archives"]), (Base::AppData, &["vcpkg", "archives"])],
+        markers: &[],
+        scope: None,
+        note: "Gebaute Pakete; Inhalt ungelesen",
+    },
+    Place {
+        id: "vcpkg-root",
+        group: FindingGroup::Store,
+        name: "vcpkg-Installation",
+        moved_by: Some("VCPKG_ROOT"),
+        candidates: &[],
+        markers: &[".vcpkg-root"],
+        scope: None,
+        note: "Klassisch installierte Pakete bleiben ungelesen; nichts wird gestartet",
+    },
+    Place {
+        id: "conan-home",
+        group: FindingGroup::Store,
+        name: "Conan-Cache",
+        moved_by: Some("CONAN_HOME"),
+        candidates: &[(Base::UserProfile, &[".conan2"]), (Base::UserProfile, &[".conan"])],
+        markers: &[],
+        scope: None,
+        note: "Paketcache und Profile; Inhalt ungelesen",
+    },
+    Place {
+        id: "terraform-mirror",
+        group: FindingGroup::Store,
+        name: "Terraform-Providerspiegel",
+        moved_by: None,
+        candidates: &[(Base::AppData, &["terraform.d", "plugins"])],
+        markers: &[],
+        scope: None,
+        note: "Lokal abgelegte Provider; Inhalt ungelesen",
+    },
+    Place {
+        id: "terraform-plugin-cache",
+        group: FindingGroup::Store,
+        name: "Terraform-Providercache",
+        moved_by: Some("TF_PLUGIN_CACHE_DIR"),
+        candidates: &[],
+        markers: &[],
+        scope: None,
+        note: "Gemeinsam genutzte Provider; Inhalt ungelesen",
+    },
+    Place {
+        id: "gradle-wrapper-dists",
+        group: FindingGroup::Store,
+        name: "Gradle-Wrapper-Distributionen",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &[".gradle", "wrapper", "dists"])],
+        markers: &[],
+        scope: None,
+        note: "Vom Wrapper geladene Gradle-Versionen; Inhalt ungelesen",
+    },
+    Place {
+        id: "maven-wrapper-dists",
+        group: FindingGroup::Store,
+        name: "Maven-Wrapper-Distributionen",
+        moved_by: None,
+        candidates: &[(Base::UserProfile, &[".m2", "wrapper", "dists"])],
+        markers: &[],
+        scope: None,
+        note: "Vom Wrapper geladene Maven-Versionen; Inhalt ungelesen",
+    },
+];
+
+/// Variables that move the parent of a place: the place then lies at the
+/// given subfolder of the variable's first entry.
+const MOVED_PARENTS: &[(&str, &str, &[&str])] = &[
+    ("go-modcache", "GOPATH", &["pkg", "mod"]),
+    ("gradle-wrapper-dists", "GRADLE_USER_HOME", &["wrapper", "dists"]),
+    ("maven-wrapper-dists", "MAVEN_USER_HOME", &["wrapper", "dists"]),
 ];
 
 /// User configuration folders of AI clients. `prefix` maps the folder to the
@@ -572,7 +966,10 @@ fn tools(env: &dyn Env, probe: &dyn Probe, started: Instant, report: &mut System
 }
 
 fn place_finding(place: &Place, env: &dyn Env, probe: &dyn Probe, report: &mut SystemReport) {
-    let moved = place.moved_by.and_then(|name| env.var(name)).map(PathBuf::from);
+    let moved = place.moved_by.and_then(|name| env.var(name)).and_then(first_path).or_else(|| {
+        let (_, name, sub) = MOVED_PARENTS.iter().find(|(id, ..)| *id == place.id)?;
+        env.var(name).and_then(first_path).map(|base| sub.iter().fold(base, |path, part| path.join(part)))
+    });
     let candidates: Vec<PathBuf> = match &moved {
         Some(path) => vec![path.clone()],
         None => place
@@ -622,6 +1019,12 @@ fn place_finding(place: &Place, env: &dyn Env, probe: &dyn Probe, report: &mut S
             coverage: String::new(),
         });
     }
+}
+
+/// The first entry of a variable that may hold a list (`GOPATH`,
+/// `JULIA_DEPOT_PATH`); an empty first entry stands for the default place.
+fn first_path(value: OsString) -> Option<PathBuf> {
+    std::env::split_paths(&value).next().filter(|path| !path.as_os_str().is_empty())
 }
 
 fn ends_with(dir: &Path, tail: &[&str]) -> bool {
@@ -749,5 +1152,96 @@ mod tests {
         assert_eq!(user_ai_prefix(Path::new(r"D:\cfg\codex-home"), &env), Some(".codex"));
         assert_eq!(user_ai_prefix(Path::new(r"C:\Users\x\.config\opencode"), &env), Some(".opencode"));
         assert_eq!(user_ai_prefix(Path::new(r"C:\Users\x\Documents"), &env), None);
+    }
+
+    #[test]
+    fn package_manager_commands_and_global_stores_are_found_by_name_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("Users").join("someone");
+        let appdata = home.join("AppData").join("Roaming");
+        let local = home.join("AppData").join("Local");
+        let tools = temp.path().join("tools");
+        let volta = local.join("Volta").join("bin");
+        for name in ["deno.exe", "composer.bat", "mix.bat", "corepack.cmd"] {
+            touch(&tools.join(name));
+        }
+        touch(&volta.join("pnpm.exe"));
+        touch(&appdata.join("Composer").join("vendor").join("autoload.php"));
+        std::fs::create_dir_all(local.join("Pub").join("Cache")).unwrap();
+        std::fs::create_dir_all(home.join("miniforge3").join("conda-meta")).unwrap();
+        std::fs::create_dir_all(home.join(".local").join("pipx").join("venvs")).unwrap();
+        std::fs::create_dir_all(home.join("go").join("pkg").join("mod")).unwrap();
+        let gopath = temp.path().join("gopath");
+        std::fs::create_dir_all(gopath.join("pkg").join("mod")).unwrap();
+        let gradle_home = temp.path().join("gradle-home");
+        std::fs::create_dir_all(gradle_home.join("wrapper").join("dists")).unwrap();
+        let depot = temp.path().join("depot");
+        std::fs::create_dir_all(&depot).unwrap();
+        let mut depots = depot.clone().into_os_string();
+        depots.push(";");
+        let env = MapEnv(HashMap::from([
+            ("PATH", std::env::join_paths([volta.clone(), tools.clone()]).unwrap()),
+            ("USERPROFILE", home.clone().into_os_string()),
+            ("APPDATA", appdata.into_os_string()),
+            ("LOCALAPPDATA", local.into_os_string()),
+            ("GOPATH", std::env::join_paths([gopath.clone(), temp.path().join("second")]).unwrap()),
+            ("GRADLE_USER_HOME", gradle_home.clone().into_os_string()),
+            ("JULIA_DEPOT_PATH", depots),
+        ]));
+        let report = discover(&env, &LocalProbe);
+        let by = |id: &str| report.findings.iter().find(|f| f.id == id).unwrap_or_else(|| panic!("{id}: {report:#?}"));
+        for tool in ["tool:deno", "tool:composer", "tool:mix", "tool:corepack"] {
+            assert_eq!(by(tool).evidence, FindingEvidence::OnPath, "{tool}");
+        }
+        let pnpm = by("tool:pnpm");
+        assert_eq!(pnpm.evidence, FindingEvidence::Shim);
+        assert!(pnpm.note.starts_with("Volta-Shim"), "{}", pnpm.note);
+        assert_eq!(by("store:composer-home:0").evidence, FindingEvidence::Installed);
+        assert_eq!(by("store:pub-cache:0").location, r"%LOCALAPPDATA%\Pub\Cache");
+        assert_eq!(by("store:miniforge:0").evidence, FindingEvidence::Installed);
+        let pipx = by("store:pipx-home:2");
+        assert!(pipx.note.starts_with("Ort weicht"), "older pipx layout: {}", pipx.note);
+        assert_eq!(pipx.evidence, FindingEvidence::Installed);
+        let modules: Vec<&SystemFinding> =
+            report.findings.iter().filter(|f| f.id.starts_with("store:go-modcache:")).collect();
+        assert_eq!(modules.len(), 1, "GOPATH replaces the default: {modules:#?}");
+        assert_eq!(Path::new(&modules[0].path), gopath.join("pkg").join("mod"));
+        assert_eq!(Path::new(&by("store:gradle-wrapper-dists:0").path), gradle_home.join("wrapper").join("dists"));
+        assert_eq!(Path::new(&by("store:julia-depot:0").path), depot);
+        let location_only = ["composer-home", "pub-cache", "miniforge", "pipx-home", "go-modcache", "julia-depot"];
+        assert!(
+            report
+                .findings
+                .iter()
+                .filter(|f| location_only.iter().any(|id| f.id.starts_with(&format!("store:{id}:"))))
+                .all(|f| f.scope.is_none()),
+            "no read approval exists for these places"
+        );
+        assert!(report.findings.iter().all(|f| !f.location.contains("someone")), "no user name in locations");
+    }
+
+    #[test]
+    fn list_variables_use_their_first_entry() {
+        assert_eq!(first_path(OsString::from(r"C:\gopath;D:\other")), Some(PathBuf::from(r"C:\gopath")));
+        assert_eq!(
+            first_path(OsString::from(r#""C:\Program Files\Julia Depot";"#)),
+            Some(PathBuf::from(r"C:\Program Files\Julia Depot"))
+        );
+        assert_eq!(first_path(OsString::from(r";D:\depot")), None, "an empty first entry keeps the default");
+    }
+
+    #[test]
+    fn tool_and_place_catalogs_stay_names_only() {
+        let mut ids: Vec<&str> = TOOLS.iter().map(|t| t.id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), TOOLS.len(), "tool ids are unique");
+        assert!(TOOLS.iter().all(|t| !matches!(t.id, "winget" | "scoop" | "choco")), "system package lists stay out");
+        assert!(TOOLS.iter().all(|t| !t.files.is_empty() && t.files.iter().all(|f| !f.contains(['/', '\\']))));
+        let mut places: Vec<&str> = STORES.iter().chain(SCRATCH_PLACES).map(|p| p.id).collect();
+        places.sort_unstable();
+        places.dedup();
+        assert_eq!(places.len(), STORES.len() + SCRATCH_PLACES.len(), "place ids are unique");
+        assert!(MOVED_PARENTS.iter().all(|(id, ..)| STORES.iter().any(|p| p.id == *id && p.scope.is_none())));
     }
 }

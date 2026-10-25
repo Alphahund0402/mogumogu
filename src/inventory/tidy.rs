@@ -1,7 +1,9 @@
 //! Bounded tidy-up walk over one approved project (see `domain::tidy`). Sizes
 //! come from directory listings below the identity-checked root; no file is
 //! opened, links and cloud placeholders are never followed, and an incomplete
-//! walk leaves the total unknown.
+//! walk leaves the total unknown. Test code is the project's own: test
+//! folders and test files never become items, only test data and outputs.
+use super::discovery::{DATA_IN_TESTS, GOLDEN, TEST_DATA_FOLDERS, TEST_ROOTS};
 use crate::domain::{TidyClass, TidyItem};
 use crate::fsread::{self, Budget, ScanControl, ScopeRoot};
 use crate::limits::ScanLimits;
@@ -62,6 +64,14 @@ const PLAYWRIGHT_RESULTS: &[&str] = &[".last-run.json"];
 const TESTNG_OUTPUT: &[&str] = &["testng-results.xml"];
 const PLAYWRIGHT_REPORT: &[&str] = &["data"];
 const NYC_OUTPUT: &[&str] = &["processinfo"];
+const LCOV_REPORT: &[&str] = &["sorter.js", "prettify.js", "block-navigation.js"];
+const VSTEST_RESULTS: &[&str] = &["*.trx", "*.coverage"];
+const BLOB_REPORT: &[&str] = &["report-*.zip", "report.zip"];
+const ALLURE_RESULTS: &[&str] = &["*-result.json", "*-container.json"];
+const SUREFIRE_REPORTS: &[&str] = &["test-*.xml"];
+const FAILSAFE_REPORTS: &[&str] = &["failsafe-summary.xml", "test-*.xml"];
+const MUTANTS_OUT: &[&str] = &["outcomes.json", "mutants.json"];
+const PHPUNIT_CACHE: &[&str] = &["test-results", "code-coverage"];
 const DOTNET_PROJECTS: &[&str] = &[".csproj", ".fsproj", ".vbproj", ".sln", ".slnx"];
 
 #[derive(Debug)]
@@ -80,17 +90,13 @@ pub struct TidyWalk {
 }
 
 use crate::domain::TEST_DATA_LABEL as TEST_DATA;
-/// Folders that hold data for tests wherever they are.
-const TEST_DATA_FOLDERS: &[&str] =
-    &["testdata", "test-data", "test_data", "testfiles", "test-files", "fixtures", "__fixtures__", "__snapshots__"];
-/// Data folders that count as test data directly inside a test folder.
-const TEST_FOLDERS: &[&str] = &["test", "tests", "spec", "__tests__"];
-const DATA_IN_TESTS: &[&str] = &["data", "resources", "samples", "assets"];
 
-/// Whether `name` inside the folder `parent` (relative path) holds test data.
+/// Whether `name` inside the folder `parent` (relative path) holds test
+/// data: a data or golden folder directly in a test folder. Deeper down
+/// such names can hold test code. The names are shared with the discovery.
 fn test_data_folder(parent: &str, name: &str) -> bool {
     let parent = parent.rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
-    TEST_FOLDERS.contains(&parent.as_str()) && DATA_IN_TESTS.contains(&name)
+    TEST_ROOTS.contains(&parent.as_str()) && (DATA_IN_TESTS.contains(&name) || GOLDEN.contains(&name))
 }
 
 #[derive(Clone, Copy)]
@@ -117,13 +123,16 @@ struct Frame {
     signature: Option<&'static [&'static str]>,
 }
 
-/// The first trace of `signature` among the names of a folder.
+/// The first trace of `signature` among the names of a folder. One `*`
+/// stands for any run of characters: `lib.*`, `*.trx`, `test-*.xml`.
 fn trace(entries: &[DirEntryInfo], signature: &[&'static str]) -> Option<&'static str> {
     signature.iter().copied().find(|wanted| {
         entries.iter().filter(|e| !e.is_reparse()).filter_map(|e| e.name_str()).any(|name| {
             let name = name.to_ascii_lowercase();
-            match wanted.strip_suffix('*') {
-                Some(prefix) => name.starts_with(prefix),
+            match wanted.split_once('*') {
+                Some((prefix, suffix)) => {
+                    name.len() >= prefix.len() + suffix.len() && name.starts_with(prefix) && name.ends_with(suffix)
+                }
                 None => name == *wanted,
             }
         })
@@ -433,6 +442,48 @@ fn verdict(name: &str, here: &Names) -> Option<Verdict> {
         "test-output" => Verdict::Signed("Test-Ausgabe", "TestNG-Ausgabe".into(), TESTNG_OUTPUT),
         "playwright-report" => Verdict::Signed("Test-Ausgabe", "Playwright-Bericht".into(), PLAYWRIGHT_REPORT),
         ".nyc_output" => Verdict::Signed("Test-Ausgabe", "nyc-Rohdaten".into(), NYC_OUTPUT),
+        // Alone, outside coverage/, these are often copies or published reports.
+        "lcov-report" => match here.file(BUILD_MANIFESTS) {
+            Some(file) => {
+                Verdict::Signed("Test-Ausgabe", format!("Abdeckungsbericht (Istanbul) · {}", beside(file)), LCOV_REPORT)
+            }
+            None => Verdict::Item(Review, "Test-Ausgabe", "Abdeckungsbericht ohne Build-Datei daneben".into()),
+        },
+        "testresults" => Verdict::Signed("Test-Ausgabe", "VSTest-Ergebnisse".into(), VSTEST_RESULTS),
+        "blob-report" => Verdict::Signed("Test-Ausgabe", "Playwright-Blob-Bericht".into(), BLOB_REPORT),
+        "allure-results" => Verdict::Signed("Test-Ausgabe", "Allure-Rohdaten".into(), ALLURE_RESULTS),
+        // Maven writes them into target/; elsewhere only with pom.xml beside
+        // (a custom reportsDirectory), otherwise they are copies.
+        "surefire-reports" | "failsafe-reports" => {
+            let (label, traces) = if name == "surefire-reports" {
+                ("Surefire-Berichte", SUREFIRE_REPORTS)
+            } else {
+                ("Failsafe-Berichte", FAILSAFE_REPORTS)
+            };
+            match here.file(&["pom.xml"]) {
+                Some(file) => Verdict::Signed("Test-Ausgabe", format!("{label} · {}", beside(file)), traces),
+                None => Verdict::Item(Review, "Test-Ausgabe", format!("{label} ohne pom.xml daneben")),
+            }
+        }
+        "mutants.out" => Verdict::Signed("Test-Ausgabe", "cargo-mutants-Ergebnisse".into(), MUTANTS_OUT),
+        // After an aborted in-place run backup-* holds the only original sources.
+        ".stryker-tmp" => {
+            Verdict::Item(Review, "Test-Ausgabe", "Stryker-Arbeitsordner; kann Originaldateien enthalten".into())
+        }
+        // The report keeps the trend of earlier runs, a new run does not.
+        "allure-report" => Verdict::Item(Review, "Test-Ausgabe", "Allure-Bericht mit Verlauf früherer Läufe".into()),
+        "test-reports" => Verdict::Item(Review, "Test-Ausgabe", "Testberichte; Erzeuger unbekannt".into()),
+        ".hypothesis" => {
+            // Found failing examples are not reliably found again; teams commit them.
+            Verdict::Item(
+                Review,
+                "Cache",
+                "Hypothesis-Beispieldatenbank; gefundene Beispiele entstehen nicht sicher neu".into(),
+            )
+        }
+        ".phpunit.cache" => {
+            Verdict::Signed("Cache", "PHPUnit-Cache; entsteht beim nächsten Lauf neu".into(), PHPUNIT_CACHE)
+        }
         _ if TEST_DATA_FOLDERS.contains(&name) => {
             Verdict::Item(Review, TEST_DATA, "Kann selbst gepflegte Daten enthalten".into())
         }
@@ -546,10 +597,101 @@ mod tests {
         put(root, "web/__snapshots__/c.snap", 300);
         put(root, "data/d.csv", 50);
         put(root, "tests/unit.rs", 10);
+        put(root, "tests/snapshots/e.txt", 70);
+        put(root, "e2e/assets/f.png", 80);
+        put(root, "test/goldens/g.png", 90);
+        put(root, "golden/h.png", 5);
+        put(root, "src/test/java/demo/golden/GoldenMasterTest.java", 7);
+        put(root, "api/cassettes/login.yml", 40);
+        put(root, "api/test_resources/i.bin", 20);
         let walk = tidy(root, None, None);
-        assert_eq!(walk.test_data, 3_300, "{:#?}", walk.items);
+        assert_eq!(walk.test_data, 3_300 + 70 + 80 + 90 + 40 + 20, "{:#?}", walk.items);
         assert!(walk.items.iter().all(|i| i.rel_path != "data"), "data outside a test folder is the project's own");
-        assert_eq!(walk.review, 3_300);
+        assert!(walk.items.iter().all(|i| i.rel_path != "golden"), "golden files only inside a test folder");
+        assert!(walk.items.iter().any(|i| i.rel_path == "test/goldens" && i.label == TEST_DATA));
+        assert!(
+            walk.items.iter().all(|i| !i.rel_path.ends_with("demo/golden")),
+            "deeper down a golden folder can hold test code"
+        );
+        assert_eq!(walk.review, walk.test_data);
+    }
+
+    #[test]
+    fn test_code_never_becomes_an_item() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        put(root, "pom.xml", 1);
+        put(root, "src/test/java/demo/AppTest.java", 100);
+        put(root, "tests/test_api.py", 100);
+        put(root, "spec/model_spec.rb", 100);
+        put(root, "__tests__/view.test.tsx", 100);
+        put(root, "cypress/e2e/login.cy.ts", 100);
+        put(root, "pkg/store_test.go", 100);
+        let walk = tidy(root, None, None);
+        assert!(walk.items.is_empty(), "{:#?}", walk.items);
+        assert_eq!((walk.regenerable, walk.review, walk.test_data), (0, 0, 0));
+    }
+
+    #[test]
+    fn new_test_outputs_and_caches_need_their_tool_trace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        // Reports outside target/ or coverage/ need their build file beside.
+        for rel in ["f/pom.xml", "g/pom.xml", "m/package.json"] {
+            put(root, rel, 1);
+        }
+        for (rel, regenerable) in [
+            ("a/TestResults/run.trx", true),
+            ("b/TestResults/notes.txt", false),
+            ("c/allure-results/0f1e-result.json", true),
+            ("d/allure-report/widgets/summary.json", false),
+            ("e/blob-report/report-3f2a.zip", true),
+            ("f/surefire-reports/TEST-demo.AppTest.xml", true),
+            ("g/failsafe-reports/failsafe-summary.xml", true),
+            ("h/mutants.out/outcomes.json", true),
+            ("i/.stryker-tmp/sandbox-Ab12/package.json", false),
+            ("j/test-reports/junit.xml", false),
+            ("k/.hypothesis/examples/1a2b/3c4d", false),
+            ("l/.phpunit.cache/test-results", true),
+            ("m/lcov-report/sorter.js", true),
+            ("n/lcov-report/index.html", false),
+            ("o/surefire-reports/TEST-copied.xml", false),
+            ("p/lcov-report/sorter.js", false),
+            ("q/.stryker-tmp/backup-Zz9/src/cart.ts", false),
+        ] {
+            put(root, rel, 10);
+            let folder = rel.split('/').take(2).collect::<Vec<_>>().join("/");
+            let walk = tidy(root, None, None);
+            let item = walk
+                .items
+                .iter()
+                .find(|i| i.rel_path == folder)
+                .unwrap_or_else(|| panic!("{folder}: {:#?}", walk.items));
+            let expected = if regenerable { TidyClass::Regenerable } else { TidyClass::Review };
+            assert_eq!(item.class, expected, "{folder}: {}", item.evidence);
+        }
+        let parent = crate::platform::DirHandle::open_root(&root.join("a"), false).unwrap();
+        let (label, evidence) = recoverable(&parent, "TestResults").unwrap();
+        assert!(label == "Test-Ausgabe" && evidence.contains("*.trx darin"), "{evidence}");
+        let parent = crate::platform::DirHandle::open_root(&root.join("b"), false).unwrap();
+        assert!(recoverable(&parent, "TestResults").is_none(), "no trace, no cleanup");
+        let parent = crate::platform::DirHandle::open_root(&root.join("d"), false).unwrap();
+        assert!(recoverable(&parent, "allure-report").is_none(), "the report keeps a history");
+    }
+
+    #[test]
+    fn every_test_output_and_test_data_name_of_the_discovery_has_a_rule() {
+        let none = Names(Vec::new());
+        let label = |name: &str| match verdict(name, &none) {
+            Some(Verdict::Item(_, label, _) | Verdict::Signed(label, ..)) => Some(label),
+            _ => None,
+        };
+        for name in super::super::discovery::TEST_OUTPUTS {
+            assert_eq!(label(name), Some("Test-Ausgabe"), "{name}");
+        }
+        for name in TEST_DATA_FOLDERS {
+            assert!(matches!(verdict(name, &none), Some(Verdict::Item(TidyClass::Review, TEST_DATA, _))), "{name}");
+        }
     }
 
     #[test]

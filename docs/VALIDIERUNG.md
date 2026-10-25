@@ -2,6 +2,98 @@
 
 Stand: 5. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 25. Oktober: 29 weitere Adapter, Testordner und Blattregel
+
+**Neue Adapter:** 29 statische Adapter, zusammen 40. Neu sind die
+Paketmanager Poetry, Pipenv, PDM, Conda, Deno, Composer, Elm, Bundler, pub,
+Mix, SwiftPM, CocoaPods, Carthage, vcpkg, Conan, Zig, Terraform/OpenTofu, Helm,
+Nix, Bazel, renv, Julia, Paket und sbt (mit den elf bisherigen 35) sowie fünf
+Abhängigkeitsarten ohne Paketmanager: Container-Images
+(Dockerfile/Containerfile, Compose, devcontainer, GitLab CI, Bitbucket), GitHub Actions
+(`uses:` in Workflows und `action.yml`), pre-commit-Hooks, Git-Submodule
+(`.gitmodules`) und Laufzeit- und Werkzeugvorgaben (`.nvmrc`,
+`.python-version`, `.tool-versions`, mise, rust-toolchain, global.json,
+Gradle-/Maven-Wrapper, `engines`/`packageManager`/`volta`, `go`/`toolchain`,
+`rust-version`, `requires-python` …); deren Einträge sind nur deklariert und
+erscheinen nicht in der Paketprüfung. Erweitert: npm (Overrides als Kanten,
+gebündelte Abhängigkeiten), pip (setup.cfg, requirements*.in,
+constraints*.txt; je pyproject.toml genau ein Besitzer nach dem Lockfile
+daneben), uv, NuGet (Directory.Build.props/.targets, GlobalPackageReference,
+ProjectReference-Kanten, dotnet-tools.json, sln/slnx, nuget.config nur als
+Hosts), Go (go.work, go.work.sum, `tool`), Gradle (settings.gradle(.kts)) und
+Maven (modules, profiles, extensions samt `.mvn/extensions.xml`).
+Installationsordner im Projekt (`vendor` für Composer und Bundler, `Pods`,
+`deps`/`_build`, `.build`, `vcpkg_installed`, `.terraform`, `charts`,
+`renv/library`, Conda-Umgebungen mit `conda-meta`, `.dart_tool`, `elm-stuff`,
+`zig-out` …) beansprucht ihr Adapter; er liest dort nur Namen oder wenige
+kleine Metadatendateien. Gemeinsame Paketidentitäten: Poetry, PDM und Pipenv
+zählen zu Python, sbt zu Maven, Paket zu NuGet, Bundler zu RubyGems, Mix zu
+Hex, renv zu CRAN. Die Ökosystem-Angabe der Projektliste lässt
+Laufzeitvorgaben, Container-Images, GitHub Actions, pre-commit und
+Git-Submodule aus. Der Adapterstand `adapters-5` beginnt eine neue
+Vergleichsbasis; die erste Erfassung nach dem Update meldet keine einzelnen
+Änderungen.
+
+**Erkennung:** mehr Manifeste, Lockfiles und Ordnermarker (Xcode-Bündel,
+Unity-Projekte mit `Assets` und `ProjectSettings`; Unitys `Library` ist ein
+Cache-Blatt), neue Hinweise „Paketmanager: …“, „Workspace (…)“, „Tests (N
+Testdateien · Frameworks)“ und „Testprojekt“ und die neue Fundart **Tests**:
+der äußerste Testordner mit Zahl der Testdateien und Frameworks nach
+Dateinamen, kein Blatt. Reihenfolge der Liste: Projekte, Scratchpads,
+Notebooks, Skripte, Testdaten, Datenbanken, Tests, Rest; der Filter
+„Testdaten & Datenbanken“ heißt jetzt **Tests & Daten** und zeigt auch
+Testordner und Test-Ausgaben. Die Projekterfassung betritt Ordner, die die
+Erkennung als Blatt einstuft (`dist`, `out`, `build`, `vendor`, `third_party`,
+`coverage`, `deps`, `.venv` ohne `pyvenv.cfg` …), nicht mehr, außer ein
+Adapter beansprucht sie; die freigegebene Wurzel wird immer durchlaufen.
+KI-Profile werten eine Datei über ihrem eigenen Limit auch dann nicht aus, wenn
+ein Paketadapter sie gelesen hat.
+
+**Aufräumbericht:** neu „Wiederherstellbar“, jeweils nur mit der Spur des
+Werkzeugs darin: `TestResults` (`*.trx`, `*.coverage`), `allure-results`
+(`*-result.json`, `*-container.json`), `blob-report` (`report-*.zip`),
+`mutants.out` und `.phpunit.cache`; `lcov-report` nur mit Build-Datei,
+`surefire-reports` und `failsafe-reports` nur mit `pom.xml` daneben. Neu
+„Prüfen“: `allure-report`, `test-reports`, `.stryker-tmp` (kann nach einem
+abgebrochenen Lauf Originaldateien enthalten) und `.hypothesis` (gefundene
+Beispiele entstehen nicht sicher neu). Weitere Testdatennamen (`test-fixtures`,
+`test-resources`, `cassettes`, `snapshots` …); `golden`- und Datenordner zählen
+nur direkt in einem Testordner. Eine Spur darf ein `*` an beliebiger Stelle
+enthalten. Testcode wird nie ein Aufräumeintrag oder eine Regel des
+Kontextfilters.
+
+**Systembefund:** 60 statt 23 Befehle im Suchpfad; 34 weitere Orte globaler
+Bestände und Caches (Go, Bun, Deno, Volta, nvm, fnm, mise, pipx, Poetry,
+Pipenv, conda, pixi, Composer, RubyGems, pub, Hex/Mix, Julia, R, vcpkg, Conan,
+Terraform, Gradle- und Maven-Wrapper), nur als Ort und ohne Freigabe.
+
+**Prüfungen:** `validate.py`, `cargo fmt` und `cargo clippy --all-targets -D
+warnings` ohne Befund, `cargo test --locked --no-default-features` mit **377
+Funktionstests** bestanden, `cargo check --bin mogumogu` (Desktop) erfolgreich.
+
+**Realer Bestand** (Entwicklungsrechner, 15 echte Repositorys auf I:, keine
+Inhalte gespeichert): Alle Erfassungen waren vollständig, ohne Parserfehler und
+ohne URL- oder Pfadlecks. Die Laufwerkssuche über I: war in 8,5 s vollständig
+(rund 304.000 Einträge, kein Dateiinhalt gelesen). Gegenüber dem vorigen Stand
+gab es 469 Projektfunde weniger (davon 456 Unity-Paketcaches, der Rest
+mitgelieferter Code und Testordner mit nur CMake-/Make-Markern), 15 neue
+(Unity-Projekte) und 368 Testordner. Eine Projekterfassung sank von 2.749 auf
+680 Einträge und von 5,6 s auf 0,5 s, weil Kopien in `out/`, `build/` und
+`dist/` nicht mehr als Eigenes des Projekts zählen.
+
+**Zwei getrennte Agentenreviews** (Löschgrenze; Lesegrenze und Datenschutz)
+fanden Lücken, alle behoben: Stryker-Sicherungsordner und kopierte Surefire-
+und lcov-Berichte sind nicht mehr wiederherstellbar; `golden`-Ordner zählen nur
+direkt in Testordnern; `CACHEDIR.TAG` geht Datenordnernamen in Testordnern vor; die Auflösung
+von Nix-`follows` ist begrenzt statt exponentiell; die Argumentsuche in Bazel
+bleibt in ihrem Fenster; quadratische Schleifen in Bundler, CocoaPods, vcpkg,
+npm, Go, Composer, Poetry, renv, Julia, Zig und Docker sind entfernt. Nicht mehr
+gespeichert werden eine SAS-Signatur in Paket-HTTP-Namen, UNC-Pfade in
+Go-`replace`-Zielen, URL-Werkzeugnamen in mise, Zeilen fremder
+Constraints-Dateien und npm-Pfad- und URL-Angaben. Offen bleiben die menschliche
+Sicherheitsabnahme und die Windows-11-Abnahme; alle Adapter bleiben
+„experimentell“.
+
 ## Ergänzung vom 24. Oktober (3): keine Begrüßung bei leerem Inventar
 
 Ein leeres lokales Inventar öffnete bei jedem Start den geführten Einstieg

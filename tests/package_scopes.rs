@@ -290,6 +290,9 @@ fn projects_and_scratchpads_lead_the_findings_page() {
         write(&root, &format!("aaa-{index:02}/node_modules/dep/index.js"), "dependency");
     }
     write(&root, "zzz-app/Cargo.toml", "never read");
+    write(&root, "zzz-app/tests/smoke.rs", "never read");
+    write(&root, "zzz-app/tests/fixtures/sample.db", "never read");
+    write(&root, "zzz-app/coverage/lcov.info", "never read");
     write(&root, "zzz-tools/a.ps1", "never read");
     write(&root, "zzz-tools/b.ps1", "never read");
     write(&root, "zzz-poc/main.py", "never read");
@@ -310,6 +313,25 @@ fn projects_and_scratchpads_lead_the_findings_page() {
     assert!(tools.evidence.contains("2 lose Skripte"), "{}", tools.evidence);
     assert!(candidates.iter().any(|c| c.rel_path == "zzz-tools/a.ps1" && c.kind == DiscoveryKind::Script));
     assert!(candidates.iter().any(|c| c.kind == DiscoveryKind::Dependencies));
+    // Test data and databases, then test folders, then everything else.
+    let rank = |kind: DiscoveryKind| match kind {
+        DiscoveryKind::Project => 0,
+        DiscoveryKind::Scratchpad => 1,
+        DiscoveryKind::Notebook => 2,
+        DiscoveryKind::Script => 3,
+        DiscoveryKind::TestData => 4,
+        DiscoveryKind::Database => 5,
+        DiscoveryKind::Tests => 6,
+        _ => 7,
+    };
+    assert!(candidates.windows(2).all(|pair| rank(pair[0].kind) <= rank(pair[1].kind)), "{candidates:#?}");
+    let tests = candidates.iter().find(|c| c.rel_path == "zzz-app/tests").unwrap();
+    assert_eq!(tests.kind, DiscoveryKind::Tests);
+    assert!(tests.evidence.contains("1 Testdatei"), "{}", tests.evidence);
+    assert_eq!(tests.project_rel_path.as_deref(), Some("zzz-app"));
+    for kind in [DiscoveryKind::TestData, DiscoveryKind::Database, DiscoveryKind::TestOutput] {
+        assert!(candidates.iter().any(|c| c.kind == kind), "{kind:?}");
+    }
 }
 
 #[test]

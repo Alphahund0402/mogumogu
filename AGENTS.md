@@ -8,7 +8,7 @@ nativen Screen-Renderer, nichts davon gehört zur Laufzeit.
 
 ## Wahrheitsgemäßer Funktionsstand
 Umgesetzt: Tray/Dashboard, Besitzerprozess mit Named-Pipe-IPC, identitätsgebundene Lesefreigaben,
-statische Erfassung (elf Paketmanager, zwölf KI-Profile), Generationen, Prüfregeln, ein
+statische Erfassung (35 Paketmanager plus Laufzeitvorgaben, Container-Images, CI-Actions, pre-commit-Hooks und Git-Submodule; zwölf KI-Profile), Generationen, Prüfregeln, ein
 lesender Aufräumbericht und ein **Papierkorb-Plan** für wiederherstellbar belegte Ordner.
 Netzwerkzugriffe, Programmstarts und verwaltete Läufe gibt es keine. Ausgeführt wird ein Plan bis zum
 unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PRODUCTION_ENABLED = false`). README,

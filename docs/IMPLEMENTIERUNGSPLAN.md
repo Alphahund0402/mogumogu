@@ -2,7 +2,7 @@
 
 **Ziel:** Lokale, performante Windows-10/11-Tray-Anwendung für Entwicklungsressourcen.
 **Stack:** Rust, Slint und SQLite. **Lizenz:** GPL-3.0-only.
-**Stand:** 18. Oktober 2026. Die Basis F-01 bis F-28 ist innerhalb der veröffentlichten Unterstützungsmatrix implementiert. Hinzu kommen Systembefund, persönliche KI-Konfiguration und [Entwicklungsfunde mit Zuordnung, Laufwerksdashboard und Skill-Inhaltsansicht](ENTWICKLUNGSFUNDE.md). Am 20. Oktober 2026 wurden verwaltete Läufe, Sessions und das Anlegen von Scratchpads entfernt; Bereinigung verschiebt seither nur wiederherstellbar belegte Ordner in den Papierkorb (F-22 bis F-24). Automatische Zweckbestimmung, vollständige Manager-/Override-Erkennung, Windows-11-Abnahme, unabhängiger Review G5 des Papierkorb-Wegs und manuelle Desktopprüfungen bleiben offen.
+**Stand:** 25. Oktober 2026. Die Basis F-01 bis F-28 ist innerhalb der veröffentlichten Unterstützungsmatrix implementiert. Hinzu kommen Systembefund, persönliche KI-Konfiguration und [Entwicklungsfunde mit Zuordnung, Testordnern, Laufwerksdashboard und Skill-Inhaltsansicht](ENTWICKLUNGSFUNDE.md). Am 25. Oktober 2026 kamen 29 statische Adapter hinzu; seither erfasst mogumogu 35 Paketmanager und fünf weitere Abhängigkeitsarten (Laufzeit- und Werkzeugvorgaben, Container-Images, GitHub Actions, pre-commit-Hooks, Git-Submodule), alle `experimentell`. Am 20. Oktober 2026 wurden verwaltete Läufe, Sessions und das Anlegen von Scratchpads entfernt; Bereinigung verschiebt seither nur wiederherstellbar belegte Ordner in den Papierkorb (F-22 bis F-24). Automatische Zweckbestimmung, vollständige Manager-/Override-Erkennung, Windows-11-Abnahme, unabhängiger Review G5 des Papierkorb-Wegs und manuelle Desktopprüfungen bleiben offen.
 
 ## 1. Produkt und Grenze
 
@@ -10,7 +10,7 @@ mogumogu macht sichtbar, welche Entwicklungsressourcen existieren, welchem Proje
 
 **Keine beobachtete Nutzung ist kein Entbehrlichkeitsnachweis.** Quellcode, Einstellungen, Skills, einzigartige Ergebnisse und unbekannte Inhalte bleiben geschützt. Erkennung und Entfernung sind getrennte Fähigkeiten; mogumogu stellt keine Netzwerkverbindungen her.
 
-Die Zielmatrix ist npm, pnpm, Bun, Yarn, pip, uv, Cargo, NuGet, Go-Module, Gradle und Maven (die letzten fünf seit dem 24. Oktober 2026); WinGet-, Scoop- und Chocolatey-Listen sind entfallen. Dazu kommen generische Scratchpads und Temp-/Buildausgaben sowie versionierte KI-Profile für Agent Skills, Codex, Claude Code, Copilot/VS Code, Cursor, Gemini, Windsurf/Cascade, Cline, Roo Code, OpenCode, Continue und Aider. „Unterstützt“ gilt nur innerhalb einer veröffentlichten Versions-/Fähigkeitsmatrix: [UNTERSTUETZUNGSMATRIX.md](UNTERSTUETZUNGSMATRIX.md).
+Die Zielmatrix ist npm, pnpm, Bun, Yarn, pip, uv, Cargo, NuGet, Go-Module, Gradle und Maven (die letzten fünf seit dem 24. Oktober 2026), seit dem 25. Oktober 2026 außerdem Deno, Poetry, Pipenv, PDM, Conda, Paket, sbt, Composer, Bundler, pub, Mix, Elm, SwiftPM, CocoaPods, Carthage, vcpkg, Conan, Zig, Terraform/OpenTofu, Helm, Nix, Bazel, renv und Julia sowie Laufzeit- und Werkzeugvorgaben, Container-Images, GitHub Actions, pre-commit-Hooks und Git-Submodule als deklarierte Abhängigkeiten; WinGet-, Scoop- und Chocolatey-Listen sind entfallen. Dazu kommen generische Scratchpads und Temp-/Buildausgaben sowie versionierte KI-Profile für Agent Skills, Codex, Claude Code, Copilot/VS Code, Cursor, Gemini, Windsurf/Cascade, Cline, Roo Code, OpenCode, Continue und Aider. „Unterstützt“ gilt nur innerhalb einer veröffentlichten Versions-/Fähigkeitsmatrix: [UNTERSTUETZUNGSMATRIX.md](UNTERSTUETZUNGSMATRIX.md).
 
 ## 2. Bewusst kleine Startarchitektur
 
@@ -44,7 +44,7 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 | Kern und Anwendungsfälle | `src/service/`, `src/domain/` | Typisierte Zustände und Zustandsautomaten; gemeinsame Anwendungsfälle für UI und CLI |
 | SQLite | `src/storage/`, `migrations/` | Schema v4 (Benutzer-Freigaben), Sicherung vor Migration; ausgewählte Paketkanten und versions-/quellengebundener Cache; bestehendes Journal unverändert |
 | Sichere Lesegrenze | `src/fsread.rs`, `src/platform/` | Identitätsgebundene Freigaben, `NtCreateFile` relativ zum Elternhandle, keine Reparse Points/Platzhalter |
-| Inventar | `src/inventory/`, `src/adapters/`, `src/parsers/`, `src/profiles/` | Elf statische Adapter, zwölf KI-Profile, begrenzte Parser, Datenminimierung |
+| Inventar | `src/inventory/`, `src/adapters/`, `src/parsers/`, `src/profiles/` | 40 statische Adapter (35 Paketmanager, fünf weitere Abhängigkeitsarten), zwölf KI-Profile, begrenzte Parser, Datenminimierung |
 | Prüfregeln und Bereinigung | `src/review.rs`, `src/cleanup/` | Hinweise mit Evidenz; Papierkorb-Plan aus dem Aufräumbericht, Planbindung per Fingerabdruck, Journal je Ordner, Abgleich nach Absturz |
 | CLI | `src/bin/cli/` | Client des Besitzerprozesses, startet ihn bei Bedarf, versioniertes JSON, Exitcodes |
 | Qualität | `tests/`, `scripts/validate.py`, `.github/workflows/windows.yml` | Automatisierte Rust-Prüfungen, Lastreferenz, statische Verträge, Clippy ohne Warnungen |
@@ -122,12 +122,12 @@ Jeder Meilenstein endet mit einer prüfbaren Freigabe. „Umgesetzt“ bedeutet:
 
 | ID | Aufgabe | Fertigkriterium | Stand |
 |---|---|---|---|
-| F-17 | uv, Cargo, NuGet ergänzen | Lock-/Workspace-/Framework-/Storesemantik mit Versionen und negativen Fixtures | Projektformate, separate globale Paketbereiche und statische Kanten umgesetzt; reale Toolversionen und vollständige Resolversemantik offen |
+| F-17 | uv, Cargo, NuGet ergänzen | Lock-/Workspace-/Framework-/Storesemantik mit Versionen und negativen Fixtures | Projektformate, separate globale Paketbereiche und statische Kanten umgesetzt; am 25.10.2026 um 29 Adapter erweitert ([UNTERSTUETZUNGSMATRIX](UNTERSTUETZUNGSMATRIX.md)); reale Toolversionen und vollständige Resolversemantik offen |
 | F-18 | WinGet, Scoop, Chocolatey ergänzen | Nur kontrollierte schreibgeschützte Erfassung; Verwaltungsbesitz nicht aus ähnlichen Namen ableiten | Entfernt am 20.10.2026: Installierte Programme gehören nicht zur Entwicklungsumgebung; bestehende Freigaben werden beim Start widerrufen, ihr Stand bleibt als Historie. Test `approvals_for_installed_program_lists_are_retired_once` |
 | F-19 | KI-Profilkatalog erweitern | Alle zugesagten Clientfamilien statisch klassifiziert; Wirksamkeit und fehlende Overrides transparent | Zwölf projektbezogene Profile umgesetzt, Erweiterungstest ohne Kernumbau; persönliche KI-Konfiguration bekannter Clients über den Freigabetyp `user-ai`, nur entlang der Katalogmuster (Test `user_ai_folder_is_read_only_along_catalog_routes`); Vorrangauflösung Benutzer/Projekt offen |
 | F-20 | Quellenbezogene Updatehinweise | Explizite Netzwerkfreigabe, private Registries wahren, Timeout/Backoff; keine Installation | Entfernt am 20.10.2026: mogumogu stellt keine Netzwerkverbindungen her; Abkündigungen nur aus lokalen Lockfiles; `validate.py` verbietet HTTP-Clients |
 
-**Freigabe G4:** Alle elf Paketmanager innerhalb der dokumentierten Fixtures getestet. Reale Toolversionen auf Windows 10/11 sind noch abzunehmen; bis dahin bleibt der Status „experimentell“.
+**Freigabe G4:** Alle 35 Paketmanager und die fünf weiteren Abhängigkeitsarten innerhalb der dokumentierten Fixtures getestet. Reale Toolversionen auf Windows 10/11 sind noch abzunehmen; bis dahin bleibt der Status „experimentell“.
 
 ### M5 — Erklären und kontrolliert bereinigen
 

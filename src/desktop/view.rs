@@ -98,7 +98,13 @@ pub fn render_candidates(ui: &Dashboard, snapshot: &Snapshot) {
                         | DiscoveryKind::TestOutput
                         | DiscoveryKind::Cache
                 ),
-                4 => matches!(c.kind, DiscoveryKind::TestData | DiscoveryKind::Database),
+                4 => matches!(
+                    c.kind,
+                    DiscoveryKind::Tests
+                        | DiscoveryKind::TestData
+                        | DiscoveryKind::TestOutput
+                        | DiscoveryKind::Database
+                ),
                 _ => true,
             };
             kind_matches && found(format!("{} {} {} {}", c.name, c.rel_path, c.evidence, c.project))

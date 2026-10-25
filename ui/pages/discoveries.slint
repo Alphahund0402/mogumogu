@@ -13,7 +13,7 @@ export component DiscoveryFilters inherits VerticalLayout {
         FilterChip { label: "Projekte"; selected: Store.candidate-filter == 5; activated => { Store.candidate-filter = 5; Actions.filter-candidates(); } }
         FilterChip { label: "Scratchpads & Skripte"; selected: Store.candidate-filter == 2; activated => { Store.candidate-filter = 2; Actions.filter-candidates(); } }
         FilterChip { label: "Umgebungen & Builds"; selected: Store.candidate-filter == 3; activated => { Store.candidate-filter = 3; Actions.filter-candidates(); } }
-        FilterChip { label: "Testdaten & Datenbanken"; selected: Store.candidate-filter == 4; activated => { Store.candidate-filter = 4; Actions.filter-candidates(); } }
+        FilterChip { label: "Tests & Daten"; selected: Store.candidate-filter == 4; activated => { Store.candidate-filter = 4; Actions.filter-candidates(); } }
         FilterChip { label: "Ohne Zuordnung"; selected: Store.candidate-filter == 1; activated => { Store.candidate-filter = 1; Actions.filter-candidates(); } }
     }
     HorizontalLayout {
