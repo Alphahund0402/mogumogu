@@ -18,6 +18,9 @@ mod desktop {
     #[path = "../../../src/desktop/disk.rs"]
     #[allow(dead_code)]
     pub mod disk;
+    #[path = "../../../src/desktop/disk_analysis.rs"]
+    #[allow(dead_code)]
+    pub mod disk_analysis;
     #[path = "../../../src/desktop/dialogs.rs"]
     #[allow(dead_code)]
     pub mod dialogs;
@@ -121,6 +124,72 @@ fn resource(id: i64, project: i64, name: &str, path: &str, kind: ResourceKind, p
         purpose: None,
         review_at: None,
         created_at: Some(now - 12 * DAY),
+    }
+}
+
+/// One synthetic analysis page of a data drive; names are invented.
+fn disk_page(now: i64, view: DiskView) -> DiskPage {
+    const GIB: u64 = 1 << 30;
+    let row = |id: usize, name: &str, path: &str, directory: bool, gib: f64, files: u64, folders: u64, age: i64, duplicates: usize| {
+        let bytes = (gib * GIB as f64) as u64;
+        DiskRow { id, name: name.into(), path: path.into(), directory, bytes, allocated: bytes / 4096 * 4096 + 4096, files, folders, modified: now - age, duplicate_candidates: duplicates, complete: true }
+    };
+    let rows = match view {
+        DiskView::Files => vec![
+            row(31, "win11-dev.vhdx", "vm/win11-dev.vhdx", false, 64.0, 1, 0, 3 * DAY, 0),
+            row(32, "sample-footage.mov", "media/raw/sample-footage.mov", false, 18.4, 1, 0, 40 * DAY, 2),
+            row(33, "dataset-2026.parquet", "dev/ml-lab/data/dataset-2026.parquet", false, 9.7, 1, 0, 12 * DAY, 0),
+            row(34, "backup-2026-09.zip", "archive/backup-2026-09.zip", false, 7.2, 1, 0, 52 * DAY, 0),
+            row(35, "sample-footage.mov", "archive/media/sample-footage.mov", false, 18.4, 1, 0, 300 * DAY, 2),
+        ],
+        _ => vec![
+            row(1, "vm", "vm", true, 71.5, 14, 3, 3 * DAY, 0),
+            row(2, "dev", "dev", true, 58.2, 112_806, 15_220, 2 * HOUR, 0),
+            row(3, "media", "media", true, 41.9, 8_214, 96, 40 * DAY, 0),
+            row(4, "archive", "archive", true, 33.0, 1_904, 51, 52 * DAY, 0),
+            row(5, "games", "games", true, 22.6, 21_440, 1_812, 9 * DAY, 0),
+            row(6, "downloads", "downloads", true, 6.1, 388, 12, 5 * HOUR, 0),
+            row(7, "notes.txt", "notes.txt", false, 0.000_01, 1, 0, 20 * MINUTE, 0),
+        ],
+    };
+    // Every view measures against the whole folder; the file list's map
+    // shows everything beyond its largest entries as one remainder.
+    let folder_bytes = (233.3 * GIB as f64) as u64;
+    let tile = |id, name: &str, bytes, directory, remainder| DiskTile { id, name: name.into(), bytes, directory, remainder, complete: true, x: 0.0, y: 0.0, width: 0.0, height: 0.0 };
+    let mut tiles: Vec<_> = rows.iter().map(|r| tile(r.id, &r.name, r.bytes, r.directory, false)).collect();
+    let listed: u64 = rows.iter().map(|r| r.bytes).sum();
+    if listed < folder_bytes {
+        tiles.push(tile(0, "Weitere Einträge", folder_bytes - listed, false, true));
+    }
+    let tiles = disk_treemap(tiles);
+    DiskPage {
+        scope_id: 9,
+        root: r"D:\".into(),
+        analysis: 1,
+        folder: 0,
+        parent: None,
+        path: String::new(),
+        folder_bytes,
+        folder_complete: true,
+        view,
+        summary: DiskSummary {
+            checked_at: now - 2 * MINUTE,
+            total_bytes: Some(folder_bytes),
+            observed_bytes: folder_bytes,
+            allocated_bytes: folder_bytes + 3 * GIB,
+            files: 144_767,
+            folders: 17_194,
+            skipped: 0,
+            unreadable: 0,
+            entries: 161_961,
+            complete: true,
+            reason: String::new(),
+        },
+        total: rows.len(),
+        offset: 0,
+        limit: 60,
+        rows,
+        tiles,
     }
 }
 
@@ -767,6 +836,34 @@ fn main() {
     renderer.shot("31-speicher-900x560", 900, 560, 1.0);
     store.invoke_open(4, 1);
     renderer.shot("04-speicher-aufraeumen", 1080, 680, 1.0);
+    // Disk analysis below the drives: shares, the area map, then the table.
+    // As in the app, the snapshot after an analysis selects its approval.
+    store.invoke_open(4, 2);
+    let mut analysed = snapshot.clone();
+    analysed.scopes.push(Scope { id: 9, project_id: None, kind: ScopeKind::Storage, path: r"D:\".into(), published: None, latest: None, ..analysed.scopes[0].clone() });
+    desktop::disk_analysis::render(&ui, &disk_page(now, DiskView::Tree));
+    view::render_snapshot(&ui, &analysed, "", &state());
+    renderer.shot("05-speicher-analyse", 1080, 1320, 1.0);
+    desktop::disk_analysis::render(&ui, &disk_page(now, DiskView::Files));
+    renderer.shot("05-speicher-analyse-dateien", 1080, 1320, 1.0);
+    // A stopped walk: lower bounds and an unread folder, never "empty".
+    let mut partial = disk_page(now, DiskView::Tree);
+    partial.summary.complete = false;
+    partial.summary.total_bytes = None;
+    partial.summary.reason = "Eintragslimit erreicht".into();
+    partial.folder_complete = false;
+    for (row, read) in [(1, true), (5, false)] {
+        partial.rows[row].complete = false;
+        if !read {
+            (partial.rows[row].bytes, partial.rows[row].allocated, partial.rows[row].files, partial.rows[row].folders) = (0, 0, 0, 0);
+        }
+    }
+    partial.tiles.iter_mut().filter(|t| t.id == 2).for_each(|t| t.complete = false);
+    partial.tiles = disk_treemap(partial.tiles.into_iter().filter(|t| t.id != 6).collect());
+    desktop::disk_analysis::render(&ui, &partial);
+    renderer.shot("05-speicher-analyse-teilweise", 1080, 1320, 1.0);
+    desktop::disk_analysis::clear(&ui);
+    view::render_snapshot(&ui, &snapshot, "", &state());
     store.invoke_open(4, 0);
     store.set_page(0);
     renderer.shot("32-uebersicht-150", 1080, 680, 1.5);

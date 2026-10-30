@@ -1,6 +1,6 @@
 # Unterstützungsmatrix · mogumogu 0.1.0
 
-Stand: 25. Oktober 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experimentell`, `getestet`, `eingeschränkt`, `nicht unterstützt`.
+Stand: 30. Oktober 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experimentell`, `getestet`, `eingeschränkt`, `nicht unterstützt`.
 „Experimentell“ heißt: Parser und Fixtures existieren und laufen in der Testsuite; eine Abnahme gegen reale Toolversionen auf Windows 10 **und** 11 steht aus. „Unterstützt“ gilt nur innerhalb der genannten Formate.
 
 Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 1.98.0, Slint 1.18.1 (winit, Software-Renderer), SQLite 3.53.2 (gebündelt über rusqlite 0.40.2). Windows 11 ist **nicht** abgenommen.
@@ -116,10 +116,11 @@ Erkennung über den deklarativen Katalog [`profiles/ai-catalog.toml`](../profile
 |---|---|
 | Paket-Caches | experimentell; npm, pip, uv, Cargo-Registry, Gradle, Maven, pnpm, Yarn mit eigener Freigabe (Schema v6), nur gemessen; im Aufräumbericht mit Aufräumbefehl des Werkzeugs, Maven als „Prüfen“; kein Paketbestand, nichts wird ausgeführt oder entfernt |
 | Aufräumbericht | experimentell; nur in Projekten mit Lesefreigabe und freigegebenen globalen Beständen; ein begrenzter Durchgang je Projekt (2 Mio. Einträge, 120 s), nur Verzeichniseinträge; „wiederherstellbar“ nur mit Wiederherstellungsbeleg und, wo der Name allein nicht reicht, der Spur des Werkzeugs im Ordner; Bericht im Speicher des Besitzers, nicht in der Datenbank; entfernt nichts |
+| Speicheranalyse | experimentell; eigene Freigabe je Ordner oder lokaler Festplatte (Schema v7) oder die Lesefreigabe eines Projekts, jeder Pfadbestandteil handle-relativ und ohne Verknüpfung, nur lokale Festplatten; nur auf Wunsch, höchstens 4 Mio. Einträge (gemessen 63–68 Bytes je Eintrag im Speicher), 64 Ebenen, 180 s; Name, logische Größe, belegter Platz und Änderungsdatum aus dem Verzeichniseintrag, keine Dateiinhalte; Ordner, größte Dateien, Dateitypen, Duplikat-Kandidaten nach Name und Größe (Inhalt nicht verglichen), Flächenkarte der 40 größten Einträge, Namensfilter, CSV einer Seite (höchstens 200 Zeilen, Formeln entschärft); Verknüpfungen, Junctions und Cloud-Platzhalter ausgelassen, Teilergebnis als „Mindestens“ ohne Gesamtgröße, nicht vollständig gelesene Ordner als Untergrenze bzw. „nicht gelesen“ (CSV-Spalte `complete`); eine Analyse im Speicher des Besitzers (ohne offenes Fenster nach zehn Minuten ohne Anfrage verworfen), keine Namen in der Datenbank; kein Löschen, Verschieben oder Öffnen |
 | Laufwerksdashboard | experimentell; Windows-Laufwerksmetadaten und gespeicherte logische Projektgrößen, unbekannte/offline Kapazitäten bleiben unbekannt; verschachtelte/identische Pfade nicht doppelt summiert; keine physische Hardlink-/Kompressionsbilanz |
 | Skill-/Instruktionsinhalte | experimentell; frische kataloggebundene Leseprüfung, schreibgeschützter Text mit Redaktion bekannter sensibler Muster; maximal 128 KiB bzw. Profillimit; keine Inhaltsdaten in DB, Logs, Snapshot oder Export; gemischte Konfiguration nicht anzeigbar |
 
-Gezielte Windows-Fixtures: `tests/package_scopes.rs`, `tests/disk.rs`, `tests/ai_content.rs`. Getrennter Agentenreview der neuen Lesewege erfolgt; dies ersetzt keine menschliche Sicherheitsabnahme oder Windows-11-Abnahme.
+Gezielte Windows-Fixtures: `tests/package_scopes.rs`, `tests/disk.rs`, `tests/storage_analysis.rs`, `tests/ai_content.rs`. Getrennter Agentenreview der neuen Lesewege erfolgt; dies ersetzt keine menschliche Sicherheitsabnahme oder Windows-11-Abnahme.
 
 ## Bereinigung
 

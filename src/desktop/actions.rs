@@ -1,6 +1,6 @@
 //! Translates UI intents into owner requests and wires callbacks in one place.
 use super::{Desktop, defer_hide, dialogs, later, ui::*, with};
-use mogumogu::domain::{PackageFilter, ScopeKind, SearchArea};
+use mogumogu::domain::{DiskQuery, DiskSort, DiskView, PackageFilter, ScopeKind, SearchArea};
 use mogumogu::limits::PACKAGE_PAGE;
 use mogumogu::service::Request;
 use slint::{ComponentHandle, SharedString, TimerMode};
@@ -11,6 +11,15 @@ const DEBOUNCE: Duration = Duration::from_millis(180);
 
 impl Desktop {
     fn detail_action(&mut self, id: &str) {
+        if let Some(path) = id.strip_prefix("approve-storage:") {
+            self.submit(Request::ApproveSystem { kind: ScopeKind::Storage, path: Some(path.into()) });
+            return;
+        }
+        if let Some(scope_id) = id.strip_prefix("analyze-storage:").and_then(|s| s.parse().ok()) {
+            self.close_modal();
+            self.start_storage(scope_id);
+            return;
+        }
         if let Some(value) = id.strip_prefix("ai-content:") {
             let (scope_id, rel_path) = if value == "demo" {
                 (None, String::new())
@@ -71,6 +80,43 @@ impl Desktop {
             _ => return,
         };
         self.submit(request);
+    }
+
+    fn storage_approval(&mut self, path: &str) {
+        if let Some(scope) = self
+            .snapshot
+            .scopes
+            .iter()
+            .find(|s| s.kind == ScopeKind::Storage && s.analyzable() && s.path.eq_ignore_ascii_case(path))
+        {
+            self.start_storage(scope.id);
+            return;
+        }
+        self.dialog(dialogs::Dialog::new("Speicheranalyse freigeben")
+            .path(path)
+            .body("mogumogu liest in diesem Ordner oder Laufwerk die Namen, Größen und Änderungsdaten aller erreichbaren Dateien und Unterordner. Dateiinhalte werden nicht gelesen. Verknüpfungen und Cloud-Platzhalter werden ausgelassen. Die Freigabe lässt sich unter Einstellungen → Lesefreigaben widerrufen.")
+            .action(format!("approve-storage:{path}"), "Metadaten lesen und analysieren", true));
+    }
+
+    pub(super) fn start_storage(&mut self, scope_id: i64) {
+        self.disk_query = DiskQuery::default();
+        self.disk_page = None;
+        if let Some(ui) = &self.dashboard {
+            super::disk_analysis::clear(ui);
+            let store = ui.global::<Store>();
+            store.set_analysis_scope(scope_id as i32);
+            store.set_analysis_sort(0);
+            store.invoke_open(4, 2);
+        }
+        self.submit(Request::AnalyzeStorage { scope_id });
+    }
+
+    fn query_storage(&mut self) {
+        let Some(ui) = &self.dashboard else { return };
+        let scope_id = i64::from(ui.global::<Store>().get_analysis_scope());
+        if scope_id > 0 && self.disk_page.as_ref().is_some_and(|p| p.scope_id == scope_id) {
+            self.submit(Request::StoragePage { scope_id, query: self.disk_query.clone() });
+        }
     }
 
     fn package_query(&mut self) {
@@ -246,6 +292,113 @@ pub(super) fn wire(ui: &Dashboard) {
         })
     });
     actions.on_storage_refresh(|| with(|d| d.submit(Request::StorageOverview)));
+    actions.on_analysis_approve(|path| {
+        let path = path.to_string();
+        later(move |d| d.storage_approval(&path));
+    });
+    actions.on_analysis_folder(|| {
+        later(|d| {
+            if let Some(path) = d.pick_folder("Ordner für die Speicheranalyse wählen") {
+                d.storage_approval(&path);
+            }
+        })
+    });
+    actions.on_analyze_storage(|scope| with(move |d| d.start_storage(i64::from(scope))));
+    actions.on_analysis_target(|index| {
+        with(move |d| {
+            let scopes: Vec<_> = d.snapshot.scopes.iter().filter(|s| s.analyzable()).collect();
+            let Some(scope) = usize::try_from(index).ok().and_then(|i| scopes.get(i)) else { return };
+            d.disk_page = None;
+            d.disk_query = DiskQuery::default();
+            if let Some(ui) = &d.dashboard {
+                super::disk_analysis::clear(ui);
+                ui.global::<Store>().set_analysis_scope(scope.id as i32);
+            }
+        })
+    });
+    actions.on_analysis_view(|view| {
+        with(move |d| {
+            d.disk_query.view = match view {
+                1 => DiskView::Files,
+                2 => DiskView::Types,
+                3 => DiskView::Duplicates,
+                _ => DiskView::Tree,
+            };
+            d.disk_query.offset = 0;
+            d.query_storage();
+        })
+    });
+    actions.on_analysis_sort(|sort| {
+        with(move |d| {
+            d.disk_query.sort = match sort {
+                1 => DiskSort::Allocated,
+                2 => DiskSort::Name,
+                3 => DiskSort::Modified,
+                _ => DiskSort::Size,
+            };
+            d.disk_query.offset = 0;
+            d.query_storage();
+        })
+    });
+    actions.on_analysis_search(|text| {
+        let text = text.to_string();
+        with(move |d| {
+            d.disk_query.text = text;
+            d.disk_query.offset = 0;
+            d.query_storage();
+        });
+    });
+    actions.on_analysis_open(|id| {
+        with(move |d| {
+            if id < 0 {
+                return;
+            }
+            d.disk_query.folder = id as usize;
+            d.disk_query.view = DiskView::Tree;
+            d.disk_query.text.clear();
+            d.disk_query.offset = 0;
+            if let Some(ui) = &d.dashboard {
+                ui.global::<Store>().set_analysis_search("".into());
+            }
+            d.query_storage();
+        })
+    });
+    actions.on_analysis_up(|| {
+        with(|d| {
+            d.disk_query.folder = d.disk_page.as_ref().and_then(|p| p.parent).unwrap_or(0);
+            d.disk_query.offset = 0;
+            d.disk_query.text.clear();
+            if let Some(ui) = &d.dashboard {
+                ui.global::<Store>().set_analysis_search("".into());
+            }
+            d.query_storage();
+        })
+    });
+    actions.on_analysis_page(|direction| {
+        with(move |d| {
+            let Some(page) = &d.disk_page else { return };
+            d.disk_query.offset =
+                if direction < 0 { page.offset.saturating_sub(page.limit) } else { page.offset + page.limit };
+            d.query_storage();
+        })
+    });
+    actions.on_analysis_export(|| {
+        later(|d| {
+            let Some(page) = &d.disk_page else { return };
+            let Some(ui) = &d.dashboard else { return };
+            let store = ui.global::<Store>();
+            store.set_detail_title("Speicheranalyse als CSV".into());
+            store.set_detail_path(page.root.clone().into());
+            store.set_content_text(page.csv().into());
+            store.set_content_note(
+                "Aktuelle Tabellenseite · Namen redigiert · Text markieren und kopieren möglich".into(),
+            );
+            d.content_scope = None;
+            d.form = super::Form::None;
+            store.set_modal(3);
+            ui.invoke_focus_dialog();
+        })
+    });
     actions.on_storage_drive(|drive| {
         let drive = drive.to_string();
         with(move |d| {

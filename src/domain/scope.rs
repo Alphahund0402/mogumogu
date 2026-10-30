@@ -10,6 +10,8 @@ string_enum! {
         /// Registry-based software list; read-only, no filesystem root.
         Winget => "winget",
         ProjectSearch => "projects",
+        /// Names, sizes and timestamps only; never file contents or cleanup.
+        Storage => "storage",
         NpmGlobal => "npm-global",
         UvTools => "uv-tools",
         Python => "python",
@@ -38,6 +40,7 @@ impl ScopeKind {
             Self::Chocolatey => "Chocolatey-Installation",
             Self::Winget => "Windows-Softwareliste (WinGet-Kontext)",
             Self::ProjectSearch => "Projektsuche (nur Dateinamen)",
+            Self::Storage => "Speicheranalyse (nur Dateimetadaten)",
             Self::NpmGlobal => "Globale npm-Pakete",
             Self::UvTools => "uv-Toolumgebungen",
             Self::Python => "Python-Paketbestand",
@@ -104,7 +107,11 @@ impl ScopeKind {
         }
     }
     pub fn profile(self) -> &'static str {
-        if self == self.storage_kind() || !self.realm().is_empty() || self.is_cache() { "" } else { self.as_str() }
+        if self == self.storage_kind() || !self.realm().is_empty() || self.is_cache() || self == Self::Storage {
+            ""
+        } else {
+            self.as_str()
+        }
     }
     /// Stored separately from `profile`, whose values are fixed by schema v3.
     pub fn realm(self) -> &'static str {
@@ -202,6 +209,18 @@ pub struct Scope {
 }
 
 impl Scope {
+    /// Disk analysis needs its own approval or a project's read approval. Like
+    /// a scan, it retries an unreachable folder but never a replaced one.
+    pub fn analyzable(&self) -> bool {
+        matches!(self.kind, ScopeKind::Project | ScopeKind::Storage)
+            && matches!(self.status, ScopeStatus::Approved | ScopeStatus::Unavailable)
+    }
+    /// An inventory scope that is blocked or whose last pass did not
+    /// complete. A disk analysis approval has no inventory and never counts.
+    pub fn partially_scanned(&self) -> bool {
+        self.kind != ScopeKind::Storage
+            && (self.status != ScopeStatus::Approved || !self.current() && self.latest.is_some())
+    }
     pub fn current(&self) -> bool {
         self.status == ScopeStatus::Approved
             && self
@@ -215,6 +234,9 @@ impl Scope {
     pub fn coverage_label(&self) -> String {
         if self.status != ScopeStatus::Approved {
             return self.status.label().into();
+        }
+        if self.kind == ScopeKind::Storage {
+            return "Nur auf Wunsch unter Speicher analysieren · kein Inventarscan".into();
         }
         match (&self.published, &self.latest) {
             (None, None) => "Freigegeben, noch nicht erfasst".into(),

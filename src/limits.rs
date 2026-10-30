@@ -42,6 +42,22 @@ pub const EVENT_QUEUE: usize = 4_096;
 /// Folders in one cleanup plan.
 pub const CLEANUP_MAX_TARGETS: usize = 50;
 
+/// One on-demand metadata-only disk index; never part of a dashboard snapshot.
+/// 40 bytes per entry plus its name (about 30 bytes on a system drive); it
+/// exists only while an analysis is open. Measurements: docs/MESSBERICHT.md.
+pub const DISK_MAX_NODES: usize = 4_000_000;
+pub const DISK_NAME_BYTES: usize = 160 << 20;
+/// Time of one analysis, like the drive search; the owner waits for it longer
+/// than for other CLI requests (`Request::reply_within`).
+pub const DISK_TIME: Duration = Duration::from_secs(180);
+pub const DISK_PAGE: usize = 60;
+pub const DISK_MAX_PAGE: usize = 200;
+pub const DISK_TILES: usize = 40;
+/// Comparison steps a name filter may spend beyond four per name byte.
+pub const DISK_MATCH_STEPS: u64 = 20_000_000;
+/// Without a dashboard, an unused analysis is released after this time.
+pub const DISK_IDLE: Duration = Duration::from_secs(600);
+
 /// SQLite page cache per connection (KiB, negative pragma value).
 pub const SQLITE_CACHE_KIB: i64 = 2_048;
 
@@ -61,6 +77,9 @@ impl Default for ScanLimits {
 }
 
 impl ScanLimits {
+    pub fn storage_analysis() -> Self {
+        Self { max_depth: 64, max_entries: DISK_MAX_NODES as u64 - 1, max_total_bytes: 0, time_budget: DISK_TIME }
+    }
     /// A whole local drive holds far more names than a project folder. This
     /// budget belongs to the names-only drive search alone: it reads no file
     /// content at all, and the time budget stays the bound of one pass.

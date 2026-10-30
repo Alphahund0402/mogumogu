@@ -153,6 +153,23 @@ nur lokale feste Laufwerke. Persönliche KI-Ordner sind eigene Freigaben
 nur Ordner, die ein Katalogmuster erreichen kann (`Catalog::user_routes`).
 Das Dashboard liest `ScanControl` über `service`, nicht über die Lesegrenze.
 
+## Speicheranalyse
+
+| Datei | Aufgabe |
+|---|---|
+| [fsread.rs](../src/fsread.rs) `ScopeRoot::open_local` | Lokalen Pfad Bestandteil für Bestandteil handle-relativ öffnen; eine Verknüpfung unterwegs oder ein Netzlaufwerk wird abgelehnt |
+| [inventory/disk.rs](../src/inventory/disk.rs) | `DiskIndex`: ein begrenzter Durchgang über Verzeichniseinträge, Summen in einem Rückwärtslauf, Seiten, Typen, Kandidaten und Namensfilter ohne erneuten Dateizugriff |
+| [inventory/disk/nodes.rs](../src/inventory/disk/nodes.rs) | 40 Bytes je Eintrag und ein gemeinsamer Namenspuffer, beide in festen Blöcken: Wachsen kopiert nie das ganze Verzeichnis |
+| [domain/disk_analysis.rs](../src/domain/disk_analysis.rs) | Abfrage, Seite, CSV einer Seite und Flächenkarte; ohne I/O |
+| [service/disk_analysis.rs](../src/service/disk_analysis.rs) | Freigabe prüfen, Status pflegen, höchstens einen Index im Besitzer halten |
+| [desktop/disk_analysis.rs](../src/desktop/disk_analysis.rs) | Eine Seite darstellen; kein Dateisystemzugriff |
+
+Die Freigabe ist ein eigener `ScopeKind::Storage` (Spalte `analysis` aus
+Migration 007) und kein Inventarbereich: `scan_all` übergeht sie, `scan` lehnt
+sie ab. Der Index liegt in `Core::disk_index`, nicht in SQLite und nicht im
+Snapshot; Widerruf, eine neue Analyse und das Schließen des Dashboards geben ihn
+frei. `Request::StoragePage` liest nur diesen Index.
+
 ## Änderungen gezielt beginnen
 
 Neue Befehle beginnen bei `service/request.rs` und dem passenden Fachmodul:

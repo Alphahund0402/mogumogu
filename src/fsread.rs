@@ -101,6 +101,51 @@ pub struct ScopeRoot {
 }
 
 impl ScopeRoot {
+    /// Local disk analysis opens every ancestor handle-relatively, refusing
+    /// junctions before resolving the next component. In particular, a local
+    /// path cannot enter a network share through an intermediate junction.
+    pub fn open_local(path: &Path, expected: Option<FileIdentity>) -> Result<Self, RootError> {
+        let unsafe_path = || {
+            RootError::Unsafe(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Nur absolute lokale Laufwerkspfade ohne Verknüpfungen sind möglich",
+            ))
+        };
+        let text = path.to_str().ok_or_else(unsafe_path)?.replace('/', "\\");
+        let bytes = text.as_bytes();
+        if bytes.len() < 3
+            || !bytes[0].is_ascii_alphabetic()
+            || bytes[1] != b':'
+            || bytes[2] != b'\\'
+            || !crate::platform::local_fixed_path(Path::new(&text[..3]))
+        {
+            return Err(unsafe_path());
+        }
+        let classify = |e: io::Error| match e.kind() {
+            io::ErrorKind::PermissionDenied | io::ErrorKind::InvalidInput => RootError::Unsafe(e),
+            _ => RootError::Unavailable(e),
+        };
+        let names: Vec<_> = text[3..].split('\\').filter(|name| !name.is_empty()).collect();
+        let mut handle = DirHandle::open_root(Path::new(&text[..3]), names.is_empty()).map_err(classify)?;
+        // The drive type was asked by letter; the opened volume must agree.
+        let local = handle.final_path().is_ok_and(|real| !real.starts_with(r"\\"));
+        if !local {
+            return Err(unsafe_path());
+        }
+        // Ancestors are passed through, so they stay open to other programs;
+        // only the analyzed folder itself is held against renaming.
+        for (i, name) in names.iter().enumerate() {
+            let name = OsStr::new(name);
+            handle = if i + 1 == names.len() { handle.open_dir_pinned(name) } else { handle.open_dir(name) }
+                .map_err(classify)?;
+        }
+        let identity = handle.identity().map_err(RootError::Unavailable)?;
+        if expected.is_some_and(|expected| expected != identity) {
+            return Err(RootError::IdentityChanged);
+        }
+        Ok(Self { handle, identity })
+    }
+
     /// Opens `path` without following a final link and verifies that it is
     /// still the approved object. While held, the root cannot be renamed.
     pub fn open(path: &Path, expected: Option<FileIdentity>) -> Result<Self, RootError> {
@@ -254,6 +299,12 @@ pub fn list(dir: &DirHandle, budget: &mut Budget) -> io::Result<(Vec<DirEntryInf
         budget.stop("Eintragslimit erreicht");
     }
     Ok((entries, truncated))
+}
+
+/// A metadata sample whose returned entries can still be accounted before
+/// stopping. The caller must mark the result partial and stop if truncated.
+pub fn list_sample(dir: &DirHandle, budget: &Budget) -> io::Result<(Vec<DirEntryInfo>, bool)> {
+    dir.entries(budget.remaining_entries().max(1))
 }
 
 /// Joins a `/`-separated relative path.

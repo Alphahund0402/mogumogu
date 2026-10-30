@@ -8,7 +8,8 @@ use crate::platform::FileIdentity;
 use crate::{Error, Result, privacy};
 use rusqlite::{OptionalExtension, Row, Transaction, params};
 
-const SCOPE_COLUMNS: &str = "id, project_id, kind, path, status, approved_at, last_error, profile, realm, cache";
+const SCOPE_COLUMNS: &str =
+    "id, project_id, kind, path, status, approved_at, last_error, profile, realm, cache, analysis";
 const GENERATION_COLUMNS: &str =
     "id, state, started_at, finished_at, entries_seen, files_read, item_count, limit_reason, error_count";
 
@@ -45,14 +46,18 @@ fn load_scope(tx: &Transaction<'_>, row: &Row<'_>) -> rusqlite::Result<Scope> {
     Ok(Scope {
         id,
         project_id: row.get(1)?,
-        kind: match (row.get::<_, String>(8)?.as_str(), row.get::<_, String>(7)?.as_str(), row.get::<_, String>(9)?) {
-            ("user", ..) => ScopeKind::UserAi,
-            ("", "", cache) if !cache.is_empty() => {
-                ScopeKind::parse(&cache).filter(|k| k.is_cache()).ok_or_else(|| rusqlite::Error::InvalidQuery)?
+        kind: if row.get::<_, bool>(10)? {
+            ScopeKind::Storage
+        } else {
+            match (row.get::<_, String>(8)?.as_str(), row.get::<_, String>(7)?.as_str(), row.get::<_, String>(9)?) {
+                ("user", ..) => ScopeKind::UserAi,
+                ("", "", cache) if !cache.is_empty() => {
+                    ScopeKind::parse(&cache).filter(|k| k.is_cache()).ok_or_else(|| rusqlite::Error::InvalidQuery)?
+                }
+                ("", "", _) => row.get(2)?,
+                ("", profile, _) => ScopeKind::parse(profile).ok_or_else(|| rusqlite::Error::InvalidQuery)?,
+                _ => return Err(rusqlite::Error::InvalidQuery),
             }
-            ("", "", _) => row.get(2)?,
-            ("", profile, _) => ScopeKind::parse(profile).ok_or_else(|| rusqlite::Error::InvalidQuery)?,
-            _ => return Err(rusqlite::Error::InvalidQuery),
         },
         path: row.get(3)?,
         status: row.get(4)?,
@@ -80,6 +85,7 @@ impl Repository {
         let profile = kind.profile();
         let realm = kind.realm();
         let cache = kind.cache();
+        let analysis = kind == ScopeKind::Storage;
         self.write(|tx| {
             if let Some(project) = project_id {
                 let exists: bool =
@@ -91,9 +97,9 @@ impl Repository {
             let existing: Option<(i64, Option<String>)> = tx
                 .query_row(
                     "SELECT id, identity FROM scopes
-                     WHERE kind = ?1 AND path = ?2 AND profile = ?3 AND realm = ?4 AND cache = ?5
+                     WHERE kind = ?1 AND path = ?2 AND profile = ?3 AND realm = ?4 AND cache = ?5 AND analysis = ?6
                        AND status <> 'revoked'",
-                    params![storage_kind, path, profile, realm, cache],
+                    params![storage_kind, path, profile, realm, cache, analysis],
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .optional()?;
@@ -105,9 +111,9 @@ impl Repository {
                 tx.execute("UPDATE scopes SET status = 'revoked' WHERE id = ?1", [id])?;
             }
             tx.execute(
-                "INSERT INTO scopes(project_id, kind, path, identity, status, approved_at, profile, realm, cache)
-                 VALUES(?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7, ?8)",
-                params![project_id, storage_kind, path, identity, now, profile, realm, cache],
+                "INSERT INTO scopes(project_id, kind, path, identity, status, approved_at, profile, realm, cache, analysis)
+                 VALUES(?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7, ?8, ?9)",
+                params![project_id, storage_kind, path, identity, now, profile, realm, cache, analysis],
             )?;
             let id = tx.last_insert_rowid();
             log_in(

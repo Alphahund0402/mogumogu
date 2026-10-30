@@ -26,6 +26,9 @@ pub fn human(view: View, value: &Value) -> String {
         View::Review => serde_json::from_value::<Vec<ReviewHint>>(value.clone()).ok().map(|h| review(&h)),
         View::Plan => serde_json::from_value::<PlanSummary>(value.clone()).ok().map(|p| plan(&p)),
         View::Json => None,
+        View::DiskCsv => {
+            serde_json::from_value::<mogumogu::domain::DiskPage>(value.clone()).ok().map(|page| page.csv())
+        }
     };
     rendered.unwrap_or_else(|| serde_json::to_string_pretty(value).unwrap_or_default())
 }

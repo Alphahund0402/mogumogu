@@ -2,7 +2,7 @@
 //! program start, protection changes and plan confirmation are separate
 //! commands; none of them grants another.
 use super::Core;
-use crate::domain::{PackageQuery, ScopeKind, Settings};
+use crate::domain::{DiskQuery, PackageQuery, ScopeKind, Settings};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -38,6 +38,15 @@ pub enum Request {
         scope_id: i64,
     },
     StorageOverview,
+    AnalyzeStorage {
+        scope_id: i64,
+    },
+    ClearStorageAnalysis,
+    StoragePage {
+        scope_id: i64,
+        #[serde(default)]
+        query: DiskQuery,
+    },
     AiContent {
         scope_id: Option<i64>,
         #[serde(default)]
@@ -170,6 +179,16 @@ pub enum Request {
 }
 
 impl Request {
+    /// How long the owner waits for its own answer to a CLI request. An
+    /// explicit disk analysis may use its whole time budget.
+    pub fn reply_within(&self) -> std::time::Duration {
+        use crate::limits::{DISK_TIME, IPC_CLIENT_TIMEOUT};
+        match self {
+            Self::AnalyzeStorage { .. } => DISK_TIME + std::time::Duration::from_secs(30),
+            _ => IPC_CLIENT_TIMEOUT,
+        }
+    }
+
     /// Whether the request changes state (used for logging and UI refresh).
     pub fn is_write(&self) -> bool {
         !matches!(
@@ -190,6 +209,8 @@ impl Request {
                 | Self::FoundProjects { .. }
                 | Self::DiscoveryCandidate { .. }
                 | Self::StorageOverview
+                | Self::StoragePage { .. }
+                | Self::ClearStorageAnalysis
                 | Self::AiContent { .. }
                 | Self::ShowDashboard
                 | Self::HideDashboard
@@ -224,6 +245,12 @@ impl Core {
                 self.storage_cache = None;
                 json!(self.storage_overview()?)
             }
+            AnalyzeStorage { scope_id } => json!(self.analyze_storage(scope_id)?),
+            ClearStorageAnalysis => {
+                self.clear_storage_analysis();
+                json!({"cleared": true})
+            }
+            StoragePage { scope_id, query } => json!(self.storage_page(scope_id, &query)?),
             AiContent { scope_id, rel_path } => json!(self.ai_content(scope_id, &rel_path)?),
             Why { resource_id } => json!(self.explain(resource_id)?),
             ScratchRegister { project_id, name, path } => {

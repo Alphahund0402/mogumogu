@@ -5,6 +5,7 @@
 //! adapters and AI profiles only ever receive bounded text.
 mod access;
 mod discovery;
+pub mod disk;
 mod measure;
 mod scanner;
 pub mod system;
@@ -45,6 +46,16 @@ pub struct ScanOutcome {
 }
 
 pub fn scan(request: &ScanRequest) -> ScanOutcome {
+    if request.kind == ScopeKind::Storage {
+        return ScanOutcome {
+            result: GenerationResult {
+                failed: true,
+                errors: vec!["Speicheranalyse wird nur ausdrücklich gestartet".into()],
+                ..Default::default()
+            },
+            failure: Some(ScanFailure::Unavailable("Speicheranalyse wird nur ausdrücklich gestartet".into())),
+        };
+    }
     if matches!(request.kind, ScopeKind::Winget | ScopeKind::Scoop | ScopeKind::Chocolatey) {
         let reason = "Installierte Programme erfasst mogumogu nicht mehr".to_string();
         let result = GenerationResult { failed: true, errors: vec![reason.clone()], ..Default::default() };

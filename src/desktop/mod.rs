@@ -5,6 +5,7 @@
 mod actions;
 mod dialogs;
 mod disk;
+mod disk_analysis;
 mod forms;
 mod view;
 
@@ -76,6 +77,8 @@ struct Desktop {
     data_path: String,
     form: Form,
     package_query: PackageQuery,
+    disk_query: mogumogu::domain::DiskQuery,
+    disk_page: Option<mogumogu::domain::DiskPage>,
     package_key: Option<String>,
     search_hits: Vec<SearchHit>,
     content_scope: Option<i64>,
@@ -159,6 +162,8 @@ pub fn run(config: Config, show: bool) -> Result<(), Box<dyn std::error::Error>>
             data_path,
             form: Form::None,
             package_query: PackageQuery::default(),
+            disk_query: mogumogu::domain::DiskQuery::default(),
+            disk_page: None,
             package_key: None,
             search_hits: Vec::new(),
             content_scope: None,
@@ -210,6 +215,10 @@ impl Desktop {
     fn hide(&mut self) {
         DASHBOARD_OPEN.store(false, Ordering::Relaxed);
         self.progress_timer.stop();
+        self.disk_page = None;
+        // Queued behind an active scan: returning to the tray also releases
+        // the index without keeping a second inventory resident.
+        self.owner.submit(Request::ClearStorageAnalysis);
         if let Some(ui) = self.dashboard.take() {
             let _ = ui.hide();
         }
@@ -331,7 +340,7 @@ impl Desktop {
             return;
         }
         let write = request.is_write();
-        let scan = matches!(request, Request::Scan { .. });
+        let scan = matches!(request, Request::Scan { .. } | Request::AnalyzeStorage { .. });
         if !self.owner.submit(request) {
             self.status = "Der Kern ist ausgelastet; bitte gleich erneut versuchen.".into();
             self.render_status();
@@ -411,6 +420,12 @@ impl Desktop {
                     later(move |d| d.open_project(id));
                 }
             }
+            Request::ApproveSystem { kind: mogumogu::domain::ScopeKind::Storage, .. } => {
+                self.close_modal();
+                if let Some(scope_id) = value["scope_id"].as_i64() {
+                    self.start_storage(scope_id);
+                }
+            }
             Request::ApproveProject { .. } | Request::ApproveSystem { .. } => {
                 self.close_modal();
                 if let Some(scope_id) = value["scope_id"].as_i64() {
@@ -448,6 +463,31 @@ impl Desktop {
                 self.status = "Speicherübersicht aktualisiert.".into();
                 let text = self.status.clone();
                 self.notify(&text, "ok");
+            }
+            Request::AnalyzeStorage { .. } | Request::StoragePage { .. } => {
+                if let Request::StoragePage { ref query, .. } = request
+                    && *query != self.disk_query
+                {
+                    return;
+                }
+                if let Ok(page) = serde_json::from_value::<mogumogu::domain::DiskPage>(value)
+                    && let Some(ui) = &self.dashboard
+                    && i64::from(ui.global::<Store>().get_analysis_scope()) == page.scope_id
+                {
+                    disk_analysis::render(ui, &page);
+                    if matches!(request, Request::AnalyzeStorage { .. }) {
+                        // Later pages only ever show this analysis.
+                        self.disk_query.analysis = page.analysis;
+                        let text = if page.summary.complete {
+                            "Speicheranalyse abgeschlossen."
+                        } else {
+                            "Speicheranalyse unvollständig; sichtbare Größen sind Teilsummen."
+                        };
+                        self.status = text.into();
+                        self.notify(text, if page.summary.complete { "ok" } else { "review" });
+                    }
+                    self.disk_page = Some(page);
+                }
             }
             Request::AiContent { scope_id, .. } => {
                 if let Ok(content) = serde_json::from_value::<mogumogu::service::AiContent>(value)

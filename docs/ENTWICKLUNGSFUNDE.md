@@ -1,6 +1,6 @@
 # Entwicklungsfunde, Speicher und Skill-Inhalte
 
-Stand: 25. Oktober 2026. Die neuen Fähigkeiten sind experimentell. Tests verwenden
+Stand: 30. Oktober 2026. Die neuen Fähigkeiten sind experimentell. Tests verwenden
 synthetische Windows-Verzeichnisse; eine Windows-11-Abnahme steht aus.
 
 ## Fundliste
@@ -329,8 +329,67 @@ Gespeicherte Messungen werden als früherer Messstand gekennzeichnet
 und können inzwischen verändert sein. Die Gruppierung verwendet den registrierten
 Laufwerksbuchstaben; Mountpoints/SUBST werden nicht physisch aufgelöst.
 
-Einen Ordnerbrowser gibt es nicht mehr (entfernt am 24. Oktober 2026): Was ein
-Projekt belegt und was davon wiederherstellbar ist, zeigt der Aufräumbericht.
+Den früheren Ordnerbrowser gibt es seit dem 24. Oktober 2026 nicht mehr;
+Ordnergrößen zeigt die Speicheranalyse (unten) unter eigener Freigabe. Was ein
+Projekt wiederherstellbar belegt, zeigt weiterhin der Aufräumbericht.
+
+## Speicheranalyse
+
+**Speicher → Speicheranalyse** zeigt, was in einem Ordner oder auf einer ganzen
+lokalen Festplatte Platz belegt: Ordner mit Größe, belegtem Platz und Anteil am
+angezeigten Ordner, die größten Dateien, Dateitypen nach Endung,
+Duplikat-Kandidaten und eine Flächenkarte der 40 größten Einträge (der Rest als
+eine Fläche). Gelesen werden nur Verzeichniseinträge: Name, logische Größe,
+belegter Platz auf dem Datenträger und Änderungsdatum. Kein Dateiinhalt, keine
+Prüfsumme, kein Programmstart.
+
+**Freigabe.** Eine eigene Art „Speicheranalyse (nur Dateimetadaten)“ (Schema
+v7), gebunden an die Identität des Ordners oder Laufwerks und nur auf lokalen
+Festplatten. Jeder Pfadbestandteil wird handle-relativ geöffnet; eine
+Verknüpfung unterwegs lehnt die Freigabe ab. Die Lesefreigabe eines Projekts
+genügt für dieses Projekt; Namenssuche, KI- und Cache-Freigaben genügen nicht.
+Erteilt wird sie über **Speicher analysieren** auf einer Laufwerkskarte,
+**Ordner freigeben** im Reiter oder `storage approve --path`. Sie ist kein
+Inventarbereich: **Jetzt erfassen** übergeht sie.
+
+**Ablauf.** Analysiert wird nur auf Wunsch, höchstens 4 Mio. Einträge, 64
+Ebenen und drei Minuten; **Abbrechen** in der Erfassungsleiste beendet den
+Durchgang. Ein Eintrag belegt 40 Bytes plus seinen Namen; gemessen hielt die
+Analyse der Systemfestplatte dieses Rechners (3,1 Mio. Einträge) 198 MiB, ein
+Datenlaufwerk mit 1,4 Mio. Einträgen 83 MiB ([Messbericht](MESSBERICHT.md)).
+Eine Seite ordnet nur die Einträge bis zu sich selbst, nicht die ganze Liste. Das Ergebnis liegt nur im Arbeitsspeicher des Besitzerprozesses:
+höchstens eine Analyse, ersetzt durch die nächste und verworfen beim Schließen
+des Fensters, beim Widerruf, mit `storage clear` oder, solange kein Fenster
+offen ist, nach zehn Minuten ohne Anfrage. Namen gelangen nicht in die
+Datenbank. Ordnernummern gelten nur innerhalb ihrer Analyse; mit dem Token aus
+dem Feld `analysis` lehnt die CLI eine Seite ab, wenn inzwischen neu analysiert
+wurde. Blättern (Seiten zu 60, höchstens 200 Einträge), Sortieren (Größe, auf
+Datenträger, Name, Änderung) und Filtern (Teilwort, oder `*` und `?` für den
+ganzen Namen; ein zu aufwendiges Muster wird abgelehnt) lesen das Dateisystem
+nicht erneut. Ein nicht erreichbarer Ordner wird beim nächsten Analysieren erneut versucht; ein
+ersetzter Ordner braucht eine neue Freigabe. Den Status einer
+Projektfreigabe ändert die Analyse nur, wenn der Ordner ersetzt wurde; ob ein
+Projekt erreichbar ist, hält die Erfassung fest. **Größe messen** gilt nicht für
+Speicheranalyse-Freigaben.
+
+**Grenzen.** Verknüpfungen, Junctions und Cloud-Platzhalter werden ausgelassen;
+sie machen das Ergebnis ebenso unvollständig wie ein Limit, ein unlesbarer Ordner
+oder ein Abbruch. Dann steht vor der Summe „Mindestens“, und die Gesamtgröße
+bleibt unbekannt; als Grund steht ein Limit oder Abbruch vor einer
+ausgelassenen Verknüpfung. Ein Ordner, unter dem etwas nicht gelesen wurde,
+zeigt „mind.“ vor der Größe und „≥“ vor dem Anteil, ein gar nicht gelesener
+„nicht gelesen“ statt 0 B; die CSV-Spalte `complete` sagt dasselbe je Zeile.
+Eine Verknüpfung macht ihren Ordner nicht unvollständig, ihr Ziel gehört nicht
+zu ihm. Erst ein Laufwerk mit mehr als 4 Mio. Einträgen bleibt am Limit
+unvollständig; Systemordner ohne Leserecht bleiben es immer. Hardlinks zählen je Namen; Verwaltungsdaten des Dateisystems (MFT,
+Ordnerindizes) fehlen. Duplikat-Kandidaten haben nur denselben Namen und dieselbe
+Größe; Inhalte werden nicht verglichen. Pfade erscheinen redigiert; ein langer
+Pfad wird vorn gekürzt, der Dateiname bleibt. **CSV
+kopieren …** zeigt eine Tabellenseite zum Kopieren an (`storage export` gibt sie
+auf stdout aus); Namen, die eine Tabellenkalkulation als Formel lesen würde,
+werden entschärft, und nichts wird in den analysierten Ordner geschrieben.
+Löschen, Verschieben und Öffnen im Explorer gibt es hier nicht. Eine Größe
+belegt keine Entbehrlichkeit.
 
 ## Skill-Inhalte
 
@@ -356,6 +415,11 @@ mogumogu-cli project accept-all                     # Vorschau mit Fingerabdruck
 mogumogu-cli project accept-all --confirm FINGERABDRUCK
 mogumogu-cli resource adopt --scope 2 --relative experiments/probe.py --project 1 --purpose "Parserprobe"
 mogumogu-cli storage
+mogumogu-cli storage approve --path D:\                 # eigene Freigabe, nur Metadaten
+mogumogu-cli storage analyze --scope 9
+mogumogu-cli storage tree --scope 9 --folder 2 --sort allocated
+mogumogu-cli storage files --scope 9 --search "*.zip"
+mogumogu-cli storage export --scope 9 --limit 200 > seite.csv
 mogumogu-cli ai content --scope 1 --relative .agents/skills/beispiel/SKILL.md
 ```
 

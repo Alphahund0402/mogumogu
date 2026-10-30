@@ -441,6 +441,13 @@ pub fn scope(scope: &Scope) -> Dialog {
     if let Some(error) = &scope.last_error {
         dialog = dialog.row("Problem", error);
     }
+    // A disk analysis approval has no inventory: it is analyzed, not scanned.
+    if scope.kind == ScopeKind::Storage {
+        return dialog
+            .action(format!("analyze-storage:{}", scope.id), "Analysieren", true)
+            .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false)
+            .body("Liest Namen, Größen und Änderungsdaten, keine Inhalte. Das Ergebnis bleibt nur bis zum Schließen des Fensters.");
+    }
     dialog = dialog.action(format!("scan-scope:{}", scope.id), "Jetzt erfassen", true);
     if scope.kind == ScopeKind::Project {
         dialog = dialog.action(format!("measure-scope:{}", scope.id), "Größe messen", false);

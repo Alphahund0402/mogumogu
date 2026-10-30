@@ -20,6 +20,50 @@ fn core_at(temp: &std::path::Path, clock: Arc<FixedClock>) -> Core {
 }
 
 #[test]
+fn v6_storage_analysis_is_a_separate_approval_and_upgrade_is_backed_up() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("inventory.sqlite3");
+    {
+        let db = Connection::open(&path).unwrap();
+        for sql in [
+            include_str!("../migrations/001_initial.sql"),
+            include_str!("../migrations/002_inventory.sql"),
+            include_str!("../migrations/003_package_evidence.sql"),
+            include_str!("../migrations/004_user_scopes.sql"),
+            include_str!("../migrations/005_recycle.sql"),
+            include_str!("../migrations/006_cache_scopes.sql"),
+        ] {
+            db.execute_batch(sql).unwrap();
+        }
+        db.execute_batch(
+            "INSERT INTO app_meta(key,value) VALUES('mode','local');
+            INSERT INTO scopes(kind,path,status,approved_at,profile,realm,cache) VALUES
+            ('project','C:\\fixture\\same','approved',0,'','',''),
+            ('project','C:\\fixture\\same','approved',0,'projects','',''),
+            ('project','C:\\fixture\\same','approved',0,'','user',''),
+            ('project','C:\\fixture\\same','approved',0,'','','npm-cache');",
+        )
+        .unwrap();
+        db.pragma_update(None, "user_version", 6).unwrap();
+    }
+    let mut repo = Repository::open_path(&path, false, Arc::new(FixedClock::new(1_000))).unwrap();
+    let original: Vec<_> = repo.scopes().unwrap().into_iter().map(|s| s.kind).collect();
+    assert_eq!(original, vec![ScopeKind::Project, ScopeKind::ProjectSearch, ScopeKind::UserAi, ScopeKind::NpmCache]);
+    let storage = repo.approve_scope(ScopeKind::Storage, None, r"C:\fixture\same", None).unwrap();
+    assert_eq!(repo.scope(storage).unwrap().kind, ScopeKind::Storage);
+    assert_eq!(repo.scopes().unwrap().len(), 5);
+    assert_eq!(repo.approve_scope(ScopeKind::Storage, None, r"C:\fixture\same", None).unwrap(), storage);
+    let db = Connection::open(&path).unwrap();
+    assert_eq!(db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), SCHEMA_VERSION);
+    assert_eq!(db.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)).unwrap(), "ok");
+    let backups: Vec<_> = std::fs::read_dir(temp.path().join("backups")).unwrap().map(|e| e.unwrap().path()).collect();
+    assert_eq!(backups.len(), 1);
+    let before = Connection::open(&backups[0]).unwrap();
+    assert_eq!(before.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), 6);
+    assert_eq!(before.query_row("SELECT COUNT(*) FROM scopes", [], |r| r.get::<_, i64>(0)).unwrap(), 4);
+}
+
+#[test]
 fn v3_scopes_keep_their_meaning_and_user_folders_get_their_own_realm() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("inventory.sqlite3");

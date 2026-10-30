@@ -12,6 +12,14 @@ Aufruf:  mogumogu-cli [--demo] [--data-dir ABSOLUTER_PFAD] [--json] [--no-start]
 
 Überblick
   status | list | review | adapters | catalog
+  storage approve --path PFAD             eigene Metadatenfreigabe für Ordner oder lokale Festplatte
+  storage analyze --scope ID              Speicheranalyse ausdrücklich starten (max. 4 Mio. Einträge, 3 min)
+  storage clear                          Analyseverzeichnis aus dem Arbeitsspeicher freigeben
+  storage tree|files|types|duplicates --scope ID [--folder N] [--search TEXT] [--sort size|allocated|name|modified] [--offset N] [--limit N]
+  storage export --scope ID [--folder N] [--search TEXT] [--offset N] [--limit N]
+                                         eine Dateiseite als CSV auf stdout; maximal 200 Zeilen, Namen redigiert
+                                         beide auch mit --analysis TOKEN (Feld `analysis` der Antwort):
+                                         verweigert, falls inzwischen neu analysiert wurde
   why --resource ID                      Besitzer, Schutz, Hinweise
 
 Projekte und Lesefreigaben (Registrierung ≠ Lesefreigabe)
@@ -72,6 +80,7 @@ pub enum View {
     Review,
     Plan,
     Json,
+    DiskCsv,
 }
 
 #[derive(Debug)]
@@ -99,6 +108,51 @@ pub fn parse(args: &[String]) -> Result<Action> {
         ["adapters"] => Ok(Action::Static(serde_json::to_value(mogumogu::adapters::descriptors())?)),
         ["catalog"] => call(Request::Catalog, View::Json),
         ["storage"] | ["storage", "overview"] => call(Request::StorageOverview, View::Json),
+        ["storage", "clear"] => call(Request::ClearStorageAnalysis, View::Json),
+        ["storage", "approve", ..] => {
+            let o = opts(rest(2), &["--path"])?;
+            call(Request::ApproveSystem { kind: ScopeKind::Storage, path: Some(o.text("--path")?) }, View::Json)
+        }
+        ["storage", "analyze", ..] => {
+            call(Request::AnalyzeStorage { scope_id: opts(rest(2), &["--scope"])?.id("--scope")? }, View::Json)
+        }
+        ["storage", view @ ("tree" | "files" | "types" | "duplicates" | "export"), ..] => {
+            use mogumogu::domain::{DiskQuery, DiskSort, DiskView};
+            let o = opts(rest(2), &["--scope", "--analysis", "--folder", "--search", "--sort", "--offset", "--limit"])?;
+            let number = |flag: &str| -> Result<usize> {
+                o.optional(flag)
+                    .map(|v| {
+                        v.parse::<usize>()
+                            .map_err(|_| Error::invalid(format!("{flag} erwartet eine nichtnegative ganze Zahl.")))
+                    })
+                    .transpose()
+                    .map(|v| v.unwrap_or(0))
+            };
+            let query = DiskQuery {
+                analysis: number("--analysis")? as u64,
+                folder: number("--folder")?,
+                view: match *view {
+                    "tree" => DiskView::Tree,
+                    "types" => DiskView::Types,
+                    "duplicates" => DiskView::Duplicates,
+                    _ => DiskView::Files,
+                },
+                sort: match o.optional("--sort").as_deref() {
+                    None | Some("size") => DiskSort::Size,
+                    Some("allocated") => DiskSort::Allocated,
+                    Some("name") => DiskSort::Name,
+                    Some("modified") => DiskSort::Modified,
+                    _ => return Err(Error::invalid("--sort: size, allocated, name oder modified.")),
+                },
+                text: o.optional("--search").unwrap_or_default(),
+                offset: number("--offset")?,
+                limit: number("--limit")?,
+            };
+            call(
+                Request::StoragePage { scope_id: o.id("--scope")?, query },
+                if *view == "export" { View::DiskCsv } else { View::Json },
+            )
+        }
         ["ai", "filter", "--all", ..] => match opts(rest(3), &["--confirm"])?.optional("--confirm") {
             Some(fingerprint) => call(Request::ApplyContextFilterAll { fingerprint }, View::Json),
             None => call(Request::ContextFilterAll, View::Json),
@@ -309,7 +363,10 @@ mod tests {
             parse(&words("ai content --scope 2 --relative AGENTS.md")).unwrap(),
             Action::Call(Request::AiContent { scope_id: Some(2), .. }, View::Json)
         ));
-        assert!(parse(&words("storage tree --scope 2")).is_err(), "no folder browser");
+        assert!(matches!(
+            parse(&words("storage tree --scope 2")).unwrap(),
+            Action::Call(Request::StoragePage { scope_id: 2, .. }, View::Json)
+        ));
         assert!(matches!(
             parse(&words("project accept-all")).unwrap(),
             Action::Call(Request::FoundProjects { scope_id: None }, View::Json)

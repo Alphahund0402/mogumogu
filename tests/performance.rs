@@ -129,3 +129,45 @@ fn reference_inventory_stays_bounded() {
         database / 1024
     );
 }
+
+/// Disk analysis of a real local folder or drive, e.g. `MOGU_DISK_BENCH=C:\`.
+/// Prints counts, timings and the index's heap; no names leave the test.
+#[test]
+#[ignore = "reads the metadata of a real folder; run explicitly in release mode"]
+fn disk_analysis_of_a_real_folder() {
+    use mogumogu::domain::{DiskQuery, DiskSort, DiskView};
+    use mogumogu::fsread::ScopeRoot;
+    use mogumogu::inventory::disk::DiskIndex;
+    use mogumogu::limits::ScanLimits;
+    let Some(path) = std::env::var_os("MOGU_DISK_BENCH") else {
+        println!("MOGU_DISK_BENCH nicht gesetzt; nichts gemessen.");
+        return;
+    };
+    let root = ScopeRoot::open_local(std::path::Path::new(&path), None).unwrap();
+    let started = Instant::now();
+    let index = DiskIndex::scan(1, "Messung", root, 0, ScanLimits::storage_analysis(), None);
+    let scanned = started.elapsed();
+    let s = &index.summary;
+    let heap = index.memory_bytes() as f64;
+    println!(
+        "Analyse {scanned:?} · {} Einträge ({} Dateien, {} Ordner, {} ausgelassen, {} nicht lesbar) · vollständig {} {:?}",
+        s.entries, s.files, s.folders, s.skipped, s.unreadable, s.complete, s.reason
+    );
+    println!(
+        "Verzeichnis im Speicher: {:.1} MiB · {:.1} Bytes je Eintrag",
+        heap / 1_048_576.0,
+        heap / (s.files + s.folders).max(1) as f64
+    );
+    for (label, query) in [
+        ("Ordner", DiskQuery::default()),
+        ("Größte Dateien", DiskQuery { view: DiskView::Files, ..Default::default() }),
+        ("Dateitypen", DiskQuery { view: DiskView::Types, ..Default::default() }),
+        ("Duplikat-Kandidaten", DiskQuery { view: DiskView::Duplicates, ..Default::default() }),
+        ("Filter *.dll", DiskQuery { view: DiskView::Files, text: "*.dll".into(), ..Default::default() }),
+        ("Nach Name", DiskQuery { view: DiskView::Files, sort: DiskSort::Name, ..Default::default() }),
+    ] {
+        let started = Instant::now();
+        let page = index.page(&query).unwrap();
+        println!("{label}: {} von {} in {:?}", page.rows.len(), page.total, started.elapsed());
+    }
+}

@@ -2,6 +2,62 @@
 
 Stand: 5. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 30. Oktober: Speicheranalyse
+
+**Neu:** Reiter **Speicher → Speicheranalyse** und CLI `storage
+approve|analyze|tree|files|types|duplicates|export|clear`: Ordnergrößen mit
+belegtem Platz und Anteil am angezeigten Ordner, größte Dateien, Dateitypen,
+Duplikat-Kandidaten nach Name und Größe, Flächenkarte der 40 größten Einträge,
+Namensfilter mit `*`/`?` und CSV einer Seite. Eigene Freigabe je Ordner oder
+lokaler Festplatte (Schema v7, Spalte `analysis`) oder die Lesefreigabe eines
+Projekts. Gelesen werden nur Verzeichniseinträge (Name, Größe, belegter Platz aus
+`AllocationSize`, Änderungsdatum), höchstens 4 Mio. Einträge, 64 Ebenen und
+180 s (so lange wartet der Besitzer auch für die CLI); das Ergebnis liegt nur
+im Besitzerprozess. Bild:
+[Speicheranalyse](screenshots/wolke-speicheranalyse.png).
+
+**Getrennter Agentenreview der Lesegrenze:** Er fand keinen Weg aus der
+freigegebenen Wurzel, über eine Verknüpfung oder zu Dateiinhalten. Behoben sind
+seine Befunde: Ein Teilergebnis nannte den ersten Grund (meist eine ausgelassene
+Verknüpfung) statt des Limits oder Abbruchs; ungelesene Ordner erschienen als
+leer (jetzt „mind.“ bzw. „nicht gelesen“, CSV-Spalte `complete`); **Größe
+messen** maß Speicheranalyse-Freigaben über den allgemeinen Pfadweg; solche
+Freigaben boten „Jetzt erfassen“ an und zählten als teilweise erfasst;
+Zwischenordner wurden ohne `FILE_SHARE_DELETE` geöffnet, und ein nicht
+erreichbarer Ordner konnte ein Projekt aus „Alle erfassen“ nehmen; ein per CLI
+erstelltes Verzeichnis blieb unbegrenzt im Tray (jetzt nach zehn Minuten ohne
+Anfrage und ohne offenes Fenster verworfen); Ordnernummern konnten auf eine
+neuere Analyse zeigen (jetzt Token `analysis`); ein Suchmuster konnte den
+Besitzer-Thread quadratisch belasten (jetzt Schrittbudget); tiefe Pfade verloren
+den Dateinamen. Zusätzlich muss die geöffnete Laufwerkswurzel lokal aufgelöst
+werden, nicht als `\\server`-Pfad. Schon vorher behoben: Eine fehlgeschlagene
+Analyse sperrte ihre Freigabe dauerhaft, und eine Ablehnung (Netzlaufwerk,
+Junction im Pfad) setzte die Projektfreigabe auf „nicht erreichbar“.
+
+**Prüfungen:** `validate.py`, `cargo fmt` und `cargo clippy --all-targets -D
+warnings` ohne Befund; `cargo test --locked --no-default-features` mit **397
+Funktionstests** bestanden, davon 12 in `tests/storage_analysis.rs`;
+`build.ps1 -NoRun` mit nativem Release-Build erfolgreich; native Renderbilder
+der vollständigen und einer unvollständigen Analyse.
+
+**Größere Analysen:** Das Verzeichnis speichert einen Eintrag in 40 Bytes plus
+Namen in festen Blöcken (`inventory/disk/nodes.rs`); Duplikat-Kandidaten
+entstehen durch Sortieren statt über kopierte Namen. Damit stieg das Limit von
+200.000 auf 4 Mio. Einträge; eine Seite ordnet nur die Einträge bis zu sich
+selbst. Gemessen ([Messbericht](MESSBERICHT.md)): C: mit 3,07 Mio. Einträgen in
+90 s (beim zweiten Mal 54 s), 198 MiB Verzeichnis, 218 MiB Spitze, bis auf 153
+nicht lesbare Systemordner und 188 Verknüpfungen gelesen; I: mit 1,38 Mio.
+Einträgen in 30 s, 83 MiB. Bei 2 Mio. Einträgen war C: noch am Limit
+abgebrochen. Für die CLI wartet der Besitzer bei einer Analyse jetzt ihr
+Zeitbudget ab statt 120 s. Dabei fiel auf, dass das Schrittbudget des
+Namensfilters ein gewöhnliches `*.dll` über 1,6 Mio. Namen abwies; es erlaubt
+jetzt vier Schritte je Namensbyte und begrenzt nur den Mehraufwand.
+
+**Offen:** menschlicher Review der erweiterten Lesegrenze, Windows-11-Abnahme
+und die neuen manuellen Punkte der [Windows-Abnahme](WINDOWS-ABNAHME.md)
+(OneDrive-Platzhalter, Abbruch auf `C:\`, Arbeitsspeicher nach dem Schließen).
+Ein Laufwerk mit mehr als 4 Mio. Einträgen bleibt unvollständig.
+
 ## Ergänzung vom 25. Oktober: 29 weitere Adapter, Testordner und Blattregel
 
 **Neue Adapter:** 29 statische Adapter, zusammen 40. Neu sind die

@@ -2,12 +2,13 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
 import { Store, Actions, DriveRow, DiskProjectRow, TidyProjectRow } from "../store.slint";
 import { Card, PageHeader, UiButton, FilterChip, Icon, StatusChip } from "../components.slint";
+import { StorageAnalysis } from "storage-analysis.slint";
 
 // Fixed size: the drive grid places the cards itself.
 component DriveCard inherits Card {
     in property <DriveRow> data;
     width: 250px;
-    height: 180px;
+    height: 211px;
     border-color: Store.selected-drive == root.data.root ? Theme.focus : Theme.edge;
     drive-content := VerticalLayout {
         x: 0px; y: 0px; width: root.width; height: self.preferred-height;
@@ -43,6 +44,7 @@ component DriveCard inherits Card {
                 activated => { Actions.search-drive(root.data.root); }
             }
         }
+        if root.data.searchable : UiButton { small: true; label: "Speicher analysieren"; available: !Store.demo && !Store.busy; activated => { Actions.analysis-approve(root.data.root); } }
     }
 }
 
@@ -65,6 +67,7 @@ component ProjectStorageCard inherits Card {
             alignment: start; spacing: 6px;
             UiButton { small: true; label: "Projekt"; activated => { Actions.open-project(root.data.id); } }
             UiButton { small: true; label: "Größe messen"; available: root.data.scope-id > 0 && !Store.demo && !Store.busy; activated => { Actions.detail-action("measure-scope:" + root.data.scope-id); } }
+            UiButton { small: true; label: "Analysieren"; available: root.data.scope-id > 0 && !Store.demo && !Store.busy; activated => { Actions.analyze-storage(root.data.scope-id); } }
         }
     }
 }
@@ -119,11 +122,11 @@ export component StoragePage inherits VerticalLayout {
             drive-grid := Rectangle {
                 property <length> available: Store.window-width - 188px - 2 * Theme.page-padding - 16px;
                 property <int> columns: max(1, floor((self.available + Theme.gap) / (250px + Theme.gap)));
-                height: Store.drives.length == 0 ? 0px : ceil(Store.drives.length / self.columns) * (180px + Theme.gap) - Theme.gap;
+                height: Store.drives.length == 0 ? 0px : ceil(Store.drives.length / self.columns) * (211px + Theme.gap) - Theme.gap;
                 for drive[index] in Store.drives : DriveCard {
                     data: drive;
                     x: mod(index, parent.columns) * (250px + Theme.gap);
-                    y: floor(index / parent.columns) * (180px + Theme.gap);
+                    y: floor(index / parent.columns) * (211px + Theme.gap);
                 }
             }
             if Store.drives.length == 0 : Text { text: "Laufwerksinformationen sind noch nicht verfügbar."; color: Theme.muted; font-size: 12px; wrap: word-wrap; }
@@ -131,8 +134,10 @@ export component StoragePage inherits VerticalLayout {
                 alignment: start; spacing: 6px;
                 FilterChip { label: "Projekte"; count: "" + Store.disk-projects.length; selected: Store.storage-tab == 0; activated => { Store.storage-tab = 0; } }
                 tidy-tab := FilterChip { label: "Aufräumen"; count: Store.tidy-projects.length > 0 ? "" + Store.tidy-projects.length : ""; selected: Store.storage-tab == 1; activated => { Store.storage-tab = 1; } }
+                FilterChip { label: "Speicheranalyse"; selected: Store.storage-tab == 2; activated => { Store.storage-tab = 2; } }
                 if Store.selected-drive != "" : UiButton { small: true; label: "Alle Laufwerke"; available: true; activated => { Actions.storage-drive(""); } }
             }
+            if Store.storage-tab == 2 : StorageAnalysis { }
             if Store.storage-tab == 1 : VerticalLayout {
                 spacing: Theme.gap;
                 HorizontalLayout {

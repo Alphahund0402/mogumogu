@@ -68,6 +68,9 @@ pub struct DirEntryInfo {
     pub name: std::ffi::OsString,
     pub attributes: u32,
     pub size: u64,
+    /// Space the filesystem reserved for the data, per name: rounded up to
+    /// clusters, smaller when compressed or sparse, zero when kept in the MFT.
+    pub allocated: u64,
     /// Last write time, unix seconds.
     pub modified: i64,
 }

@@ -47,6 +47,10 @@ Legende: ☑ geprüft · ☐ offen. Spalte „W10“ = Windows 10 Pro 22H2 (Buil
 | Keine Netzwerkzugriffe bei ausgeschalteten Updatehinweisen | ☑ (Code-Allowlist, kein Aufruf ohne Freigabe) | ☐ |
 | Updatehinweis gegen echte öffentliche Registry | ☐ | ☐ |
 | Scoop/Chocolatey/WinGet-Freigabe auf einem System mit diesen Managern | ☐ | ☐ |
+| Speicheranalyse: Junction auf dem Weg abgelehnt, Junction und Platzhalter im Ordner ausgelassen, ungelesener Ordner „nicht gelesen“, nicht erreichbarer Ordner erneut versucht | ☑ (automatisiert) | ☐ |
+| Speicheranalyse eines Profils mit OneDrive „Dateien bei Bedarf“: keine Platzhalter abgerufen, kein Netzverkehr | ☐ manuell | ☐ |
+| Speicheranalyse von `C:\` im Dashboard: Fenster bleibt während des Durchgangs bedienbar, Abbruch zeigt „Vom Benutzer abgebrochen“ | ☐ manuell | ☐ |
+| Speicheranalyse: Arbeitsspeicher des Trays nach Schließen des Fensters wieder auf Leerlaufniveau | ☐ manuell | ☐ |
 
 ## D. Betrieb und Messung
 

@@ -271,3 +271,31 @@ Laufwerkssuche, gesammelte Übernahme, dann eine Erfassung aller Bereiche):
 | Projektfunde mit redigiertem Pfad / redigierte Einträge in Projekterfassungen | 0 von 1.738 / 0 von 23.942 |
 | Go (Sparkle), Bun (koharu), Gradle (lumina) | 27 + 46, 1.882 aufgelöst, 45 deklariert |
 | Besitzer danach | 11,8 MiB Private Bytes |
+
+## Speicheranalyse ganzer Laufwerke (30. Oktober 2026)
+
+Derselbe Windows-10-Rechner, Release-Build,
+`MOGU_DISK_BENCH=<Laufwerk> cargo test --release --no-default-features --test performance -- --ignored --nocapture --exact disk_analysis_of_a_real_folder`.
+Der Test analysiert direkt über die Lesegrenze, ohne Datenbank und ohne
+Namensausgabe; private Bytes alle 250 ms aus dem Testprozess abgetastet.
+Grenzen: 4 Mio. Einträge, 64 Ebenen, 180 s.
+
+| Laufwerk | Einträge | Analyse | Verzeichnis im Speicher | Spitze private Bytes | Ergebnis |
+|---|---|---|---|---|---|
+| C: (865 GB belegt, Systemfestplatte) | 3.067.201 (2,60 Mio. Dateien) | 90 s, beim zweiten Mal 54 s | 198,0 MiB (68 Bytes je Eintrag) | 218 MiB | bis auf 153 nicht lesbare Systemordner und 188 Verknüpfungen gelesen |
+| I: (706 GB belegt, Projekte und Daten) | 1.382.813 (1,24 Mio. Dateien) | 30 s | 83,3 MiB (63 Bytes je Eintrag) | 95 MiB | bis auf 3 nicht lesbare Systemordner und 503 Verknüpfungen gelesen |
+
+Seitenabfragen auf C: (2,6 Mio. Dateien): Ordner 5 ms, größte Dateien 0,12 s,
+Sortierung nach Name 0,10 s, Duplikat-Kandidaten 0,05 s, Dateitypen 0,34 s,
+Filter `*.dll` 0,66 s. Bevor eine Seite nur die Einträge bis zu sich selbst
+ordnete, brauchten größte Dateien 0,90 s und die Sortierung nach Name 1,24 s.
+
+Zwischenstand mit 2 Mio. Einträgen: C: brach nach 74 s (kalt; warm 15 s) am
+Limit ab, das Verzeichnis belegte 134 MiB, die Spitze 146 MiB. Davor überschritt
+jeder Namensblock seine Größe um bis zur Hälfte (eine Verdopplung ab ungerader
+Startgröße); dasselbe Verzeichnis belegte damit 160 MiB. Das alte Limit von
+200.000 Einträgen hätte von I: etwa 15 % der Einträge gelesen. Das Verzeichnis
+existiert nur, solange eine Analyse offen ist; Schließen des Fensters gibt es
+frei. Der Tray-Leerlauf (50-MiB-Ziel) ist davon nicht betroffen, gemessen wurde
+das aber noch nicht im laufenden Tray (Punkt in der
+[Windows-Abnahme](WINDOWS-ABNAHME.md)).

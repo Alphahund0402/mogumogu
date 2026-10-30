@@ -64,6 +64,8 @@ macro_rules! string_enum {
 mod access;
 mod cleanup;
 mod disk;
+mod disk_analysis;
+pub use disk_analysis::*;
 mod inventory;
 mod package;
 mod project;

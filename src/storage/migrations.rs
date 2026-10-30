@@ -13,6 +13,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (4, include_str!("../../migrations/004_user_scopes.sql")),
     (5, include_str!("../../migrations/005_recycle.sql")),
     (6, include_str!("../../migrations/006_cache_scopes.sql")),
+    (7, include_str!("../../migrations/007_storage_analysis.sql")),
 ];
 
 pub const SCHEMA_VERSION: i64 = MIGRATIONS[MIGRATIONS.len() - 1].0;

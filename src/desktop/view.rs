@@ -283,6 +283,7 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
     render_packages(ui, &snapshot.packages, state.package_key);
     render_system(&store, snapshot, now);
     super::disk::render(ui, &snapshot.disks);
+    super::disk_analysis::targets(ui, &snapshot.scopes);
     super::disk::render_tidy(ui, &snapshot.tidy);
 
     render_candidates(ui, snapshot);
@@ -397,8 +398,7 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
 /// Mochi shows the state; it only speaks when the state needs a word.
 /// The state is always also given as text elsewhere.
 fn render_mascot(store: &Store<'_>, snapshot: &Snapshot, state: &ViewState<'_>) {
-    let partial = !snapshot.demo
-        && snapshot.scopes.iter().any(|s| s.status != ScopeStatus::Approved || !s.current() && s.latest.is_some());
+    let partial = !snapshot.demo && snapshot.scopes.iter().any(Scope::partially_scanned);
     let (pose, line) = if state.scanning {
         (4, "Ich erfasse gerade. Du kannst weiterarbeiten.".to_string())
     } else if partial {
@@ -475,11 +475,7 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot) {
             0,
         ));
     }
-    let partial: Vec<&Scope> = snapshot
-        .scopes
-        .iter()
-        .filter(|s| s.status != ScopeStatus::Approved || !s.current() && s.latest.is_some())
-        .collect();
+    let partial: Vec<&Scope> = snapshot.scopes.iter().filter(|s| s.partially_scanned()).collect();
     if !partial.is_empty() {
         cards.push(card(
             "review",

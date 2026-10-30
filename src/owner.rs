@@ -8,12 +8,12 @@ use crate::config::Config;
 use crate::domain::{Snapshot, TraySummary};
 use crate::fsread::ScanControl;
 use crate::ipc::Server;
-use crate::limits::EVENT_QUEUE;
+use crate::limits::{DISK_IDLE, EVENT_QUEUE};
 use crate::service::{Core, Request};
 use crate::{Error, Result};
 use serde_json::Value;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::mpsc::{self, Receiver, RecvError, RecvTimeoutError, SyncSender};
 use std::thread::JoinHandle;
 
 /// Callbacks from the worker thread. Implementations must not block.
@@ -70,12 +70,11 @@ impl Owner {
         let forward = jobs.clone();
         let server = Server::start(&pipe, move |request| {
             let (reply, answer) = mpsc::sync_channel(1);
+            let wait = request.reply_within();
             forward
                 .send(Job::Request(request, Some(reply)))
                 .map_err(|_| Error::conflict("Besitzerprozess wird beendet."))?;
-            answer
-                .recv_timeout(crate::limits::IPC_CLIENT_TIMEOUT)
-                .map_err(|_| Error::conflict("Zeitüberschreitung im Besitzerprozess."))?
+            answer.recv_timeout(wait).map_err(|_| Error::conflict("Zeitüberschreitung im Besitzerprozess."))?
         })
         .map_err(|e| {
             Error::conflict(format!("IPC-Kanal belegt – läuft bereits ein mogumogu-Besitzerprozess? ({e})"))
@@ -121,8 +120,23 @@ impl Drop for Owner {
 fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents) {
     publish(&mut core, &events);
     loop {
-        // Blocks without a timer: the owner only acts on requests.
-        match receiver.recv() {
+        // Blocks without a timer: the owner only acts on requests. A held disk
+        // analysis is the exception: without a dashboard, an unused one is
+        // released instead of staying in the tray.
+        let job = if core.holds_storage_analysis() {
+            match receiver.recv_timeout(DISK_IDLE) {
+                Err(RecvTimeoutError::Timeout) => {
+                    if !events.wants_snapshot() {
+                        core.clear_storage_analysis();
+                    }
+                    continue;
+                }
+                job => job.map_err(|_| RecvError),
+            }
+        } else {
+            receiver.recv()
+        };
+        match job {
             Ok(Job::Request(request, reply)) => {
                 let from_ui = reply.is_none();
                 match request {

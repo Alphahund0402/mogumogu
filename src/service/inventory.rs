@@ -39,6 +39,16 @@ impl Core {
     /// Read approval for a system-wide manager root or the software list.
     pub fn approve_system(&mut self, kind: ScopeKind, path: Option<&str>) -> Result<i64> {
         match kind {
+            ScopeKind::Storage => {
+                let input = path.ok_or_else(|| {
+                    Error::invalid("Für die Speicheranalyse einen Ordner oder ein lokales Laufwerk angeben.")
+                })?;
+                let path = validation::drive_root(input).or_else(|_| validation::windows_path(input))?;
+                let root = crate::fsread::ScopeRoot::open_local(Path::new(&path), None)
+                    .map_err(|_| Error::blocked("Ordner oder Laufwerk nicht freigebbar."))?;
+                let identity = root.identity();
+                self.repo.approve_scope(kind, None, &path, Some(identity))
+            }
             ScopeKind::Project => Err(Error::invalid("Projektordner werden über ihr Projekt freigegeben.")),
             ScopeKind::Winget | ScopeKind::Scoop | ScopeKind::Chocolatey => {
                 Err(Error::blocked("Installierte Programme und ihre Manager erfasst mogumogu nicht mehr."))
@@ -95,7 +105,11 @@ impl Core {
     }
 
     pub fn revoke_scope(&mut self, scope_id: i64) -> Result<()> {
-        self.repo.revoke_scope(scope_id)
+        self.repo.revoke_scope(scope_id)?;
+        if self.disk_index.as_ref().is_some_and(|i| i.scope_id == scope_id) {
+            self.disk_index = None;
+        }
+        Ok(())
     }
 
     /// One static pass over an approved scope, stored as a generation.
@@ -109,8 +123,13 @@ impl Core {
     /// All approved scopes in turn. A cancel request ends the current pass
     /// at its next entry and skips the remaining scopes.
     pub fn scan_all(&mut self) -> Result<Vec<ScanReport>> {
-        let ids: Vec<i64> =
-            self.repo.scopes()?.iter().filter(|s| s.status == ScopeStatus::Approved).map(|s| s.id).collect();
+        let ids: Vec<i64> = self
+            .repo
+            .scopes()?
+            .iter()
+            .filter(|s| s.status == ScopeStatus::Approved && s.kind != ScopeKind::Storage)
+            .map(|s| s.id)
+            .collect();
         self.scan_control.begin(ids.len());
         let mut reports = Vec::with_capacity(ids.len());
         for id in ids {
@@ -134,6 +153,11 @@ impl Core {
     fn scan_one(&mut self, scope_id: i64) -> Result<ScanReport> {
         self.repo.require_local()?;
         let scope = self.repo.scope(scope_id)?;
+        if scope.kind == ScopeKind::Storage {
+            return Err(Error::blocked(
+                "Speicheranalyse unter Speicher ausdrücklich starten; sie gehört nicht zur Inventarerfassung.",
+            ));
+        }
         match scope.status {
             ScopeStatus::Approved | ScopeStatus::Unavailable => {}
             ScopeStatus::IdentityChanged => {
@@ -195,6 +219,11 @@ impl Core {
         let scope = self.repo.scope(scope_id)?;
         if scope.status != ScopeStatus::Approved || scope.kind == ScopeKind::Winget {
             return Err(Error::blocked("Nur freigegebene Ordner können gemessen werden."));
+        }
+        // Its folder is measured only along the local, link-free path the
+        // analysis opens, never through the general path-based measurement.
+        if scope.kind == ScopeKind::Storage {
+            return Err(Error::blocked("Diesen Ordner misst die Speicheranalyse unter Speicher."));
         }
         if validation::drive_root(&scope.path).is_ok() {
             return Err(Error::blocked(

@@ -13,6 +13,7 @@ mod access;
 mod ai_content;
 mod discovery;
 mod disk;
+mod disk_analysis;
 mod filters;
 mod inventory;
 mod maintenance;
@@ -58,6 +59,10 @@ pub struct Core {
     system: Option<SystemReport>,
     /// Cached drive metadata; directory enumeration is always on demand.
     storage_cache: Option<crate::domain::StorageOverview>,
+    /// Last explicitly requested disk index; no filenames in the database.
+    disk_index: Option<crate::inventory::disk::DiskIndex>,
+    /// Analyses started by this owner; part of each analysis token.
+    disk_runs: u64,
     /// Last tidy-up report; measured only on request, never persisted.
     tidy: Option<crate::domain::TidyReport>,
     /// Progress and cancel requests shared with the dashboard.
@@ -88,6 +93,8 @@ impl Core {
             package_cache: None,
             system: None,
             storage_cache: None,
+            disk_index: None,
+            disk_runs: 0,
             tidy: None,
             scan_control: Arc::new(ScanControl::default()),
         };

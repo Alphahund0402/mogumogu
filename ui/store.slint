@@ -24,6 +24,8 @@ export struct SearchRow { area: string, area-label: string, key: string, title: 
 export struct ChainStep { label: string, detail: string, warn: bool }
 export struct DriveRow { root: string, label: string, kind: string, total: string, used: string, free: string, projects: string, usage: float, project-share: float, note: string, search: string, search-id: int, searchable: bool }
 export struct DiskProjectRow { id: int, name: string, path: string, drive: string, size: string, share: string, fraction: float, scope-id: int, note: string }
+export struct AnalysisRow { id: int, name: string, path: string, directory: bool, size: string, allocated: string, share: float, share-text: string, counts: string, modified: string, duplicates: string }
+export struct AnalysisTile { id: int, label: string, size: string, directory: bool, remainder: bool, left: float, top: float, wide: float, tall: float }
 // One measured project of the tidy-up report; sizes are formatted text.
 export struct TidyProjectRow { id: int, name: string, path: string, total: string, regenerable: string, review: string, vcs: string, test-data: string, test-heavy: bool, share: float, last-change: string, dormant: bool, note: string }
 export struct TidyStoreRow { name: string, path: string, size: string, regenerable: bool, evidence: string }
@@ -117,8 +119,27 @@ export global Store {
     in property <[DiskProjectRow]> disk-projects;
     in property <string> disk-checked;
     in-out property <string> selected-drive;
-    // 0 projects, 1 tidy-up report
+    // 0 projects, 1 tidy-up report, 2 disk analysis
     in-out property <int> storage-tab: 0;
+    in property <[string]> analysis-scopes;
+    in-out property <int> analysis-target: -1;
+    in-out property <int> analysis-scope: -1;
+    in property <bool> analysis-ready: false;
+    in property <bool> analysis-complete: false;
+    in property <string> analysis-summary;
+    in property <string> analysis-note;
+    in property <string> analysis-path;
+    in property <bool> analysis-has-parent: false;
+    in property <bool> analysis-folder-complete: true;
+    in-out property <int> analysis-view: 0;
+    in-out property <int> analysis-sort: 0;
+    in-out property <string> analysis-search;
+    in property <[AnalysisRow]> analysis-rows;
+    in property <[AnalysisTile]> analysis-tiles;
+    in property <string> analysis-page;
+    in property <bool> analysis-previous: false;
+    in property <bool> analysis-next: false;
+    in-out property <string> analysis-hover;
     in property <[TidyProjectRow]> tidy-projects;
     in property <[TidyStoreRow]> tidy-stores;
     in property <string> tidy-summary: "Noch kein Aufräumbericht.";
@@ -222,6 +243,17 @@ export global Actions {
     callback add-store();
     callback storage-refresh();
     callback storage-drive(string);
+    callback analysis-approve(string);
+    callback analysis-folder();
+    callback analysis-target(int);
+    callback analyze-storage(int);
+    callback analysis-view(int);
+    callback analysis-sort(int);
+    callback analysis-search(string);
+    callback analysis-open(int);
+    callback analysis-up();
+    callback analysis-page(int);
+    callback analysis-export();
     callback search-drive(string);
     callback tidy-report(int);
     callback open-tidy(int);

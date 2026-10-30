@@ -313,7 +313,7 @@ impl Desktop {
     // ------------------------------------------------------ data, folders
 
     /// Native folder dialog; `None` when cancelled. Nothing is read or created.
-    fn pick_folder(&mut self, title: &str) -> Option<String> {
+    pub(super) fn pick_folder(&mut self, title: &str) -> Option<String> {
         match mogumogu::platform::pick_folder(title) {
             Ok(path) => path,
             Err(error) => {

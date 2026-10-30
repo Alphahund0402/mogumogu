@@ -1,0 +1,137 @@
+import { ScrollView, ComboBox, LineEdit } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions } from "../store.slint";
+import { Card, UiButton, FilterChip, StatusChip } from "../components.slint";
+
+export component StorageAnalysis inherits VerticalLayout {
+    spacing: 10px;
+    Text { text: "Was belegt den Speicher?"; font-size: 16px; font-weight: 700; color: Theme.ink; }
+    Text { text: "Ordnergrößen, größte Dateien, Dateitypen und eine Flächenkarte. Analysiert wird nur auf deinen Wunsch, mit Lesefreigabe. Dateiinhalte bleiben ungelesen."; font-size: 12px; color: Theme.text; wrap: word-wrap; }
+    HorizontalLayout {
+        spacing: 8px;
+        ComboBox {
+            horizontal-stretch: 1; min-width: 0px;
+            model: Store.analysis-scopes; current-index <=> Store.analysis-target;
+            enabled: !Store.busy && self.model.length > 0;
+            accessible-label: "Freigegebener Analysebereich";
+            selected(value) => { Actions.analysis-target(self.current-index); }
+        }
+        UiButton { label: Store.analysis-ready ? "Neu analysieren" : "Analysieren"; primary: true; small: true; available: Store.analysis-scope > 0 && !Store.demo && !Store.busy; activated => { Actions.analyze-storage(Store.analysis-scope); } }
+        UiButton { label: "Ordner freigeben"; small: true; has-icon: true; icon: Icons.folder; available: !Store.demo && !Store.busy; activated => { Actions.analysis-folder(); } }
+    }
+    if !Store.analysis-ready : Card {
+        VerticalLayout {
+            padding: 16px; spacing: 6px;
+            Text { text: "Finde große Ordner und Dateien"; font-size: 14px; font-weight: 700; color: Theme.ink; }
+            Text { text: Store.analysis-scopes.length == 0 ? "Gib einen Ordner frei oder wähle oben bei einer lokalen Festplatte „Speicher analysieren“. Danach erscheint hier die Belegung." : "Wähle einen freigegebenen Bereich und starte die Analyse. Eine neue Analyse ersetzt den bisherigen Stand."; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+        }
+    }
+    if Store.analysis-ready : VerticalLayout {
+        spacing: 10px;
+        HorizontalLayout {
+            spacing: 8px;
+            StatusChip { label: Store.analysis-complete ? "Vollständig" : "Unvollständig"; kind: Store.analysis-complete ? "ok" : "review"; }
+            Text { text: Store.analysis-summary; font-size: 12px; font-weight: 700; color: Theme.ink; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+        }
+        Text { text: Store.analysis-note; font-size: 11px; color: Store.analysis-complete ? Theme.muted : Theme.review-ink; wrap: word-wrap; }
+        HorizontalLayout {
+            spacing: 8px;
+            UiButton { label: "Nach oben"; small: true; available: Store.analysis-has-parent && !Store.busy; activated => { Actions.analysis-up(); } }
+            Text { text: Store.analysis-path; font-size: 12px; color: Theme.ink; horizontal-stretch: 1; min-width: 0px; overflow: elide; vertical-alignment: center; }
+            UiButton { label: "CSV kopieren …"; small: true; available: Store.analysis-rows.length > 0 && !Store.busy; activated => { Actions.analysis-export(); } }
+        }
+        HorizontalLayout {
+            alignment: start; spacing: 6px;
+            FilterChip { label: "Ordner"; selected: Store.analysis-view == 0; activated => { Actions.analysis-view(0); } }
+            FilterChip { label: "Größte Dateien"; selected: Store.analysis-view == 1; activated => { Actions.analysis-view(1); } }
+            FilterChip { label: "Dateitypen"; selected: Store.analysis-view == 2; activated => { Actions.analysis-view(2); } }
+            FilterChip { label: "Duplikat-Kandidaten"; selected: Store.analysis-view == 3; activated => { Actions.analysis-view(3); } }
+        }
+        if Store.analysis-view == 3 : Text { text: "Gleicher Dateiname und gleiche logische Größe: nur ein Hinweis. Die Inhalte wurden nicht verglichen; daraus folgt keine Löschfreigabe."; font-size: 11px; color: Theme.review-ink; wrap: word-wrap; }
+        HorizontalLayout {
+            spacing: 8px;
+            LineEdit { horizontal-stretch: 1; min-width: 0px; text <=> Store.analysis-search; placeholder-text: "Dateiname oder Muster, z. B. *.zip"; accessible-label: "Dateinamen filtern"; accepted(text) => { Actions.analysis-search(text); } }
+            UiButton { small: true; label: "Suchen"; available: !Store.busy; activated => { Actions.analysis-search(Store.analysis-search); } }
+            ComboBox { model: ["Größe ↓", "Auf Datenträger ↓", "Name A–Z", "Änderung ↓"]; current-index <=> Store.analysis-sort; accessible-label: "Sortierung"; selected(value) => { Actions.analysis-sort(self.current-index); } }
+        }
+        // The same entries are available as keyboard-operable table rows.
+        // Colour is decorative; every tile also shows its name and size.
+        if Store.analysis-tiles.length > 0 : Rectangle {
+            height: 230px; background: Theme.fog; clip: true;
+            accessible-role: none;
+            for tile[index] in Store.analysis-tiles : Rectangle {
+                x: parent.width * tile.left; y: parent.height * tile.top;
+                width: parent.width * tile.wide; height: parent.height * tile.tall;
+                background: tile.remainder ? Theme.chart-fog : mod(index, 4) == 0 ? Theme.chart-sky : mod(index, 4) == 1 ? Theme.chart-sage : mod(index, 4) == 2 ? Theme.chart-amber : Theme.chart-blush;
+                border-width: 1px; border-color: Theme.surface;
+                if self.width > 65px && self.height > 32px : VerticalLayout {
+                    padding: 7px; spacing: 2px; alignment: start;
+                    Text { text: tile.label; font-size: 11px; font-weight: 700; color: Theme.ink; overflow: elide; }
+                    Text { text: tile.size; font-size: 10px; color: Theme.ink; overflow: elide; }
+                }
+                area := TouchArea {
+                    mouse-cursor: tile.directory && !tile.remainder ? pointer : default;
+                    clicked => { if tile.directory && !tile.remainder { Actions.analysis-open(tile.id); } }
+                }
+                if area.has-hover : Rectangle {
+                    background: #ffffff26;
+                    init => { Store.analysis-hover = tile.label + " · " + tile.size; }
+                }
+            }
+        }
+        Text { text: Store.analysis-hover == "" ? "Flächen sind proportional zur logischen Größe. Ordner anklicken zum Öffnen; kleine Einträge stehen auch in der Tabelle." : Store.analysis-hover; font-size: 11px; color: Theme.muted; overflow: elide; }
+        if Store.analysis-rows.length == 0 : Text { text: Store.analysis-search != "" ? "Keine Treffer. Ändere den Namen oder entferne den Suchfilter." : Store.analysis-view == 3 ? "Keine Dateien mit gleichem Namen und gleicher Größe gefunden." : !Store.analysis-folder-complete ? "Dieser Ordner wurde nicht vollständig gelesen (Limit, Tiefe, Berechtigung oder Cloud-Platzhalter). Sein Inhalt ist unbekannt, nicht leer." : "Dieser Ordner enthält keine anzeigbaren Einträge."; font-size: 12px; color: Theme.muted; wrap: word-wrap; }
+        if Store.analysis-rows.length > 0 : Card {
+            height: 320px;
+            ScrollView {
+                x: 8px; y: 6px; width: parent.width - 16px; height: parent.height - 12px;
+                content-width: self.visible-width;
+                VerticalLayout {
+                    spacing: 2px; padding-right: 14px;
+                    for row in Store.analysis-rows : Rectangle {
+                        height: Store.analysis-view == 3 ? 86px : 74px;
+                        HorizontalLayout {
+                            spacing: 10px; padding: 5px;
+                            VerticalLayout {
+                                horizontal-stretch: 1; min-width: 0px; spacing: 2px; alignment: center;
+                                if row.directory : HorizontalLayout {
+                                    alignment: start;
+                                    UiButton { small: true; has-icon: true; icon: Icons.folder; label: row.name; available: !Store.busy; activated => { Actions.analysis-open(row.id); } }
+                                }
+                                if !row.directory : Text { text: row.name; font-size: 12px; font-weight: 700; color: Theme.ink; overflow: elide; }
+                                // The folder view's location is the path line above the table.
+                                if Store.analysis-view != 0 && row.path != "" : Text { text: row.path; font-size: 10.5px; color: Theme.muted; overflow: elide; }
+                                // Share of the shown folder; the text carries the value, the bar only repeats it.
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1; alignment: center;
+                                        Rectangle {
+                                            height: 5px; border-radius: 2px; background: Theme.fog;
+                                            Rectangle { x: 0px; y: 0px; width: parent.width * clamp(row.share, 0, 1); height: parent.height; border-radius: 2px; background: Theme.chart-blue; }
+                                        }
+                                    }
+                                    Text { text: row.share-text; font-size: 10px; color: Theme.muted; min-width: 44px; horizontal-alignment: right; }
+                                }
+                            }
+                            // Fixed width: every share bar gets the same track.
+                            VerticalLayout {
+                                width: 190px; alignment: center; spacing: 3px;
+                                Text { text: row.size; font-size: 13px; font-weight: 700; color: Theme.protected-ink; horizontal-alignment: right; }
+                                Text { text: row.allocated; font-size: 10.5px; color: Theme.muted; horizontal-alignment: right; }
+                                Text { text: row.counts != "" ? row.counts : row.modified; font-size: 10.5px; color: Theme.muted; horizontal-alignment: right; overflow: elide; }
+                                if Store.analysis-view == 3 : Text { text: row.duplicates; font-size: 10px; color: Theme.review-ink; horizontal-alignment: right; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: Store.analysis-page; font-size: 11px; color: Theme.muted; horizontal-stretch: 1; vertical-alignment: center; }
+            UiButton { small: true; label: "Zurück"; available: Store.analysis-previous && !Store.busy; activated => { Actions.analysis-page(-1); } }
+            UiButton { small: true; label: "Weiter"; available: Store.analysis-next && !Store.busy; activated => { Actions.analysis-page(1); } }
+        }
+    }
+}

@@ -393,6 +393,7 @@ impl DirHandle {
                         name,
                         attributes: header.FileAttributes,
                         size: header.EndOfFile.max(0) as u64,
+                        allocated: header.AllocationSize.max(0) as u64,
                         modified: filetime_to_unix(header.LastWriteTime),
                     });
                 }
