@@ -5,9 +5,10 @@
 
 mod common;
 
-use common::owner::{cli, err, ok, start_owner, start_owner_with_bin};
+use common::owner::{cli, err, ok, start_dashboard, start_owner};
 use common::*;
 use mogumogu::cleanup::{DISPOSABLE_MARKER, DISPOSABLE_MARKER_TEXT};
+use mogumogu::service::Request;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,7 +44,7 @@ fn approved_project(data: &Path, dir: &Path) -> String {
 #[test]
 fn pilot_registration_scan_and_a_recycle_plan() {
     let f = fixture("pilot");
-    let (_owner, bin) = start_owner_with_bin(&f.data);
+    let (dashboard, bin) = start_dashboard(&f.data);
     let data = f.data.as_path();
     ok(cli(data, &["cleanup", "test-root", "--path", &path_text(&f.root)]));
     let project_dir = sample_project(&f.root);
@@ -88,31 +89,55 @@ flask==3.0.0
         plan["targets"].as_array().unwrap().iter().map(|t| t["rel_path"].as_str().unwrap()).collect();
     assert_eq!(paths.len(), 2, "{plan}");
     assert!(paths.contains(&"node_modules") && paths.contains(&"tool/target"), "{plan}");
-    let plan_id = id(&plan, "id").to_string();
+    let plan_id = id(&plan, "id");
     let fingerprint = plan["fingerprint"].as_str().unwrap()[..12].to_string();
 
-    // Wrong confirmation is refused; the exact fingerprint approves.
-    assert_eq!(err(cli(data, &["cleanup", "approve", "--plan", &plan_id, "--confirm", "000000000000"])).0, "invalid");
-    ok(cli(data, &["cleanup", "approve", "--plan", &plan_id, "--confirm", &fingerprint]));
+    // Binding and moving are the person's: neither the CLI nor anything else
+    // on the pipe approves or runs a plan, even with the right fingerprint.
+    let text = plan_id.to_string();
+    let refused: [&[&str]; 2] =
+        [&["cleanup", "approve", "--plan", &text, "--confirm", &fingerprint], &["cleanup", "apply", "--plan", &text]];
+    for args in refused {
+        assert_eq!(err(cli(data, args)), ("blocked".to_string(), 3), "{args:?}");
+    }
+    let config = mogumogu::config::Config::new(Some(f.data.clone()), false).unwrap();
+    let client = mogumogu::ipc::Client::new(&config).unwrap();
+    for request in
+        [Request::CleanupApprove { plan_id, confirmation: fingerprint.clone() }, Request::CleanupApply { plan_id }]
+    {
+        let refused = client.call(request.clone());
+        assert!(matches!(refused, Err(mogumogu::Error::Blocked(_))), "{request:?}: {refused:?}");
+    }
+    let listed = ok(cli(data, &["list"]));
+    let stored = listed["plans"].as_array().unwrap().iter().find(|p| p["id"] == plan_id).unwrap().clone();
+    assert_eq!(stored["state"], "draft", "{stored}");
+
+    // In the dashboard a wrong confirmation is refused; the exact fingerprint approves.
+    let approve = |plan_id, confirmation: &str| {
+        dashboard.send(Request::CleanupApprove { plan_id, confirmation: confirmation.into() })
+    };
+    let apply = |plan_id| dashboard.send(Request::CleanupApply { plan_id });
+    assert_eq!(approve(plan_id, "000000000000").unwrap_err(), "invalid");
+    approve(plan_id, &fingerprint).unwrap();
 
     // The lockfile goes away: the evidence no longer holds, nothing moves.
     fs::remove_file(project_dir.join("package-lock.json")).unwrap();
-    assert_eq!(err(cli(data, &["cleanup", "apply", "--plan", &plan_id])).0, "blocked");
+    assert_eq!(apply(plan_id).unwrap_err(), "blocked");
     let after = ok(cli(data, &["list"]));
-    let stored = after["plans"].as_array().unwrap().iter().find(|p| p["id"] == id(&plan, "id")).unwrap().clone();
+    let stored = after["plans"].as_array().unwrap().iter().find(|p| p["id"] == plan_id).unwrap().clone();
     assert_eq!(stored["state"], "invalidated", "{stored}");
     assert!(project_dir.join("node_modules/left-pad/index.js").is_file());
     assert!(project_dir.join("tool/target/debug/tool.exe").is_file());
     // A plan runs at most once.
-    assert_eq!(err(cli(data, &["cleanup", "apply", "--plan", &plan_id])).0, "conflict");
+    assert_eq!(apply(plan_id).unwrap_err(), "conflict");
 
     // With the lockfile back, a new plan moves both folders as a whole.
     write(&project_dir, "package-lock.json", "{}");
     let plan = ok(cli(data, &["cleanup", "plan", "--project", &project_id.to_string()]));
-    let plan_id = id(&plan, "id").to_string();
+    let plan_id = id(&plan, "id");
     let fingerprint = plan["fingerprint"].as_str().unwrap()[..12].to_string();
-    ok(cli(data, &["cleanup", "approve", "--plan", &plan_id, "--confirm", &fingerprint]));
-    let applied = ok(cli(data, &["cleanup", "apply", "--plan", &plan_id]));
+    approve(plan_id, &fingerprint).unwrap();
+    let applied = apply(plan_id).unwrap();
     assert_eq!(applied["state"], "completed", "{applied}");
     assert_eq!(bin.count(), 2);
     assert!(!project_dir.join("node_modules").exists() && !project_dir.join("tool/target").exists());
@@ -122,17 +147,19 @@ flask==3.0.0
 #[test]
 fn folders_to_review_and_projects_outside_a_test_root_stay_out_of_reach() {
     let f = fixture("gate");
-    let _owner = start_owner(&f.data);
+    let (dashboard, _) = start_dashboard(&f.data);
     let data = f.data.as_path();
     let outside = f.root.parent().unwrap().join("real");
     let project_dir = sample_project(&outside);
     let project_id = approved_project(data, &project_dir);
     let plan = ok(cli(data, &["cleanup", "plan", "--project", &project_id]));
     assert!(plan["targets"].to_string().contains("G5"), "{plan}");
-    let plan_id = id(&plan, "id").to_string();
-    let fingerprint = plan["fingerprint"].as_str().unwrap()[..12].to_string();
-    assert_eq!(err(cli(data, &["cleanup", "approve", "--plan", &plan_id, "--confirm", &fingerprint])).0, "blocked");
-    assert_eq!(err(cli(data, &["cleanup", "apply", "--plan", &plan_id])).0, "conflict", "a draft never runs");
+    let plan_id = id(&plan, "id");
+    let confirmation = plan["fingerprint"].as_str().unwrap()[..12].to_string();
+    // Not even the dashboard gets past the gate.
+    assert_eq!(dashboard.send(Request::CleanupApprove { plan_id, confirmation }).unwrap_err(), "blocked");
+    let applied = dashboard.send(Request::CleanupApply { plan_id });
+    assert_eq!(applied.unwrap_err(), "conflict", "a draft never runs");
     for path in [".venv", "package.json", ".claude"] {
         assert_eq!(
             err(cli(data, &["cleanup", "plan", "--project", &project_id, "--path", path])).0,
@@ -149,7 +176,7 @@ fn second_owner_and_foreign_protocols_are_refused() {
     let owner = start_owner(&f.data);
     let config = mogumogu::config::Config::new(Some(f.data.clone()), false).unwrap();
     assert!(mogumogu::owner::Owner::start(config, common::owner::Quiet).is_err(), "no second writer");
-    let (code, exit) = err(cli(&f.data, &["cleanup", "apply", "--plan", "1", "--force"]));
+    let (code, exit) = err(cli(&f.data, &["cleanup", "cancel", "--plan", "1", "--force"]));
     assert_eq!((code.as_str(), exit), ("invalid", 2));
     drop(owner);
     let (code, exit) = err(cli(&f.data, &["status"]));

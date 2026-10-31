@@ -139,6 +139,7 @@ Papierkorb, Verknüpfung darin, Pfad über 259 Zeichen, Docker nicht erreichbar)
 | Zwei Hardlinks auf dieselben Daten | Belegter Platz einmal, ab 64 KiB | `hard_links_reserve_their_space_once` |
 | Lauf beendet und vom Menschen freigegeben | Artefakte nicht mehr gehalten; laufender Lauf, zweite Freigabe und neue Artefakte abgelehnt | `a_finished_run_is_released_once_and_its_artifacts_are_no_longer_held` |
 | Agent hebt Schutz auf (Lauf, Datenbank, behaltener Ordner, Docker-Kontext) | Über CLI und Pipe abgelehnt | `ending_a_monitoring_or_a_runs_protection_is_the_persons_decision` |
+| Agent bestätigt oder führt einen Papierkorb-Plan aus, auch mit richtigem Fingerabdruck | Über CLI und Pipe abgelehnt, Plan bleibt Entwurf; im Dashboard bestätigt und verschoben | `pilot_registration_scan_and_a_recycle_plan` |
 | SQLite-Datei in `target/` überwacht | Gehalten, mit WAL gemessen, Wachstum | `a_database_file_is_measured_with_its_companions_held_and_followed` |
 | Postgres-Datenordner, Freigabe, fehlender Ort | Am Namen erkannt; Freigabe und fehlender Ort abgelehnt | `a_data_folder_is_told_by_its_names_and_measured_with_full_reports` |
 | Datenbank-Volume in Docker | Vorgeschlagen, Größe aus `/system/df` | `suggestions_come_from_known_folders_project_files_and_volumes` |
@@ -169,7 +170,10 @@ Linkprüfung fand zwei blockierende Wege (Artefakte nach der Freigabe wurden
 angenommen, aber nicht gehalten; `cleanup unkeep` und `docker revoke` hoben
 über die CLI einen Schutz auf) und zwei Linkfehler beim Registrieren und
 Auflösen; alle behoben. Seitdem gilt: Schutz hinzufügen darf die CLI, Schutz
-aufheben nur das Dashboard. Der menschliche Review G5 ersetzt das nicht.
+aufheben nur das Dashboard. Seit dem 31. Oktober 2026 bestätigt und führt auf
+deine Entscheidung hin auch nur das Dashboard einen Papierkorb-Plan aus; über
+CLI und Pipe ist das abgelehnt, auch mit richtigem Fingerabdruck. Die CLI
+plant, bricht ab und gleicht ab. Der menschliche Review G5 ersetzt das nicht.
 
 ## Bewusst nicht umgesetzt
 
@@ -196,6 +200,3 @@ aufheben nur das Dashboard. Der menschliche Review G5 ersetzt das nicht.
    nachgestellt (kein Recht für symbolische Links); die Regel ist mit einer
    Attrappe geprüft.
 4. Ein Git-Index über 32 MB wird je Ziel neu gelesen.
-5. Zu entscheiden: Die CLI kann einen Papierkorb-Plan erstellen, bestätigen
-   und ausführen (`cleanup plan|approve|apply`, bis G5 nur in Testwurzeln). Ein
-   Agent mit CLI-Zugang sieht dabei den Fingerabdruck, den er bestätigen soll.

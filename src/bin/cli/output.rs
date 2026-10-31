@@ -140,7 +140,7 @@ fn plan(plan: &PlanSummary) -> String {
     }
     if plan.state == mogumogu::domain::PlanState::Draft && plan.executable() {
         lines.push(format!(
-            "  Bestätigen: mogumogu-cli cleanup approve --plan {} --confirm {}",
+            "  Bestätigen und ausführen: im Dashboard unter Übersicht → Bereinigungspläne → Plan {} (Fingerabdruck {})",
             plan.id,
             plan.short_fingerprint()
         ));

@@ -176,6 +176,16 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents) {
                             )));
                         }
                     }
+                    // Moving folders is the person's decision: over the pipe a plan
+                    // can be made, cancelled and reconciled, but never bound to its
+                    // fingerprint or run, even with the right one.
+                    Request::CleanupApprove { .. } | Request::CleanupApply { .. } if !from_ui => {
+                        if let Some(reply) = reply {
+                            let _ = reply.send(Err(crate::Error::blocked(
+                                "Einen Papierkorb-Plan bestätigen und ausführen geht nur im Dashboard (Übersicht → Bereinigungspläne).",
+                            )));
+                        }
+                    }
                     request => {
                         // Reads (search, filters, findings) stay quiet so typing
                         // never blocks the dashboard's buttons.

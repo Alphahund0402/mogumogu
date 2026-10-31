@@ -2,6 +2,25 @@
 
 Stand: 5. Oktober 2026, ergänzt bis 31. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 31. Oktober: Papierkorb-Plan nur im Dashboard ausführen
+
+**Geändert** auf Entscheidung der Person: Einen Papierkorb-Plan bestätigen und
+ausführen geht nur noch im Dashboard. Die CLI bietet `cleanup approve` und
+`cleanup apply` nicht mehr an, und der Besitzerprozess lehnt `CleanupApprove`
+und `CleanupApply` über die Pipe ab, auch mit richtigem Fingerabdruck. Planen,
+Abbrechen und Abgleichen bleiben in der CLI; ein dort erstellter Plan steht im
+Dashboard unter Übersicht → Bereinigungspläne.
+
+**Prüfungen:** `pilot_registration_scan_and_a_recycle_plan` plant über die
+echte CLI, lässt Bestätigen und Ausführen über CLI (Exit 3) und einen eigenen
+Pipe-Client abweisen, prüft, dass der Plan Entwurf bleibt, und bestätigt und
+verschiebt dann wie das Dashboard (`Owner::submit` im selben Prozess);
+`folders_to_review_and_projects_outside_a_test_root_stay_out_of_reach` zeigt,
+dass auch das Dashboard an G5 nicht vorbeikommt. `validate.py` (15 Verträge),
+`cargo fmt` und `cargo clippy --all-targets -D warnings` ohne Befund;
+`cargo test --locked --no-default-features` mit **455 Funktionstests**
+bestanden (3 ignoriert). Nicht ausgeführt: Windows 11, menschlicher Review G5.
+
 ## Ergänzung vom 31. Oktober: Datenbanken, Freigabe von Läufen, Lücken
 
 **Neu** (Schema v10): Überwachte Datenbanken – eine Datei, ein Datenordner oder
