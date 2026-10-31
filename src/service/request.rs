@@ -2,7 +2,8 @@
 //! program start, protection changes and plan confirmation are separate
 //! commands; none of them grants another.
 use super::Core;
-use crate::domain::{DiskQuery, PackageQuery, ScopeKind, Settings};
+use super::runs::{ArtifactRequest, ProjectRef};
+use crate::domain::{DatabaseEngine, DatabasePlace, DiskQuery, PackageQuery, RunState, ScopeKind, Settings};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -103,6 +104,86 @@ pub enum Request {
     /// Tidy-up report for all approved projects, or one.
     Tidy {
         project_id: Option<i64>,
+    },
+    /// Keeps a folder of a project out of every plan (`keep`), or suggests
+    /// it again; returns the project's fresh tidy-up report.
+    KeepFolder {
+        project_id: i64,
+        rel_path: String,
+        keep: bool,
+    },
+    /// Saved tidy-up reports of a project and what grew.
+    TidyHistory {
+        project_id: i64,
+    },
+    /// Switches registration of runs by cooperating harnesses on or off.
+    RunsAllow {
+        allowed: bool,
+    },
+    /// Registered runs, newest first, of one project or all.
+    Runs {
+        #[serde(default)]
+        project_id: Option<i64>,
+    },
+    /// Registers a run; refused unless registration is switched on.
+    RunStart {
+        project: ProjectRef,
+        harness: String,
+        #[serde(default)]
+        purpose: Option<String>,
+    },
+    /// Registers what a run made; it is protected from then on.
+    RunArtifact {
+        run_id: i64,
+        artifact: ArtifactRequest,
+    },
+    RunState {
+        run_id: i64,
+        state: RunState,
+        #[serde(default)]
+        note: Option<String>,
+    },
+    /// Ends a finished run's protection; only from the dashboard.
+    RunRelease {
+        run_id: i64,
+    },
+    /// Monitored databases and suggestions.
+    Databases,
+    /// Registers a database for monitoring (a folder, a file or a volume).
+    DbRegister {
+        place: DatabasePlace,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        engine: Option<DatabaseEngine>,
+    },
+    DbMeasure {
+        #[serde(default)]
+        id: Option<i64>,
+    },
+    DbHistory {
+        id: i64,
+    },
+    /// Ends the monitoring and its hold; only from the dashboard.
+    DbUnregister {
+        id: i64,
+    },
+    /// Docker contexts of the client configuration and their approval.
+    DockerContexts,
+    /// Runs and Docker contexts together, for the dashboard.
+    AgentsOverview,
+    DockerApprove {
+        context: String,
+    },
+    DockerRevoke {
+        context: String,
+    },
+    /// Read-only questions to an approved local engine.
+    DockerInventory {
+        #[serde(default)]
+        context: Option<String>,
+        #[serde(default)]
+        usage: bool,
     },
     /// Takes over every untracked scratchpad finding, protected.
     AdoptScratchpads,
@@ -212,6 +293,13 @@ impl Request {
                 | Self::StoragePage { .. }
                 | Self::ClearStorageAnalysis
                 | Self::AiContent { .. }
+                | Self::TidyHistory { .. }
+                | Self::Runs { .. }
+                | Self::DockerContexts
+                | Self::AgentsOverview
+                | Self::Databases
+                | Self::DbHistory { .. }
+                | Self::DockerInventory { .. }
                 | Self::ShowDashboard
                 | Self::HideDashboard
                 | Self::Shutdown
@@ -274,6 +362,30 @@ impl Core {
             RegisterDisposableRoot { path } => json!({ "root_id": self.register_disposable_root(&path)? }),
             GetSettings => json!(self.settings()?),
             Tidy { project_id } => json!(self.tidy_report(project_id)?),
+            KeepFolder { project_id, rel_path, keep } => json!(self.keep_folder(project_id, &rel_path, keep)?),
+            TidyHistory { project_id } => {
+                let (points, growth) = self.tidy_history(project_id)?;
+                json!({ "points": points, "growth": growth })
+            }
+            RunsAllow { allowed } => json!(self.allow_agent_runs(allowed)?),
+            Runs { project_id } => json!(self.run_overview(project_id)?),
+            RunStart { project, harness, purpose } => json!(self.start_run(&project, &harness, purpose.as_deref())?),
+            RunArtifact { run_id, artifact } => json!(self.add_run_artifact(run_id, &artifact)?),
+            RunState { run_id, state, note } => json!(self.set_run_state(run_id, state, note.as_deref())?),
+            RunRelease { run_id } => json!(self.release_run(run_id)?),
+            Databases => json!(self.database_overview()?),
+            DbRegister { place, name, engine } => json!(self.register_database(&place, name.as_deref(), engine)?),
+            DbMeasure { id } => json!(self.measure_databases(id)?),
+            DbHistory { id } => {
+                let (database, sizes) = self.database_history(id)?;
+                json!({ "database": database, "sizes": sizes })
+            }
+            DbUnregister { id } => json!(self.unregister_database(id)?),
+            DockerContexts => json!(self.docker_overview()?),
+            AgentsOverview => json!({ "runs": self.run_overview(None)?, "docker": self.docker_overview()? }),
+            DockerApprove { context } => json!(self.approve_docker(&context)?),
+            DockerRevoke { context } => json!(self.revoke_docker(&context)?),
+            DockerInventory { context, usage } => json!(self.docker_inventory(context.as_deref(), usage)?),
             AdoptScratchpads => json!({ "adopted": self.adopt_found_scratchpads()? }),
             ContextFilter { scope_id } => json!(self.context_filter(scope_id)?),
             ApplyContextFilter { scope_id, fingerprint } => json!(self.apply_context_filter(scope_id, &fingerprint)?),

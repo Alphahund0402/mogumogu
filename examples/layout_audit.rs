@@ -203,7 +203,8 @@ mod audit {
                 detail: detail.into(),
                 action: "Öffnen".into(),
                 page: 1,
-                tab: 1
+                tab: 1,
+                ..Default::default()
             };
             3
         ]));
@@ -515,6 +516,8 @@ mod audit {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
         slint::platform::set_platform(Box::new(RenderPlatform(window.clone())))?;
         let app = ui::Dashboard::new()?;
+        // Measures settled layouts: transitions would be caught halfway.
+        app.global::<ui::Motion>().set_on(false);
         app.show()?;
         let mut records = Vec::new();
         for (width, height, scale) in

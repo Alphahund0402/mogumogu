@@ -222,12 +222,20 @@ pub fn found_projects(batch: &mogumogu::service::ProjectBatch) -> Dialog {
 }
 
 /// What one project holds, largest first. Nothing here removes anything.
+/// Keep buttons offered per dialog: the largest recoverable folders.
+const KEEP_ACTIONS: usize = 3;
+
 pub fn tidy(report: &ProjectTidy) -> Dialog {
     let size = |b: u64| format_bytes(i64::try_from(b).ok());
+    let shown = |rel: &str| rel.replace('/', "\\");
+    let recoverable = match report.regenerable_allocated {
+        0 => size(report.regenerable),
+        allocated => format!("{} · belegt auf dem Laufwerk {}", size(report.regenerable), size(allocated)),
+    };
     let mut dialog = Dialog::new(format!("Aufräumen · {}", report.name))
         .path(&report.path)
         .row("Gesamt", report.total.map_or_else(|| "Unvollständig gemessen".to_string(), size))
-        .row("Wiederherstellbar", size(report.regenerable))
+        .row("Wiederherstellbar", recoverable)
         .row("Prüfen", size(report.review))
         .row(
             "Davon Testdaten",
@@ -244,21 +252,52 @@ pub fn tidy(report: &ProjectTidy) -> Dialog {
         .row("Versionsverwaltung", size(report.vcs))
         .row("Zuletzt geändert", report.last_change.map_or("Unbekannt".into(), display_local))
         .row("Gemessen", display_local(report.checked_at));
+    if report.agent > 0 {
+        dialog = dialog.row("Davon Reste von KI-Agenten", size(report.agent));
+    }
+    if !report.kept.is_empty() {
+        dialog = dialog.row("Von dir behalten", report.kept.iter().map(|k| shown(k)).collect::<Vec<_>>().join("\n"));
+    }
+    if let Some(growth) = &report.growth {
+        dialog = dialog.row("Wachstum", growth_text(growth));
+    }
+    if !report.runs.is_empty() {
+        let runs: Vec<String> = report
+            .runs
+            .iter()
+            .map(|r| format!("{} · {} · {} Artefakte", r.title, display_local(r.started_at), r.artifacts))
+            .collect();
+        dialog = dialog.row("Registrierte KI-Läufe", runs.join("\n"));
+    }
     if !report.note.is_empty() {
         dialog = dialog.row("Hinweis", &report.note);
     }
     for item in report.items.iter().take(20) {
         dialog = dialog.row(
             &format!("{} · {}", item.class.label(), item.label),
-            format!("{} · {} · {}", item.rel_path.replace('/', "\\"), size(item.bytes), item.evidence),
+            format!("{} · {} · {}", shown(&item.rel_path), size(item.bytes), item.evidence),
         );
     }
     if report.regenerable > 0 {
         dialog = dialog.action(format!("tidy-plan:{}", report.project_id), "Papierkorb-Plan …", true);
     }
+    let name = |rel: &str| rel.rsplit('/').next().unwrap_or(rel).to_string();
+    for item in report.items.iter().filter(|i| i.class == TidyClass::Regenerable).take(KEEP_ACTIONS) {
+        let id = format!("keep-folder:{}:1:{}", report.project_id, item.rel_path);
+        dialog = dialog.action(id, format!("„{}“ behalten", name(&item.rel_path)), false);
+    }
+    for kept in report.kept.iter().take(KEEP_ACTIONS) {
+        let id = format!("keep-folder:{}:0:{kept}", report.project_id);
+        dialog = dialog.action(id, format!("„{}“ wieder vorschlagen", name(kept)), false);
+    }
+    for item in report.items.iter().filter(|i| i.label == "Datenbank").take(2) {
+        let path = format!("{}\\{}", report.path.trim_end_matches('\\'), shown(&item.rel_path));
+        dialog =
+            dialog.action(format!("db-register-path:{path}"), format!("„{}“ überwachen", name(&item.rel_path)), false);
+    }
     dialog
         .action(format!("tidy:{}", report.project_id), "Neu messen", false)
-        .body("Wiederherstellbar heißt: Lockfile oder Build-Datei daneben, Werkzeugcache oder Test-Ausgabe – ein Werkzeug baut es neu. Name und Alter allein machen nichts entfernbar. Der Papierkorb-Plan zeigt zuerst, was verschoben würde; ohne Bestätigung passiert nichts.")
+        .body("Wiederherstellbar heißt: Lockfile oder Build-Datei daneben, Werkzeugcache oder Test-Ausgabe – ein Werkzeug baut es neu. In einem Git-Repository zählt ein Ordner nur, wenn Git keine Datei darin versioniert. Reste von KI-Agenten, Testdaten und alles, was du behältst, bleiben immer „Prüfen“. Name und Alter allein machen nichts entfernbar. Der Papierkorb-Plan zeigt zuerst, was verschoben würde; ohne Bestätigung passiert nichts.")
 }
 
 pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
@@ -371,6 +410,214 @@ pub fn hint(hint: &ReviewHint) -> Dialog {
     dialog.body("Ein Hinweis ist kein Urteil. Verschoben wird nur über einen Papierkorb-Plan, den du bestätigst.")
 }
 
+fn signed(bytes: i64) -> String {
+    format!("{}{}", if bytes < 0 { "−" } else { "+" }, format_bytes(Some(bytes.saturating_abs())))
+}
+
+/// `+1,2 GB wiederherstellbar in 14 Tagen (4 Berichte) · target +800 MB …`
+fn growth_text(growth: &Growth) -> String {
+    let days = ((growth.until - growth.since) / 86_400).max(1);
+    let mut text = format!(
+        "{} wiederherstellbar, {} zu prüfen in {days} Tag{} ({} Berichte)",
+        signed(growth.regenerable),
+        signed(growth.review),
+        if days == 1 { "" } else { "en" },
+        growth.reports
+    );
+    for (rel, grown) in &growth.items {
+        text.push_str(&format!("\n{} {}", rel.replace('/', "\\"), signed(*grown)));
+    }
+    text
+}
+
+/// Registered runs and Docker contexts, with what can be switched.
+pub fn agents(runs: &RunOverview, docker: &DockerOverview) -> Dialog {
+    let mut dialog = Dialog::new("KI-Läufe & Docker").row(
+        "KI-Läufe",
+        if runs.allowed {
+            "Werden angenommen: Agenten registrieren Läufe mit mogumogu-cli run start …".to_string()
+        } else {
+            "Aus: Agenten können keine Läufe registrieren".to_string()
+        },
+    );
+    for run in runs.runs.iter().take(10) {
+        let purpose = run.purpose.as_deref().map(|p| format!(" · {p}")).unwrap_or_default();
+        let held = if run.released_at.is_some() { " · freigegeben" } else { " · geschützt" };
+        dialog = dialog.row(
+            &run.title(),
+            format!(
+                "{} · {} · {} Artefakte{held}{purpose}",
+                run.project,
+                display_local(run.started_at),
+                run.artifact_count
+            ),
+        );
+    }
+    for run in
+        runs.runs.iter().filter(|r| r.state.finished() && r.released_at.is_none() && r.artifact_count > 0).take(3)
+    {
+        dialog = dialog.action(format!("run-release:{}", run.id), format!("Lauf #{} freigeben", run.id), false);
+    }
+    dialog = if runs.allowed {
+        dialog.action("runs-allow:0", "Läufe nicht mehr annehmen", false)
+    } else {
+        dialog.action("runs-allow:1", "Läufe annehmen", false)
+    };
+    for context in &docker.contexts {
+        let state = if context.approved { "freigegeben" } else { "nicht freigegeben" };
+        let note = if context.note.is_empty() { String::new() } else { format!(" · {}", context.note) };
+        dialog = dialog.row(&format!("Docker · {}", context.name), format!("{} · {state}{note}", context.host));
+        if context.approved {
+            dialog = dialog
+                .action(format!("docker-inventory:{}", context.name), format!("„{}“ ansehen", context.name), true)
+                .action(format!("docker-revoke:{}", context.name), format!("„{}“ widerrufen", context.name), false);
+        } else if context.pipe.is_some() {
+            dialog = dialog.action(
+                format!("docker-approve:{}", context.name),
+                format!("„{}“ freigeben", context.name),
+                false,
+            );
+        }
+    }
+    dialog.body(
+        "Ein registrierter Lauf ist Herkunft, keine Erlaubnis: Was er meldet, ist geschützt und erscheint in keinem \
+         Papierkorb-Plan; kein Befehl entfernt einen Lauf oder seine Artefakte. Docker fragt mogumogu nur lesend über \
+         die Named Pipe der lokalen Engine – nichts wird gestoppt, entfernt oder bereinigt. Ordner, die Container \
+         einbinden, bleiben dann aus jedem Plan heraus.",
+    )
+}
+
+/// What an approved Docker engine runs and stores.
+pub fn docker(inventory: &DockerInventory) -> Dialog {
+    let size = |b: u64| format_bytes(i64::try_from(b).ok());
+    let run = |run: Option<i64>| run.map(|id| format!(" · Lauf #{id}")).unwrap_or_default();
+    let mut dialog = Dialog::new(format!("Docker · {}", inventory.context))
+        .row("Engine", &inventory.engine)
+        .row("Gefragt", display_local(inventory.checked_at))
+        .row("Container", format!("{} · {} laufen", inventory.containers.len(), inventory.running()));
+    for c in inventory.containers.iter().take(15) {
+        let compose = c.compose.as_deref().map(|p| format!(" · Compose {p}")).unwrap_or_default();
+        let mut value = format!("{} · {}{compose}{}", c.image, c.status, run(c.run));
+        for m in c.mounts.iter().filter(|m| m.kind == "bind").take(4) {
+            let project = m.project.as_deref().map(|p| format!(" (Projekt {p})")).unwrap_or_default();
+            value.push_str(&format!("\nbindet {} ein{project}", m.host.as_deref().unwrap_or(&m.source)));
+        }
+        dialog = dialog.row(&format!("Container · {}", c.name), value);
+    }
+    let image_bytes: u64 = inventory.images.iter().map(|i| i.bytes).sum();
+    dialog = dialog.row(
+        "Images",
+        format!("{} · zusammen {} (gemeinsame Schichten zählen je Image)", inventory.images.len(), size(image_bytes)),
+    );
+    let mut images: Vec<&DockerImage> = inventory.images.iter().collect();
+    images.sort_by_key(|i| std::cmp::Reverse(i.bytes));
+    for i in images.into_iter().take(8) {
+        let name = i.tags.first().cloned().unwrap_or_else(|| i.id.clone());
+        let used = i.containers.map(|n| format!(" · {n} Container")).unwrap_or_default();
+        dialog = dialog.row(&format!("Image · {name}"), format!("{}{used}{}", size(i.bytes), run(i.run)));
+    }
+    dialog = dialog.row("Volumes", format!("{} · Daten, immer geschützt", inventory.volumes.len()));
+    for v in inventory.volumes.iter().filter(|v| DatabaseEngine::of_volume(&v.name).is_some()).take(3) {
+        let id = format!("db-register-volume:{}/{}", inventory.context, v.name);
+        dialog = dialog.action(id, format!("„{}“ überwachen", v.name), false);
+    }
+    for v in inventory.volumes.iter().take(10) {
+        let bytes = v.bytes.map(|b| format!(" · {}", size(b))).unwrap_or_default();
+        let compose = v.compose.as_deref().map(|p| format!(" · Compose {p}")).unwrap_or_default();
+        dialog = dialog.row(&format!("Volume · {}", v.name), format!("{}{bytes}{compose}{}", v.driver, run(v.run)));
+    }
+    let networks: Vec<&DockerNetwork> = inventory.networks.iter().filter(|n| !n.builtin).collect();
+    dialog = dialog.row("Netzwerke", format!("{} eigene", networks.len()));
+    if let Some(usage) = &inventory.usage {
+        dialog = dialog.row(
+            "Docker-Speicher",
+            format!(
+                "Schichten {} · Container {} · Volumes {} · Build-Cache {}\nGezählt in der Engine; die virtuelle Festplatte \
+                 von Docker Desktop schrumpft dadurch nicht von selbst.",
+                size(usage.layers),
+                size(usage.containers),
+                size(usage.volumes),
+                size(usage.build_cache)
+            ),
+        );
+    }
+    if inventory.truncated {
+        dialog = dialog.row("Hinweis", "Mehr als 2.000 Objekte einer Art; die Listen sind gekürzt.");
+    }
+    dialog.action(format!("docker-inventory:{}", inventory.context), "Neu fragen", false).body(
+        "Nur gelesen. mogumogu stoppt, entfernt oder bereinigt nichts in Docker und öffnet keine Docker-Daten. \
+         Aufräumen geht nur über Docker selbst.",
+    )
+}
+
+/// Monitored databases with size and growth, and what else looks like one.
+pub fn databases(overview: &DatabaseOverview) -> Dialog {
+    let size = |b: Option<u64>| b.map_or("Größe unbekannt".to_string(), |b| format_bytes(i64::try_from(b).ok()));
+    let place = |p: &DatabasePlace| match p {
+        DatabasePlace::Path(path) => path.clone(),
+        DatabasePlace::Volume { context, volume } => format!("Docker-Volume {volume} ({context})"),
+    };
+    let mut dialog = Dialog::new("Datenbanken");
+    if overview.databases.is_empty() {
+        dialog = dialog.row("Überwacht", "Noch keine");
+    }
+    for database in &overview.databases {
+        let mut value = format!("{} · {}", database.engine.label(), place(&database.place));
+        match &database.last {
+            Some(last) => {
+                value.push_str(&format!("\n{} · gemessen {}", size(last.bytes), display_local(last.measured_at)));
+                if let Some(modified) = last.modified {
+                    value.push_str(&format!(" · geändert {}", display_local(modified)));
+                }
+                if !last.note.is_empty() {
+                    value.push_str(&format!("\n{}", last.note));
+                }
+            }
+            None => value.push_str("\nNoch nicht gemessen"),
+        }
+        if let Some(growth) = &database.growth {
+            let days = ((growth.until - growth.since) / 86_400).max(1);
+            value.push_str(&format!(
+                "\nWachstum {} in {days} Tagen ({} Messungen)",
+                signed(growth.bytes),
+                growth.measurements
+            ));
+        }
+        if let Some(project) = &database.project {
+            value.push_str(&format!("\nProjekt {project}"));
+        }
+        dialog = dialog.row(&database.name, value);
+    }
+    for suggestion in overview.suggestions.iter().take(10) {
+        dialog = dialog.row(
+            &format!("Vorschlag · {}", suggestion.name),
+            format!("{} · {} · {}", suggestion.engine.label(), place(&suggestion.place), suggestion.source),
+        );
+    }
+    if !overview.databases.is_empty() {
+        dialog = dialog.action("db-measure", "Alle messen", true);
+    }
+    for suggestion in overview.suggestions.iter().take(4) {
+        let id = match &suggestion.place {
+            DatabasePlace::Path(path) => format!("db-register-path:{path}"),
+            DatabasePlace::Volume { context, volume } => format!("db-register-volume:{context}/{volume}"),
+        };
+        dialog = dialog.action(id, format!("„{}“ überwachen", suggestion.name), false);
+    }
+    for database in overview.databases.iter().take(3) {
+        dialog = dialog.action(
+            format!("db-unregister:{}", database.id),
+            format!("„{}“ nicht mehr überwachen", database.name),
+            false,
+        );
+    }
+    dialog.body(
+        "mogumogu misst nur Größe und Änderungszeit aus den Verzeichniseinträgen – es verbindet sich mit keinem \
+         Datenbankserver und liest keine Datenbankdatei. Überwacht wird auf Wunsch und bei jedem vollständigen \
+         Aufräumbericht (Docker-Volumes nur auf Wunsch). Eine überwachte Datenbank erscheint in keinem Papierkorb-Plan.",
+    )
+}
+
 pub fn plan(plan: &PlanSummary) -> Dialog {
     let mut dialog = Dialog::new(format!("Papierkorb-Plan {} · {}", plan.id, plan.state.label()))
         .path(&plan.root)
@@ -396,6 +643,9 @@ pub fn plan(plan: &PlanSummary) -> Dialog {
     dialog = dialog.row("Bleibt erhalten", plan.kept.join("\n")).row("Wiederherstellung", &plan.recovery);
     if plan.done + plan.failed > 0 {
         dialog = dialog.row("Ergebnis", format!("{} verschoben, {} nicht verschoben", plan.done, plan.failed));
+    }
+    if let Some(space) = plan.space_text() {
+        dialog = dialog.row("Laufwerk", space);
     }
     if let Some(note) = &plan.note {
         dialog = dialog.row("Hinweis", note);

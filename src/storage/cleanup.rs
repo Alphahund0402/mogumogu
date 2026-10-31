@@ -3,11 +3,31 @@
 //! folder is moved.
 use super::Repository;
 use super::activity::log_in;
+use super::resources::require_project;
 use crate::clock::Timestamp;
-use crate::domain::{JournalState, PlanState};
+use crate::domain::{JournalState, PlanState, fold_case};
 use crate::platform::FileIdentity;
 use crate::{Error, Result, privacy};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, Transaction, params};
+
+/// Kept folders per project and in all; more are refused, never dropped.
+const KEEPS_PER_PROJECT: i64 = 500;
+const KEEPS_MAX: i64 = 5_000;
+
+/// Keeps of a project for the same folder, compared as Windows does.
+fn same_keeps(tx: &Transaction<'_>, project_id: i64, rel_path: &str) -> Result<Vec<i64>> {
+    let wanted = fold_case(rel_path);
+    let mut statement = tx.prepare("SELECT id, rel_path FROM cleanup_keeps WHERE project_id = ?1")?;
+    let rows = statement.query_map([project_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+    let mut ids = Vec::new();
+    for row in rows {
+        let (id, rel) = row?;
+        if fold_case(&rel) == wanted {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
 
 #[derive(Clone, Debug)]
 pub struct StoredTarget {
@@ -33,6 +53,9 @@ pub struct StoredPlan {
     pub rule_version: String,
     pub fingerprint: String,
     pub note: Option<String>,
+    /// Free bytes of the project's drive before and after execution.
+    pub free_before: Option<i64>,
+    pub free_after: Option<i64>,
     pub targets: Vec<StoredTarget>,
 }
 
@@ -85,7 +108,8 @@ impl Repository {
         self.read(|tx| {
             let plan = tx
                 .query_row(
-                    "SELECT id, state, created_at, approved_at, rule_version, fingerprint, note FROM cleanup_plans WHERE id = ?1",
+                    "SELECT id, state, created_at, approved_at, rule_version, fingerprint, note, free_before, free_after
+                     FROM cleanup_plans WHERE id = ?1",
                     [id],
                     |r| {
                         Ok(StoredPlan {
@@ -96,6 +120,8 @@ impl Repository {
                             rule_version: r.get(4)?,
                             fingerprint: r.get(5)?,
                             note: r.get(6)?,
+                            free_before: r.get(7)?,
+                            free_after: r.get(8)?,
                             targets: Vec::new(),
                         })
                     },
@@ -179,6 +205,88 @@ impl Repository {
                 return Err(Error::conflict("Journalzustand wurde zwischenzeitlich geändert."));
             }
             Ok(())
+        })
+    }
+
+    /// Free bytes of the drive measured around an execution: `before` once
+    /// the plan starts executing, `after` once it ended. Never part of the
+    /// journal; a missing measurement stays unknown.
+    pub fn record_plan_space(&mut self, plan_id: i64, before: Option<u64>, after: Option<u64>) -> Result<()> {
+        self.require_local()?;
+        let clamp = |bytes: Option<u64>| bytes.and_then(|b| i64::try_from(b).ok());
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE cleanup_plans SET free_before = COALESCE(?1, free_before), free_after = COALESCE(?2, free_after)
+                 WHERE id = ?3",
+                params![clamp(before), clamp(after), plan_id],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Folders kept in one project, as entered there (for display).
+    pub fn kept_folders(&mut self, project_id: i64) -> Result<Vec<String>> {
+        let mut rows: Vec<String> =
+            self.query("SELECT rel_path FROM cleanup_keeps WHERE project_id = ?1", [project_id], |r| r.get(0))?;
+        rows.sort_by_cached_key(|rel| fold_case(rel));
+        Ok(rows)
+    }
+
+    /// The real places of every kept folder, of all projects: a keep counts
+    /// for each project that reaches the folder. Bounded by [`KEEPS_MAX`] at
+    /// insertion, so nothing is cut off here.
+    pub fn kept_locations(&mut self) -> Result<Vec<String>> {
+        self.query("SELECT location FROM cleanup_keeps ORDER BY id", [], |r| r.get(0))
+    }
+
+    /// Keeps a folder of a project at its real `location`. `rel_path` is
+    /// already checked; keeping the same folder again refreshes its place.
+    pub fn keep_folder(&mut self, project_id: i64, rel_path: &str, location: &str) -> Result<()> {
+        self.require_local()?;
+        let now = self.now();
+        self.write(|tx| {
+            require_project(tx, project_id)?;
+            let existing = same_keeps(tx, project_id, rel_path)?;
+            if let Some(id) = existing.first() {
+                tx.execute("UPDATE cleanup_keeps SET location = ?1 WHERE id = ?2", params![location, id])?;
+                return Ok(());
+            }
+            let (total, here): (i64, i64) = tx.query_row(
+                "SELECT COUNT(*), COALESCE(SUM(project_id = ?1), 0) FROM cleanup_keeps",
+                [project_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            if here >= KEEPS_PER_PROJECT || total >= KEEPS_MAX {
+                return Err(Error::blocked("Limit für behaltene Ordner erreicht."));
+            }
+            tx.execute(
+                "INSERT INTO cleanup_keeps(project_id, rel_path, location, created_at) VALUES(?1, ?2, ?3, ?4)",
+                params![project_id, rel_path, location, now],
+            )?;
+            log_in(tx, now, "protection", "Ordner behalten", "Er erscheint in keinem Papierkorb-Plan.")
+        })
+    }
+
+    /// Suggests a kept folder again. A folder that is not kept is reported,
+    /// not silently acknowledged.
+    pub fn unkeep_folder(&mut self, project_id: i64, rel_path: &str) -> Result<()> {
+        self.require_local()?;
+        let now = self.now();
+        self.write(|tx| {
+            let ids = same_keeps(tx, project_id, rel_path)?;
+            if ids.is_empty() {
+                return Err(Error::not_found("Dieser Ordner wird in diesem Projekt nicht behalten."));
+            }
+            for id in ids {
+                tx.execute("DELETE FROM cleanup_keeps WHERE id = ?1", [id])?;
+            }
+            log_in(
+                tx,
+                now,
+                "protection",
+                "Ordner wieder vorgeschlagen",
+                "Nur ein Wiederherstellungsbeleg macht ihn planbar.",
+            )
         })
     }
 

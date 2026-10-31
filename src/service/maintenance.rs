@@ -44,7 +44,7 @@ impl Core {
                 s.project_id == Some(project_id) && s.kind == ScopeKind::Project && s.status == ScopeStatus::Approved
             })
             .ok_or_else(|| Error::blocked("Für dieses Projekt fehlt eine Lesefreigabe."))?;
-        let id = cleanup::draft(&mut self.repo, &scope, &candidates)?;
+        let id = cleanup::draft(&mut self.repo, &scope, &candidates, &*self.env)?;
         cleanup::summary(&mut self.repo, id)
     }
 
@@ -54,7 +54,7 @@ impl Core {
     }
 
     pub fn cleanup_apply(&mut self, plan_id: i64) -> Result<PlanSummary> {
-        let applied = cleanup::apply(&mut self.repo, plan_id, self.recycler.as_mut(), &mut NoHooks);
+        let applied = cleanup::apply(&mut self.repo, plan_id, self.recycler.as_mut(), &mut NoHooks, &*self.env);
         let summary = cleanup::summary(&mut self.repo, plan_id)?;
         applied.map(|_| summary)
     }
@@ -118,8 +118,11 @@ impl Core {
         self.repo.settings()
     }
 
+    /// Saves settings. Whether runs are accepted is not part of it: only the
+    /// person switches that, through [`Core::allow_agent_runs`].
     pub fn save_settings(&mut self, settings: &Settings) -> Result<()> {
-        self.repo.save_settings(settings)
+        let agent_runs = self.repo.settings()?.agent_runs;
+        self.repo.save_settings(&Settings { agent_runs, ..settings.clone() })
     }
 
     pub fn backup(&mut self, path: &str) -> Result<String> {

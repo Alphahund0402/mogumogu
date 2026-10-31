@@ -1,13 +1,16 @@
 //! Drafting and approving plans (F-22). A draft never changes anything on
 //! disk; approval binds a person's confirmation to the exact fingerprint.
 use super::RULE_VERSION;
-use super::gate::{allowed, locate, unprotected};
+use super::gate::{allowed, locate, not_held, unprotected};
+use super::holds::{Env, Places, holds};
 use crate::domain::{JournalState, PlanState, PlanSummary, PlanTarget, Scope, ScopeKind, ScopeStatus};
+use crate::inventory::git::IndexCache;
 use crate::limits::CLEANUP_MAX_TARGETS;
 use crate::platform::FileIdentity;
 use crate::storage::{NewTarget, Repository};
 use crate::{Error, Result};
 use sha2::{Digest, Sha256};
+use std::path::Path;
 
 /// A recoverable folder from a fresh tidy-up walk of the project.
 #[derive(Clone, Debug)]
@@ -19,7 +22,7 @@ pub struct Candidate {
 /// Drafts a plan for recoverable folders of one approved project. Each one
 /// is checked on handles now; folders that fail keep their blockers in the
 /// plan, so the person sees why nothing will happen.
-pub fn draft(repo: &mut Repository, scope: &Scope, candidates: &[Candidate]) -> Result<i64> {
+pub fn draft(repo: &mut Repository, scope: &Scope, candidates: &[Candidate], env: &Env) -> Result<i64> {
     repo.require_local()?;
     if scope.kind != ScopeKind::Project || scope.status != ScopeStatus::Approved {
         return Err(Error::blocked("Bereinigung nur in Projekten mit Lesefreigabe."));
@@ -29,6 +32,8 @@ pub fn draft(repo: &mut Repository, scope: &Scope, candidates: &[Candidate]) -> 
     }
     let roots = repo.disposable_roots()?;
     let resources = repo.resources()?;
+    let held = holds(repo, env, &mut Places::default())?;
+    let indexes = IndexCache::default();
     let identity = repo.scope_identity(scope.id)?;
     let mut targets = Vec::new();
     for candidate in candidates {
@@ -43,7 +48,7 @@ pub fn draft(repo: &mut Repository, scope: &Scope, candidates: &[Candidate]) -> 
         };
         let checked = locate(&scope.path, identity, &candidate.rel_path).and_then(|located| {
             let paths = [located.path.to_string_lossy().into_owned(), located.shell.to_string_lossy().into_owned()];
-            Ok((located.inspect()?, paths))
+            Ok((located.inspect(&indexes)?, paths))
         });
         match checked {
             Ok(((identity, label, evidence), [path, shell])) => {
@@ -56,6 +61,10 @@ pub fn draft(repo: &mut Repository, scope: &Scope, candidates: &[Candidate]) -> 
                 if let Err(blocker) = allowed(&roots, &path, identity) {
                     target.blockers.push(blocker);
                 }
+                if let Err(blocker) = not_held(&held.holds, &[Path::new(&shell), Path::new(&path)]) {
+                    target.blockers.push(blocker);
+                }
+                target.blockers.extend(held.unknown.iter().cloned());
             }
             Err(blocker) => {
                 target.label = "Ordner".into();
@@ -139,8 +148,9 @@ pub fn summary(repo: &mut Repository, plan_id: i64) -> Result<PlanSummary> {
             .collect(),
         kept: vec![
             "Quellen, Projekt- und Lockfiles".into(),
-            "Versionsverwaltung (.git)".into(),
-            "Alles unter „Prüfen“: Testdaten, Datenbanken, Logs, große Dateien".into(),
+            "Versionsverwaltung (.git) und jeder Ordner mit Dateien, die Git versioniert".into(),
+            "Alles unter „Prüfen“: Testdaten, Datenbanken, Logs, große Dateien, Reste von KI-Agenten".into(),
+            "Ordner, die du behältst".into(),
             "Jeder Ordner, der nicht im Plan steht".into(),
         ],
         recovery: "Die Ordner landen im Windows-Papierkorb und lassen sich dort wiederherstellen. Neu erzeugen \
@@ -148,5 +158,7 @@ pub fn summary(repo: &mut Repository, plan_id: i64) -> Result<PlanSummary> {
                    Speicher wird erst frei, wenn du den Papierkorb leerst."
             .into(),
         note: plan.note,
+        free_before: plan.free_before,
+        free_after: plan.free_after,
     })
 }

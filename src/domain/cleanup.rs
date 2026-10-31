@@ -113,9 +113,36 @@ pub struct PlanSummary {
     pub done: i64,
     pub failed: i64,
     pub note: Option<String>,
+    /// Free bytes of the project's drive right before and after execution.
+    #[serde(default)]
+    pub free_before: Option<i64>,
+    #[serde(default)]
+    pub free_after: Option<i64>,
 }
 
 impl PlanSummary {
+    /// What the drive gained while the plan ran; other programs write too.
+    pub fn free_gained(&self) -> Option<i64> {
+        Some(self.free_after? - self.free_before?)
+    }
+
+    /// The free space measured around the execution, in one line.
+    pub fn space_text(&self) -> Option<String> {
+        let size = |bytes: i64| super::format_bytes(Some(bytes));
+        let before = self.free_before?;
+        Some(match (self.free_after, self.free_gained()) {
+            (Some(after), Some(gained)) => format!(
+                "Vorher {} frei, nachher {} frei ({}{}). Der Papierkorb gibt den Platz erst beim Leeren frei; \
+                 andere Programme schreiben gleichzeitig.",
+                size(before),
+                size(after),
+                if gained < 0 { "−" } else { "+" },
+                size(gained.abs())
+            ),
+            _ => format!("Vorher {} frei; danach nicht gemessen.", size(before)),
+        })
+    }
+
     pub fn executable(&self) -> bool {
         self.targets.iter().all(|t| t.blockers.is_empty()) && !self.targets.is_empty()
     }

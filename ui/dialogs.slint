@@ -1,6 +1,7 @@
 import { ScrollView, TextEdit, ComboBox } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
 import { Store, Actions, DetailRow } from "store.slint";
+import { Motion } from "motion.slint";
 import { Card, UiButton, PillField } from "components.slint";
 
 // Repeated rows must contribute their wrapped height to the scroll extent.
@@ -64,7 +65,19 @@ component FormFields inherits VerticalLayout {
 // and one generic two-field form. Content is prepared in Rust.
 export component DialogLayer inherits Rectangle {
     callback dismissed();
-    background: #2f364066;
+    // Opening dims the window and lifts the card into place; closing is
+    // quicker. The last kind stays while the card fades out.
+    property <bool> open: Store.modal != 0;
+    property <int> modal: Store.modal;
+    property <int> last: 1;
+    changed modal => { if self.modal != 0 { self.last = self.modal; } }
+    property <int> kind: root.open ? Store.modal : root.last;
+    property <float> shown: root.open ? 1 : 0;
+    animate shown { duration: root.open ? Motion.base : Motion.fast; easing: ease-out; }
+    property <bool> live: root.open || root.shown > 0;
+    visible: root.live;
+    background: root.open ? #2f364066 : #2f364000;
+    animate background { duration: Motion.fast; }
     accessible-role: none;
     public function focus-first() {
         if Store.modal != 2 { close-button.grab-focus(); }
@@ -72,10 +85,11 @@ export component DialogLayer inherits Rectangle {
     TouchArea { }
     Card {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: min(Store.modal == 3 ? 850px : 620px, parent.width - 32px);
+        y: (parent.height - self.height) / 2 + (1 - root.shown) * 12px;
+        opacity: root.shown;
+        width: min(root.kind == 3 ? 850px : 620px, parent.width - 32px);
         // Detail sheets follow their content up to 500px, then scroll.
-        height: min(Store.modal == 3 ? 620px : Store.modal == 2 ? 360px
+        height: min(root.kind == 3 ? 620px : root.kind == 2 ? 360px
             : Store.detail-rows.length == 0 && Store.detail-path == ""
                 ? clamp(message-measure.preferred-height + dialog-title.preferred-height
                     + dialog-footer.preferred-height + 64px, 220px, 500px)
@@ -105,11 +119,11 @@ export component DialogLayer inherits Rectangle {
         VerticalLayout {
             padding: 18px; spacing: 10px;
             dialog-title := Text {
-                text: Store.modal == 2 ? Store.form-title : Store.detail-title;
+                text: root.kind == 2 ? Store.form-title : Store.detail-title;
                 font-size: 17px; font-weight: 700; color: Theme.ink; wrap: word-wrap;
                 accessible-role: AccessibleRole.text;
             }
-            if Store.modal == 1 : ScrollView {
+            if root.kind == 1 && root.live : ScrollView {
                 vertical-stretch: 1;
                 content-width: self.visible-width;
                 content-height: detail-content.preferred-height;
@@ -128,19 +142,19 @@ export component DialogLayer inherits Rectangle {
                     if Store.detail-body != "" : Text { text: Store.detail-body; font-size: 12px; color: Theme.text; wrap: word-wrap; }
                 }
             }
-            if Store.modal == 2 : ScrollView {
+            if root.kind == 2 && root.live : ScrollView {
                 vertical-stretch: 1;
                 content-width: self.visible-width;
                 content-height: form-content.preferred-height;
                 form-content := FormFields { height: self.preferred-height; padding-right: 16px; padding-bottom: 8px; }
             }
-            if Store.modal == 3 : Text {
+            if root.kind == 3 && root.live : Text {
                 text: Store.detail-path; font-size: 11px; color: Theme.muted; wrap: word-wrap;
             }
-            if Store.modal == 3 : Text {
+            if root.kind == 3 && root.live : Text {
                 text: Store.content-note; font-size: 11px; color: Theme.muted; wrap: word-wrap;
             }
-            if Store.modal == 3 : TextEdit {
+            if root.kind == 3 && root.live : TextEdit {
                 vertical-stretch: 1;
                 text <=> Store.content-text;
                 read-only: true;
@@ -150,16 +164,18 @@ export component DialogLayer inherits Rectangle {
             }
             dialog-footer := FlexboxLayout {
                 spacing: 8px; alignment: end;
-                for action in (Store.modal == 1 ? Store.detail-actions : []) : UiButton {
+                for action in (root.kind == 1 ? Store.detail-actions : []) : UiButton {
                     label: action.label; primary: action.primary; in-dialog: true; available: !Store.busy;
                     activated => { Actions.detail-action(action.id); }
                 }
-                if Store.modal == 2 : UiButton {
+                if root.kind == 2 : UiButton {
                     label: Store.form-submit; primary: true; in-dialog: true; available: !Store.busy;
                     activated => { Actions.submit-form(Store.form-value-1, Store.form-value-2); }
                 }
-                close-button := UiButton { label: Store.modal == 2 ? "Abbrechen" : "Schließen"; in-dialog: true; available: true; activated => { root.dismissed(); } }
+                close-button := UiButton { label: root.kind == 2 ? "Abbrechen" : "Schließen"; in-dialog: true; available: true; activated => { root.dismissed(); } }
             }
         }
     }
+    // A closing card no longer takes clicks.
+    if !root.open : TouchArea { }
 }

@@ -5,9 +5,12 @@
 pub mod owner;
 
 use mogumogu::cleanup::Recycler;
+use serde_json::Value;
 use std::fs;
+use std::io::{Read, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Stands in for the recycle bin: moves folders into a directory of the
@@ -49,6 +52,30 @@ pub fn write(root: &Path, rel: &str, content: &str) {
     let path = root.join(rel);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, content).unwrap();
+}
+
+/// Makes `root` a Git work tree whose index lists `paths`, written in Git's
+/// version 2 layout (SHA-1 names, no extensions). Git is not started.
+pub fn git_repo(root: &Path, paths: &[&str]) {
+    write(root, ".git/HEAD", "ref: refs/heads/main\n");
+    write(root, ".git/config", "[core]\n\trepositoryformatversion = 0\n\tbare = false\n");
+    write(root, ".git/refs/heads/main", "0123456789abcdef0123456789abcdef01234567\n");
+    let mut index = b"DIRC".to_vec();
+    index.extend(2_u32.to_be_bytes());
+    index.extend((paths.len() as u32).to_be_bytes());
+    for path in paths {
+        let start = index.len();
+        let mut stat = [0_u8; 40];
+        stat[24..28].copy_from_slice(&0o100644_u32.to_be_bytes());
+        index.extend(stat);
+        index.extend([0xab; 20]);
+        index.extend((path.len() as u16).to_be_bytes());
+        index.extend(path.as_bytes());
+        index.resize(start + ((62 + path.len() + 8) & !7), 0);
+    }
+    let hash = mogumogu::parsers::sha1::sha1(&index);
+    index.extend(hash);
+    fs::write(root.join(".git/index"), index).unwrap();
 }
 
 /// Creates a directory junction (no admin rights needed) via `mklink /J`.
@@ -102,4 +129,46 @@ pub fn sample_project(root: &Path) -> PathBuf {
     );
     write(&project, "AGENTS.md", "# Regeln\nNutze @docs/rules.md\n");
     project
+}
+
+static ENGINES: AtomicU32 = AtomicU32::new(0);
+
+/// A stand-in for a Docker engine: answers each request on its pipe with the
+/// JSON for its path and records the request line.
+pub struct FakeEngine {
+    pub pipe: String,
+    pub requests: Arc<Mutex<Vec<String>>>,
+}
+
+pub fn fake_engine(answers: Vec<(&'static str, Value)>) -> FakeEngine {
+    let pipe = format!("mogumogu-test-engine-{}-{}", std::process::id(), ENGINES.fetch_add(1, Ordering::Relaxed));
+    let server = mogumogu::platform::PipeListener::bind(&format!(r"\\.\pipe\{pipe}")).unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&requests);
+    std::thread::spawn(move || {
+        while let Ok(mut connection) = server.accept() {
+            let mut head = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                match connection.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&buffer[..n]),
+                }
+            }
+            let text = String::from_utf8_lossy(&head).to_string();
+            let line = text.lines().next().unwrap_or_default().to_string();
+            let path = line.split(' ').nth(1).unwrap_or_default().to_string();
+            seen.lock().unwrap().push(line);
+            let (status, body) = match answers.iter().find(|(p, _)| *p == path) {
+                Some((_, value)) => ("200 OK", value.to_string()),
+                None => ("404 Not Found", "{}".to_string()),
+            };
+            let answer = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = connection.write_all(answer.as_bytes());
+        }
+    });
+    FakeEngine { pipe, requests }
 }

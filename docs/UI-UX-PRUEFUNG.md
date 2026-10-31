@@ -70,6 +70,30 @@ und die [Text-Eigenschaften](https://docs.slint.dev/latest/docs/slint/reference/
 mit dem lokal gepinnten 1.18.1-Quellstand abgeglichen; Context7 war wegen seines
 Monatslimits nicht verfügbar.
 
+## Bewegung und Sprungziele · 31. Oktober 2026
+
+Bewegung zeigt eine Zustandsänderung und kostet im Leerlauf nichts. Der
+Software-Renderer animiert nur Position, Größe, Deckkraft und Farbe; Skalierung,
+Drehung und Schatten gibt es dort nicht. Die Dauern stehen in `ui/motion.slint`.
+
+| Stelle | Verhalten |
+|---|---|
+| Dialoge | Der Hintergrund dunkelt in 120 ms ab, die Karte hebt sich 12 px und blendet in 180 ms ein; Schließen dauert 120 ms. Beim Ausblenden bleibt der Inhalt stehen und nimmt keine Klicks mehr an. |
+| Erfassung | Mochi kaut (±1,5 px, 600 ms) nur während eines Laufs: im Streifen, in der Seitenleiste und im Einstieg. Der Balken gleitet zwischen den Fortschrittsmeldungen (280 ms), am Ende wechselt die Streifenfarbe in 180 ms. |
+| Sprungziele | „Teilweise erfasst › Freigaben ansehen“ und Suchtreffer auf Projekte und Ressourcen wählen die Zielzeile aus; sie leuchtet himmelblau auf und läuft in 900 ms in die normale Auswahl aus. |
+| Windows | Ist „Animationen in Windows anzeigen“ aus, sind alle Dauern 0. Gelesen wird die Einstellung bei jedem Öffnen des Dashboards. |
+| Renderings | `design/screens/render.rs` und `examples/layout_audit.rs` schalten Bewegung ab und erfassen jeden Zustand im Ruhezustand. |
+
+Behoben: „Freigaben ansehen“ öffnete die nicht vorhandene Seite 6, „Bericht
+ansehen“ die Speicheranalyse statt des Aufräumberichts.
+
+Messung mit `SLINT_DEBUG_PERFORMANCE=refresh_lazy,console`, eigenem
+Datenverzeichnis und Release-Build: 0 Bilder und 0 ms CPU-Zeit in je 10 s
+Leerlauf vor und nach einer Erfassung. Ein Dialog zeichnet beim Öffnen rund
+15 Bilder, beim Schließen rund 10; danach wieder 0. Im Debug-Build schafft der
+Software-Renderer beim Öffnen nur rund 4 Bilder, weil der abgedunkelte
+Hintergrund das ganze Fenster neu zeichnet.
+
 ## Verschlankung · 20. Oktober 2026
 
 Funktionen ohne Bezug zu „Projekte und Scratchpads finden, Aufräumbedarf

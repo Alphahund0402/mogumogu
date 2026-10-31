@@ -19,16 +19,18 @@ pub struct Measurement {
 }
 
 pub fn measure(path: &Path, identity: Option<FileIdentity>) -> Measurement {
+    match ScopeRoot::open(path, identity) {
+        Ok(root) => measure_root(root),
+        Err(e) => Measurement { bytes: None, entries: 0, skipped_links: 0, reason: Some(e.to_string()) },
+    }
+}
+
+/// Measures below a root the caller opened, e.g. without links on the way.
+pub fn measure_root(root: ScopeRoot) -> Measurement {
     let limits =
         ScanLimits { max_depth: 64, max_entries: 1_000_000, max_total_bytes: 0, time_budget: Duration::from_secs(30) };
     let mut measurement = Measurement { bytes: None, entries: 0, skipped_links: 0, reason: None };
-    let root = match ScopeRoot::open(path, identity) {
-        Ok(root) => Rc::new(root.into_handle()),
-        Err(e) => {
-            measurement.reason = Some(e.to_string());
-            return measurement;
-        }
-    };
+    let root = Rc::new(root.into_handle());
     let mut budget = Budget::new(limits);
     let mut total = 0_u64;
     let mut complete = true;

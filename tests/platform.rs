@@ -73,3 +73,23 @@ fn a_busy_owner_counts_as_running() {
     let _held = platform::pipe_connect(&name, Duration::from_secs(2)).unwrap().expect("instance listens");
     assert!(Client::new(&config).unwrap().owner_running());
 }
+
+/// A symbolic link from a local folder to a share is never followed: not by
+/// the real place of a hold, not below it. Creating the link needs Developer
+/// Mode or admin rights; without them the test says so and checks nothing.
+/// The share is never contacted, the link's own data names it.
+#[test]
+fn a_symbolic_link_to_a_share_is_not_followed() {
+    let temp = tempfile::tempdir().unwrap();
+    let link = temp.path().join("share");
+    if let Err(e) = std::os::windows::fs::symlink_dir(r"\127.0.0.1\mogumogu-none", &link) {
+        println!("Symbolischer Link nicht anlegbar ({e}); nichts geprüft.");
+        return;
+    }
+    assert!(platform::real_location(&link).is_err());
+    assert!(platform::real_location(&link.join("data")).is_err(), "nor below it");
+    assert_eq!(platform::real_place(&link.join("data").join("db.sqlite")), None);
+    let local = temp.path().join("local");
+    fs::create_dir_all(&local).unwrap();
+    assert!(platform::real_location(&local).is_ok(), "a plain folder next to it still resolves");
+}

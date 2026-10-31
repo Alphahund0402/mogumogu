@@ -1,6 +1,125 @@
 # Validierung · mogumogu 0.1.0
 
-Stand: 5. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
+Stand: 5. Oktober 2026, ergänzt bis 31. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
+
+## Ergänzung vom 31. Oktober: Datenbanken, Freigabe von Läufen, Lücken
+
+**Neu** (Schema v10): Überwachte Datenbanken – eine Datei, ein Datenordner oder
+ein Docker-Volume, registriert im Dashboard oder per CLI. Gemessen werden nur
+Größe, Dateizahl und letzte Änderung aus Verzeichniseinträgen (bei einer Datei
+mit `-wal`, `-shm`, `-journal`), ein Volume aus `/system/df`; kein Server wird
+kontaktiert, keine Datei geöffnet. Jede überwachte Datei und jeder Ordner ist
+gehalten. Ein vollständiger Bericht misst sie mit, höchstens 20 s lang, die am
+längsten ungemessenen zuerst. Einen beendeten Lauf gibt die Person im
+Dashboard frei; danach hält er nichts mehr und nimmt keine Artefakte mehr an.
+Hardlinks ab 64 KiB zählen beim belegten Platz einmal. Git-Index und echte
+Orte von Haltungen werden je Vorgang einmal gelesen. Ein Link auf dem Weg zu
+einer Freigabe, einem Volume- oder Gerätenamen wird nicht verfolgt; ein
+relatives Linkziel zählt ab dem Ordner, in dem der Link wirklich liegt.
+
+**Live:** Ein gestoppter Container (`docker create --pull never` aus einem
+lokalen Image) band einen Projektordner ein. Docker Desktop meldete ihn als
+`/run/desktop/mnt/host/c/…`; mogumogu bildete das auf den Windows-Ort ab, ordnete
+das Projekt zu, der Bericht zeigte „Container „mogu-live-bind“ (created) bindet
+ihn ein“, ein Plan wurde abgelehnt (`a_real_container_bind_holds_its_folder`,
+ignoriert, mit `MOGU_DOCKER_LIVE` auszuführen). Der Container ist wieder
+entfernt. Ein echter symbolischer Link auf eine Freigabe ließ sich nicht
+anlegen (Fehler 1314, kein Recht dafür); `a_symbolic_link_to_a_share_is_not_followed`
+prüft ihn, wo das Recht besteht, und meldet sonst, dass es nichts geprüft hat.
+
+**Getrennter Agentenreview** von Freigabe, Datenbanken, Zwischenspeichern,
+Hardlinks und Linkprüfung: zwei blockierende Befunde mit Nachstellung –
+Artefakte nach der Freigabe wurden angenommen, aber nicht gehalten; `cleanup
+unkeep` und `docker revoke` hoben über die CLI einen Schutz auf – und zwei
+weitere: Das Registrieren einer Datenbank folgte Links auf dem Weg, und ein
+relatives Linkziel unter einer Junction wurde ab der geschriebenen statt der
+erreichten Stelle aufgelöst. Alle behoben, mit Tests. Unauffällig: Freigabe
+selbst, Datenbank-Haltungen in Plan und Ausführung, `IndexCache` (nur geprüfte
+Bytes, Schlüssel aus Identität, Größe und Änderungszeit), Hardlinks (nur die
+Anzeige des belegten Platzes).
+
+**Prüfungen:** `validate.py` (15 Verträge), `cargo fmt` und `cargo clippy
+--all-targets -D warnings` ohne Befund; `cargo test --locked
+--no-default-features` mit **455 Funktionstests** bestanden (3 ignoriert: zwei
+Messläufe und der Live-Test mit Docker), davon 5 in `tests/databases.rs`;
+nativer Release-Build beider Programme erfolgreich. Nicht ausgeführt: ein
+echter symbolischer Link auf eine Freigabe, Windows 11, menschlicher Review G5.
+
+## Ergänzung vom 31. Oktober: KI-Läufe, Docker-Inventar, Verlauf
+
+**Neu** (Schema v9): Kooperierende Harnesses registrieren über die CLI Läufe,
+Artefakte und Docker-Objekte – erst, wenn die Person es im Dashboard
+einschaltet; über die Pipe lässt es sich nur ausschalten. Jedes Artefakt ist
+geschützt, kein Befehl entfernt etwas. Ein schreibgeschütztes Docker-Inventar
+fragt freigegebene Kontexte mit lokaler Named Pipe nur mit `GET` aus einer
+festen Liste; Ordner, die Container oder Volumes einbinden, bleiben aus jedem
+Plan, und eine nicht fragbare Engine blockiert. Aufräumberichte werden je
+Projekt gespeichert (30) und zeigen Wachstum. Die Prüfsumme des Git-Index wird
+geprüft (SHA-1 nach FIPS 180-4, SHA-256).
+
+**Abnahme am echten Docker Desktop 4.73.1** (Engine 29.4.3, API 1.54): beide
+Kontexte (`default`, `desktop-linux`), 3 Container, 16 Images, 11 Volumes,
+7 Netze; Dockers Bilanz stimmt mit `docker system df` überein; Bind-Quellen als
+Windows-Pfade (Laufwerk, Ordner, Leerzeichen); die Pipes bestehen die
+Besitzerprüfung; erste Frage 3,4–4,2 s, weitere 0,7 s.
+
+**Getrennter Agentenreview:** sieben blockierende Befunde mit Nachstellung,
+alle behoben (Schreibweise von Bind-Quellen, Artefakte vor der Freigabe,
+gekürzte Containerliste, Absturz bei falscher Antwortform, geänderter Endpunkt,
+Pipe-Besitzer, Selbsteinschalten durch Agenten), dazu zwölf nicht blockierende
+(unter anderem Frist zwischen Lesevorgängen und lineares Lesen gestückelter
+Antworten, Volumes mit Bind-Gerät, gesättigte Summen, Verlauf robust). Die
+Nachprüfung derselben Prüfinstanz bestätigte die Behebungen mit Proben bis zum
+Verschieben in einen Wegwerf-Papierkorb (8.3-Kurzname, Junction, Artefakt vor
+der Freigabe, 2.001 und 5.001 Container, geänderter Endpunkt, echte Pipes von
+Docker Desktop) und fand noch einen Weg (Volume mit `o=rbind`) sowie drei
+kleinere Punkte (fehlende Bind-Quelle unter Kurzname, Verknüpfung auf eine
+Freigabe beim Auflösen des echten Orts, Allowlist für `real_location`); alle
+behoben.
+
+**Prüfungen:** `validate.py` (15 Verträge, neu `test_docker_and_runs_stay_read_only`),
+`cargo fmt` und `cargo clippy --all-targets -D warnings` ohne Befund;
+`cargo test --locked --no-default-features` mit **441 Funktionstests**
+bestanden, davon 12 in `tests/runs_docker_history.rs` gegen eine nachgebildete
+Engine auf einer Test-Pipe; nativer Release-Build beider Programme
+erfolgreich. Nicht ausgeführt: ein Container, der selbst einen Ordner
+einbindet (keine Container erstellt), Engines unter fremdem Konto, eine
+Verknüpfung auf eine Freigabe (kein Symlink-Recht), Windows 11, menschlicher
+Review G5.
+
+## Ergänzung vom 31. Oktober: Projektbewusste Bereinigung
+
+**Neu** ([Abgrenzung zur Spezifikation](PROJEKTBEWUSSTE-BEREINIGUNG.md)): Der
+Aufräumbericht liest je Repository im Projekt `.git/config` und `.git/index`
+statisch. Ein Ordner mit einer Datei, die irgendein Index auf dem Weg führt, ist
+nicht mehr wiederherstellbar, ebenso einer mit unlesbarem Git-Stand oder unter
+einem Repository oberhalb der Freigabe (dort nur Vorhandensein von `.git`
+geprüft). Behaltene Ordner (Schema v8) werden mit ihrem echten Ort gespeichert
+und gelten für jedes Projekt, das sie erreicht. Reste von KI-Agenten haben eine
+eigene Summe und bleiben „Prüfen“. Pläne messen den freien Speicher des
+Laufwerks vorher und nachher. Regelversion `recycle-rules-3`. Keine neue Regel
+macht etwas wiederherstellbar.
+
+**Abnahme an echten Indizes** von Git 2.53.0 (Windows): dieses Repository (v2,
+356 Einträge, `target/` mit 73 GB „nicht in Git“, 0,85–1 s), ein Repository mit
+eingechecktem `dist/` (v2 und v4), ein v4-Index mit 12.004 Einträgen und
+IEOT-Blöcken (16 ms), ein geteilter Index und ein verknüpfter Worktree (beide
+„unbekannt“), ein Claude-Code-Worktree unter `.claude/worktrees` (KI-Agent).
+
+**Getrennter Agentenreview:** vier blockierende Befunde, alle mit Wegwerf-Tests
+nachgestellt und behoben (Repository oberhalb der Freigabe, Behalten an der
+Projekt-ID, nur innerstes Repository gefragt, Behalten als Textvergleich mit
+Kurznamen und abschließendem `Σ`), dazu sechs nicht blockierende. Die
+Nachstellungen schlagen nach der Behebung fehl, weil kein Plan mehr entsteht.
+Offen: Prüfsumme des Index nicht verifiziert; Index je Ziel neu gelesen.
+
+**Prüfungen:** `validate.py`, `cargo fmt` und `cargo clippy --all-targets -D
+warnings` ohne Befund; `cargo test --locked --no-default-features` mit **420
+Funktionstests** bestanden (2 Lasttests wie vorgesehen ignoriert), davon 42 in
+`tests/core/windows_cleanup.rs`; nativer Release-Build beider Programme
+erfolgreich. Nicht ausgeführt: `build.ps1` (überschriebe `dist\`), native
+Renderbilder des geänderten Dialogs, Windows 11, Speicherspitze beim Lesen
+großer Indizes (Messbericht), menschlicher Review G5.
 
 ## Ergänzung vom 30. Oktober: Speicheranalyse
 

@@ -205,6 +205,8 @@ impl Desktop {
             self.owner.refresh();
         }
         if let Some(ui) = &self.dashboard {
+            // Read on every show: the Windows setting may have changed meanwhile.
+            ui.global::<Motion>().set_on(mogumogu::platform::animations_enabled());
             ui.show()?;
         }
         Ok(())
@@ -599,6 +601,63 @@ impl Desktop {
                         view::render_scan_link(ui, "Bericht ansehen", 4, 1);
                     }
                     self.status = text;
+                }
+            }
+            Request::AgentsOverview => {
+                if let (Ok(runs), Ok(docker)) = (
+                    serde_json::from_value::<mogumogu::domain::RunOverview>(value["runs"].clone()),
+                    serde_json::from_value::<mogumogu::domain::DockerOverview>(value["docker"].clone()),
+                ) {
+                    self.dialog(dialogs::agents(&runs, &docker));
+                }
+                return;
+            }
+            // A change in the overview: show it again.
+            Request::RunsAllow { .. }
+            | Request::RunRelease { .. }
+            | Request::DockerApprove { .. }
+            | Request::DockerRevoke { .. } => {
+                self.submit(Request::AgentsOverview);
+            }
+            Request::Databases => {
+                if let Ok(overview) = serde_json::from_value::<mogumogu::domain::DatabaseOverview>(value) {
+                    self.dialog(dialogs::databases(&overview));
+                }
+                return;
+            }
+            Request::DbRegister { .. } | Request::DbMeasure { .. } | Request::DbUnregister { .. } => {
+                self.status = "Datenbanken aktualisiert.".into();
+                self.submit(Request::Databases);
+            }
+            Request::DockerInventory { .. } => {
+                if let Ok(inventory) = serde_json::from_value::<mogumogu::domain::DockerInventory>(value) {
+                    self.status = format!(
+                        "Docker „{}“: {} Container, {} Images, {} Volumes.",
+                        inventory.context,
+                        inventory.containers.len(),
+                        inventory.images.len(),
+                        inventory.volumes.len()
+                    );
+                    self.dialog(dialogs::docker(&inventory));
+                }
+                return;
+            }
+            Request::KeepFolder { project_id, keep, .. } => {
+                if let Ok(report) = serde_json::from_value::<mogumogu::domain::TidyReport>(value) {
+                    self.snapshot.tidy = report;
+                    if let Some(ui) = &self.dashboard {
+                        disk::render_tidy(ui, &self.snapshot.tidy);
+                    }
+                    let project = self.snapshot.tidy.projects.iter().find(|p| p.project_id == project_id).cloned();
+                    if let Some(project) = project {
+                        self.dialog(dialogs::tidy(&project));
+                    }
+                    self.status = if keep {
+                        "Ordner behalten: Er erscheint in keinem Papierkorb-Plan."
+                    } else {
+                        "Ordner wird wieder vorgeschlagen, sofern ein Wiederherstellungsbeleg ihn trägt."
+                    }
+                    .into();
                 }
             }
             Request::ContextFilter { .. } => {

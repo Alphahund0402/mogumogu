@@ -277,7 +277,7 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
     }));
     store.set_review_count(snapshot.review_count() as i32);
     render_mascot(&store, snapshot, state);
-    render_attention(&store, snapshot);
+    store.set_attention(model(attention_cards(snapshot)));
     render_projects(ui, snapshot);
     render_resources(ui, snapshot);
     render_packages(ui, &snapshot.packages, state.package_key);
@@ -413,8 +413,9 @@ fn render_mascot(store: &Store<'_>, snapshot: &Snapshot, state: &ViewState<'_>) 
 }
 
 /// Decisions that live on other pages. Review hints are listed on the
-/// overview itself and therefore not repeated here.
-fn render_attention(store: &Store<'_>, snapshot: &Snapshot) {
+/// overview itself and therefore not repeated here. Each card's button calls
+/// `Store.open(page, tab)` with the page and tab order of `ui/store.slint`.
+fn attention_cards(snapshot: &Snapshot) -> Vec<AttentionCard> {
     let names = |ids: Vec<String>| {
         let mut ids = ids;
         ids.dedup();
@@ -441,6 +442,7 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot) {
             action: s(action),
             page,
             tab,
+            ..Default::default()
         }
     }
     let mut cards = Vec::new();
@@ -460,7 +462,7 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot) {
             },
             "Bericht ansehen",
             4,
-            2,
+            1,
         ));
     }
     if snapshot.packages.counts.deprecated > 0 {
@@ -476,17 +478,21 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot) {
         ));
     }
     let partial: Vec<&Scope> = snapshot.scopes.iter().filter(|s| s.partially_scanned()).collect();
-    if !partial.is_empty() {
-        cards.push(card(
+    if let Some(first) = partial.first() {
+        let mut partial_card = card(
             "review",
             "Teilweise erfasst",
             partial.len(),
             names(partial.iter().map(|s| s.path.rsplit('\\').next().unwrap_or(&s.path).to_string()).collect()),
             "Limit oder Lesefehler; der letzte vollständige Stand bleibt sichtbar".into(),
             "Freigaben ansehen",
-            6,
+            5,
             1,
-        ));
+        );
+        // The jump lands on the first affected approval and lights it up.
+        partial_card.select_kind = s("scope");
+        partial_card.select_key = s(first.id.to_string());
+        cards.push(partial_card);
     }
     let open =
         |group: FindingGroup| snapshot.system.of(group).filter(|f| f.scope.is_some() && f.scope_id.is_none()).count();
@@ -517,7 +523,7 @@ fn render_attention(store: &Store<'_>, snapshot: &Snapshot) {
         ));
     }
     cards.truncate(3);
-    store.set_attention(model(cards));
+    cards
 }
 
 pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
@@ -844,4 +850,41 @@ pub fn render_status(ui: &Dashboard, busy: bool, status: &str) {
     let store = ui.global::<Store>();
     store.set_busy(busy);
     store.set_status(s(status));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Page and tab follow `Store.open` in ui/store.slint: storage 4 with the
+    /// tidy-up report on tab 1, settings 5 with the read approvals on tab 1.
+    #[test]
+    fn attention_cards_open_the_tab_that_holds_the_decision() {
+        let mut snapshot = Snapshot::default();
+        snapshot.tidy.stores.push(StoreTidy {
+            scope_id: 1,
+            label: "npm-Cache".into(),
+            path: r"C:\cache\npm".into(),
+            bytes: Some(1 << 30),
+            class: TidyClass::Regenerable,
+            evidence: String::new(),
+        });
+        snapshot.scopes.push(Scope {
+            id: 2,
+            project_id: None,
+            kind: ScopeKind::Project,
+            path: r"D:\projects\game".into(),
+            status: ScopeStatus::Unavailable,
+            approved_at: 0,
+            last_error: None,
+            published: None,
+            latest: None,
+        });
+        let cards = attention_cards(&snapshot);
+        let targets: Vec<_> = cards.iter().map(|c| (c.label.to_string(), c.page, c.tab)).collect();
+        assert_eq!(targets, [("Aufräumpotenzial".to_string(), 4, 1), ("Teilweise erfasst".to_string(), 5, 1)]);
+        // The jump lights up the affected approval's row, and only there.
+        assert_eq!((cards[1].select_kind.as_str(), cards[1].select_key.as_str()), ("scope", "2"));
+        assert_eq!(cards[0].select_kind.as_str(), "");
+    }
 }

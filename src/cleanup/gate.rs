@@ -1,7 +1,8 @@
 //! Where a plan may act, and the verified way to one folder. Every open
 //! below the approved root is handle-relative and never follows a link.
-use crate::domain::Resource;
+use crate::domain::{Hold, Resource, holding};
 use crate::fsread::{self, Budget, ScopeRoot};
+use crate::inventory::git::{self, GitState};
 use crate::inventory::tidy;
 use crate::limits::ScanLimits;
 use crate::platform::{self, DirHandle, FileIdentity};
@@ -105,6 +106,60 @@ pub(super) fn unprotected(resources: &[Resource], paths: &[&str]) -> Result<(), 
     Ok(())
 }
 
+/// A hold wins like protection: a held folder, one in it or one holding it
+/// stays where it is. `places` are the folder's real place
+/// ([`Located::shell`]) and its registered spelling ([`Located::path`]);
+/// holds of every project count.
+pub(super) fn not_held(holds: &[Hold], places: &[&Path]) -> Result<(), String> {
+    match places.iter().find_map(|place| holding(holds, &place.to_string_lossy())) {
+        Some(hold) => {
+            let mut reason = hold.reason.clone();
+            if let Some(first) = reason.get(..1) {
+                reason.replace_range(..1, &first.to_uppercase());
+            }
+            Err(format!("{reason}: {}.", hold.location))
+        }
+        None => Ok(()),
+    }
+}
+
+/// The real place of a folder the person keeps, below an approved root. The
+/// part that exists is opened component by component, never through a link,
+/// and named as the drive names it, so `LONGFO~1` becomes its long name. A
+/// part that does not exist yet is kept as written, but not as a short name:
+/// that could later mean another folder.
+pub fn keep_location(root_path: &str, identity: Option<FileIdentity>, rel_path: &str) -> Result<String, String> {
+    let parts: Vec<&str> = rel_path.split('/').collect();
+    if let Some(part) = parts.iter().find(|part| !plain_name(part)) {
+        return Err(format!("Der Name „{part}“ ist für Windows nicht eindeutig."));
+    }
+    let root = ScopeRoot::open(Path::new(root_path), identity).map_err(|e| format!("Projektordner: {e}"))?;
+    let mut reached: Option<DirHandle> = None;
+    let mut found = 0;
+    for part in &parts {
+        match reached.as_ref().unwrap_or(root.handle()).open_dir(OsStr::new(part)) {
+            Ok(next) => {
+                reached = Some(next);
+                found += 1;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
+            Err(e) => return Err(format!("„{part}“ ist kein sicher erreichbarer Ordner: {e}")),
+        }
+    }
+    let rest = &parts[found..];
+    if let Some(short) = rest.iter().find(|part| short_name(part)) {
+        return Err(format!("„{short}“ sieht nach einem Kurznamen aus; bitte den vollen Ordnernamen angeben."));
+    }
+    let base =
+        reached.as_ref().unwrap_or(root.handle()).final_path().map_err(|e| format!("Ort nicht bestimmbar: {e}"))?;
+    Ok(rest.iter().fold(base.trim_end_matches('\\').to_string(), |path, part| format!("{path}\\{part}")))
+}
+
+/// An 8.3 alias such as `LONGFO~1` or `PROGRA~2.TXT`.
+fn short_name(name: &str) -> bool {
+    name.split_once('~').is_some_and(|(_, tail)| tail.starts_with(|c: char| c.is_ascii_digit()))
+}
+
 /// A folder below an approved root. Root and parent stay open without delete
 /// sharing while this is held, so neither can be renamed, and Windows
 /// refuses to rename a folder with open handles below it: no folder on the
@@ -119,6 +174,11 @@ pub(super) struct Located {
     pub path: PathBuf,
     /// The real place of the held parent plus the name: what the shell gets.
     pub shell: PathBuf,
+    /// Every Git work tree on the way, outermost first: its `.git` (or why it
+    /// cannot be read) and the folder's path inside it.
+    git: Vec<(Result<DirHandle, String>, String)>,
+    /// A repository above the approved root, whose index is not approved.
+    around: Option<String>,
 }
 
 /// Walks to the parent of `rel_path`, one component at a time. A name the
@@ -132,14 +192,29 @@ pub(super) fn locate(root_path: &str, identity: Option<FileIdentity>, rel_path: 
         return Err(format!("Der Name „{part}“ ist für Windows nicht eindeutig."));
     }
     let root = ScopeRoot::open(Path::new(root_path), identity).map_err(|e| format!("Projektordner: {e}"))?;
-    let mut located = Located { root, parent: None, name, path: PathBuf::from(root_path), shell: PathBuf::new() };
+    let place = root.handle().final_path().map_err(|e| format!("Ort des Projekts nicht bestimmbar: {e}"))?;
+    let mut located = Located {
+        root,
+        parent: None,
+        name,
+        path: PathBuf::from(root_path),
+        shell: PathBuf::new(),
+        git: Vec::new(),
+        around: git::above(Path::new(&place)),
+    };
     refuse_kept(located.parent())?;
-    for part in parts {
+    located.git.extend(git::open(located.parent()).map(|git| (git, rel_path.to_string())));
+    for (index, part) in parts.iter().enumerate() {
         let next = located
             .parent()
             .open_dir_pinned(OsStr::new(part))
             .map_err(|e| format!("Weg zum Ordner nicht sicher ({part}): {e}"))?;
         refuse_kept(&next)?;
+        if let Some(git) = git::open(&next) {
+            let inside =
+                parts[index + 1..].iter().copied().chain([located.name.as_str()]).collect::<Vec<_>>().join("/");
+            located.git.push((git, inside));
+        }
         located.parent = Some(next);
         located.path.push(part);
     }
@@ -176,10 +251,11 @@ impl Located {
     }
 
     /// Opens the folder itself (never a link), reads its identity, checks
-    /// everything below it and asks the tidy rules again. Every handle inside
-    /// the folder is closed before this returns, so nothing of mogumogu stays
-    /// open in the folder that moves.
-    pub fn inspect(&self) -> Result<(FileIdentity, &'static str, String), String> {
+    /// everything below it and asks the tidy rules again, including the Git
+    /// index of every work tree around it. Every handle inside the folder is
+    /// closed before this returns, so nothing of mogumogu stays open in the
+    /// folder that moves; the `.git` handles lie outside it.
+    pub fn inspect(&self, indexes: &git::IndexCache) -> Result<(FileIdentity, &'static str, String), String> {
         let identity = {
             let folder = self
                 .parent()
@@ -191,7 +267,14 @@ impl Located {
         };
         let (label, evidence) = tidy::recoverable(self.parent(), &self.name)
             .ok_or("Nicht mehr wiederherstellbar belegt (Datei daneben oder Spur des Werkzeugs fehlt).")?;
-        Ok((identity, label, evidence))
+        let mut states: Vec<GitState> = self.around.iter().map(|reason| GitState::Unknown(reason.clone())).collect();
+        for (git, inside) in &self.git {
+            states.push(match git {
+                Ok(git) => git::tracked_with(git, std::slice::from_ref(inside), indexes).remove(0),
+                Err(reason) => GitState::Unknown(reason.clone()),
+            });
+        }
+        Ok((identity, label, tidy::git_evidence(&evidence, &states)?))
     }
 }
 

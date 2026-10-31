@@ -10,7 +10,9 @@ import { OverviewPage } from "pages/overview.slint";
 import { StoragePage } from "pages/storage.slint";
 import { ProjectsPage, PackagesPage, AiPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
 import { DialogLayer } from "dialogs.slint";
+import { Motion } from "motion.slint";
 
+export { Motion }
 export { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, ScopeRow, PlanRow,
          DetailRow, DetailAction, PackageRow, CandidateRow, AttentionCard, SystemRow, SearchRow,
          ChainStep }
@@ -46,7 +48,7 @@ component Sidebar inherits Rectangle {
                 visible: parent.talk;
                 text: Store.mascot-line;
             }
-            Mascot { x: 4px; y: parent.height - parent.figure; width: parent.figure; height: parent.figure; pose: Store.mascot-pose; }
+            Mascot { x: 4px; y: parent.height - parent.figure + Motion.chew; width: parent.figure; height: parent.figure; pose: Store.mascot-pose; }
         }
         Rectangle { height: 1.5px; background: Theme.edge; }
         NavItem { label: "Einstellungen"; icon: Icons.settings; selected: Store.page == 5; activated => { Store.page = 5; } }
@@ -130,9 +132,10 @@ component ScanStrip inherits Rectangle {
     property <bool> warn: Store.scan-notice-kind == "warn";
     height: 46px;
     background: !root.done ? Theme.sky-soft : root.warn ? Theme.amber-soft : Theme.sage-soft;
+    animate background { duration: Motion.base; }
     HorizontalLayout {
         padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 10px;
-        MascotPlate { pose: !root.done ? 4 : root.warn ? 6 : 1; width: 40px; height: 40px; y: 3px; }
+        MascotPlate { pose: !root.done ? 4 : root.warn ? 6 : 1; bob: Motion.chew; width: 40px; height: 40px; y: 3px; }
         Text {
             text: root.done ? Store.scan-notice : Store.scan-text;
             font-size: 11.5px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
@@ -141,7 +144,7 @@ component ScanStrip inherits Rectangle {
         }
         if !root.done : Rectangle {
             width: 160px; height: 8px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Theme.surface; clip: true;
-            Rectangle { x: 0; width: parent.width * clamp(Store.scan-progress, 0.04, 1.0); background: Theme.chart-blue; border-radius: 4px; }
+            Rectangle { x: 0; width: parent.width * clamp(Store.scan-progress, 0.04, 1.0); background: Theme.chart-blue; border-radius: 4px; animate width { duration: Motion.slow; easing: ease-out; } }
         }
         if !root.done : UiButton { y: (parent.height - self.height) / 2; small: true; label: Store.scan-cancelling ? "Wird angehalten …" : "Abbrechen"; available: !Store.scan-cancelling; activated => { Actions.cancel-scan(); } }
         if root.done && Store.scan-notice-link != "" : UiButton {
@@ -183,6 +186,9 @@ export component Dashboard inherits Window {
     public function focus-dialog() { dialog.focus-first(); }
     // Button, Escape and completed requests all restore the keyboard target.
     public function dismiss-dialog() { Store.modal = 0; Store.content-text = ""; keys.focus(); }
+
+    // Ends a jump highlight shortly after the target row is shown.
+    Timer { interval: 80ms; running: Store.flash; triggered => { Store.flash = false; } }
 
     keys := FocusScope {
         capture-key-pressed(event) => {
@@ -235,7 +241,7 @@ export component Dashboard inherits Window {
             y: 46px;
         }
         dialog := DialogLayer {
-            visible: Store.modal != 0; width: parent.width; height: parent.height;
+            width: parent.width; height: parent.height;
             dismissed => { root.dismiss-dialog(); }
         }
     }

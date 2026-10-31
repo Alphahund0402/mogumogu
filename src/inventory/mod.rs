@@ -4,14 +4,16 @@
 //! generation. Traversal is handle-relative and bounded (see `fsread`);
 //! adapters and AI profiles only ever receive bounded text.
 mod access;
+pub mod databases;
 mod discovery;
 pub mod disk;
+pub mod git;
 mod measure;
 mod scanner;
 pub mod system;
 pub mod tidy;
 
-pub use measure::{Measurement, measure};
+pub use measure::{Measurement, measure, measure_root};
 
 use crate::domain::ScopeKind;
 use crate::fsread::{Budget, RootError, ScanControl, ScopeRoot};

@@ -12,8 +12,10 @@
 //! 3. After a crash the plan becomes `recovery_required`; [`reconcile`]
 //!    compares journal and disk and never repeats a move.
 use super::RULE_VERSION;
-use super::gate::{Located, allowed, locate, unprotected};
+use super::gate::{Located, allowed, locate, not_held, unprotected};
+use super::holds::{Env, Holds, Places, holds};
 use crate::domain::{JournalState, PlanState, ScopeKind, ScopeStatus};
+use crate::inventory::git::IndexCache;
 use crate::platform::{self, FileIdentity};
 use crate::storage::{Repository, StoredPlan, StoredTarget};
 use crate::{Error, Result};
@@ -55,6 +57,7 @@ pub fn apply(
     plan_id: i64,
     recycler: &mut dyn Recycler,
     hooks: &mut dyn ExecutorHooks,
+    env: &Env,
 ) -> Result<PlanState> {
     repo.require_local()?;
     let plan = repo.plan(plan_id)?;
@@ -67,16 +70,27 @@ pub fn apply(
         return Err(Error::conflict("Plan mit anderer Regelversion; bitte einen neuen Plan erstellen."));
     }
     repo.transition_plan(plan_id, PlanState::Approved, PlanState::Revalidating, None)?;
+    // Lookups for this execution only: each index and each hold place once.
+    let (indexes, mut places) = (IndexCache::default(), Places::default());
     let (root, reasons) = match revalidate(repo, &plan) {
         Ok(root) => {
-            let reasons: Vec<String> = plan
-                .targets
-                .iter()
-                .filter_map(|t| check(repo, &root, t).err().map(|e| format!("{}: {e}", t.rel_path)))
-                .collect();
+            // One look at the holds for the whole revalidation; each move asks
+            // the stored holds and Docker again. The real place of a hold is
+            // looked up once per execution: a link retargeted meanwhile by
+            // another program is not noticed until the next one.
+            let reasons: Vec<String> = match holds(repo, env, &mut places).map_err(|e| e.to_string()) {
+                Ok(held) => plan
+                    .targets
+                    .iter()
+                    .filter_map(|t| {
+                        check(repo, &root, t, &held, &indexes).err().map(|e| format!("{}: {e}", t.rel_path))
+                    })
+                    .collect(),
+                Err(reason) => vec![reason],
+            };
             (root, reasons)
         }
-        Err(reason) => ((String::new(), None), vec![reason]),
+        Err(reason) => (Root { path: String::new(), identity: None }, vec![reason]),
     };
     if !reasons.is_empty() {
         let note = format!("Ungültig geworden: {}", reasons.join(" "));
@@ -84,14 +98,34 @@ pub fn apply(
         return Err(Error::blocked(note));
     }
     repo.transition_plan(plan_id, PlanState::Revalidating, PlanState::Executing, None)?;
+    // Measured, not promised: the recycle bin frees space only when emptied.
+    // Never part of the journal, so a failed write of it stops nothing.
+    let drive = Path::new(&root.path);
+    let _ = repo.record_plan_space(plan_id, platform::free_space(drive).ok(), None);
     let (mut done, mut failed) = (0_usize, 0_usize);
+    // Once an engine could not be asked, the remaining folders fail at once
+    // instead of each waiting for it again.
+    let mut unknown: Option<String> = None;
     for target in &plan.targets {
         if hooks.cancel_requested() {
+            let _ = repo.record_plan_space(plan_id, None, platform::free_space(drive).ok());
             repo.transition_plan(plan_id, PlanState::Executing, PlanState::Cancelled, Some(&progress(done, failed)))?;
             return Ok(PlanState::Cancelled);
         }
         // Checked again while the parent is held; nothing on the way can change now.
-        let located = match check(repo, &root, target) {
+        let fresh = match &unknown {
+            Some(reason) => Err(reason.clone()),
+            None => {
+                holds(repo, env, &mut places).map_err(|e| e.to_string()).and_then(|held| match held.unknown.first() {
+                    Some(reason) => {
+                        unknown = Some(reason.clone());
+                        Err(reason.clone())
+                    }
+                    None => Ok(held),
+                })
+            }
+        };
+        let located = match fresh.and_then(|held| check(repo, &root, target, &held, &indexes)) {
             Ok(located) => located,
             Err(reason) => {
                 failed += 1;
@@ -134,6 +168,7 @@ pub fn apply(
         (0, _) => PlanState::Failed,
         _ => PlanState::Partial,
     };
+    let _ = repo.record_plan_space(plan_id, None, platform::free_space(drive).ok());
     repo.transition_plan(plan_id, PlanState::Executing, state, Some(&progress(done, failed)))?;
     Ok(state)
 }
@@ -142,7 +177,11 @@ fn progress(done: usize, failed: usize) -> String {
     format!("{done} in den Papierkorb verschoben, {failed} nicht verschoben.")
 }
 
-type Root = (String, Option<FileIdentity>);
+/// The approved project root a plan acts in.
+struct Root {
+    path: String,
+    identity: Option<FileIdentity>,
+}
 
 /// The project root of a plan: still an approved project scope.
 fn revalidate(repo: &mut Repository, plan: &StoredPlan) -> std::result::Result<Root, String> {
@@ -155,16 +194,27 @@ fn revalidate(repo: &mut Repository, plan: &StoredPlan) -> std::result::Result<R
         return Err("Die Lesefreigabe des Projekts besteht nicht mehr.".into());
     }
     let identity = repo.scope_identity(scope_id).map_err(|e| e.to_string())?;
-    Ok((scope.path, identity))
+    Ok(Root { path: scope.path, identity })
 }
 
 /// Everything a move needs, checked on handles: way, identity, protection,
-/// evidence unchanged since approval, and the G5 gate.
-fn check(repo: &mut Repository, root: &Root, target: &StoredTarget) -> std::result::Result<Located, String> {
+/// keep decisions, evidence (with the Git state) unchanged since approval,
+/// and the G5 gate.
+fn check(
+    repo: &mut Repository,
+    root: &Root,
+    target: &StoredTarget,
+    held: &Holds,
+    indexes: &IndexCache,
+) -> std::result::Result<Located, String> {
     let roots = repo.disposable_roots().map_err(|e| e.to_string())?;
     let resources = repo.resources().map_err(|e| e.to_string())?;
-    let located = locate(&root.0, root.1, &target.rel_path)?;
-    let (identity, _, evidence) = located.inspect()?;
+    if let Some(unknown) = held.unknown.first() {
+        return Err(unknown.clone());
+    }
+    let located = locate(&root.path, root.identity, &target.rel_path)?;
+    not_held(&held.holds, &[&located.shell, &located.path])?;
+    let (identity, _, evidence) = located.inspect(indexes)?;
     if identity != target.identity {
         return Err("Ein anderer Ordner steht jetzt an diesem Ort.".into());
     }
@@ -188,7 +238,7 @@ pub fn reconcile(repo: &mut Repository, plan_id: i64) -> Result<PlanState> {
     let root = revalidate(repo, &plan).ok();
     let (mut gone, mut kept) = (0_usize, 0_usize);
     for target in plan.targets.iter().filter(|t| matches!(t.state, JournalState::Started | JournalState::Planned)) {
-        let located = root.as_ref().map(|root| locate(&root.0, root.1, &target.rel_path));
+        let located = root.as_ref().map(|root| locate(&root.path, root.identity, &target.rel_path));
         let present = match located {
             Some(Ok(located)) => match located.current() {
                 Ok(None) => Some(false),

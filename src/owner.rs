@@ -152,6 +152,30 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: impl OwnerEvents) {
                         reply_ok(reply);
                         events.shutdown();
                     }
+                    // Accepting runs is the person's decision in the dashboard; an
+                    // agent on the pipe could otherwise switch it on for itself.
+                    Request::RunsAllow { allowed: true } if !from_ui => {
+                        if let Some(reply) = reply {
+                            let _ = reply.send(Err(crate::Error::blocked(
+                                "KI-Läufe lassen sich nur im Dashboard einschalten (Speicher → Aufräumen → Läufe & Docker …).",
+                            )));
+                        }
+                    }
+                    // Ending a hold is the person's decision in the dashboard too:
+                    // releasing a run, ending a monitoring, giving up a kept folder,
+                    // or revoking a Docker context (its binds would stop holding).
+                    Request::RunRelease { .. }
+                    | Request::DbUnregister { .. }
+                    | Request::KeepFolder { keep: false, .. }
+                    | Request::DockerRevoke { .. }
+                        if !from_ui =>
+                    {
+                        if let Some(reply) = reply {
+                            let _ = reply.send(Err(crate::Error::blocked(
+                                "Schutz aufheben geht nur im Dashboard (Speicher → Aufräumen).",
+                            )));
+                        }
+                    }
                     request => {
                         // Reads (search, filters, findings) stay quiet so typing
                         // never blocks the dashboard's buttons.

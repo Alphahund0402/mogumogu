@@ -219,14 +219,17 @@ fn recycle_plan(now: i64) -> PlanSummary {
         ],
         kept: vec![
             "Quellen, Projekt- und Lockfiles".into(),
-            "Versionsverwaltung (.git)".into(),
-            "Alles unter „Prüfen“: Testdaten, Datenbanken, Logs, große Dateien".into(),
+            "Versionsverwaltung (.git) und jeder Ordner mit Dateien, die Git versioniert".into(),
+            "Alles unter „Prüfen“: Testdaten, Datenbanken, Logs, große Dateien, Reste von KI-Agenten".into(),
+            "Ordner, die du behältst".into(),
             "Jeder Ordner, der nicht im Plan steht".into(),
         ],
         recovery: "Die Ordner landen im Windows-Papierkorb und lassen sich dort wiederherstellen. Neu erzeugen lassen sie sich mit dem Werkzeug aus dem Beleg (etwa npm ci, cargo build oder uv sync). Der Speicher wird erst frei, wenn du den Papierkorb leerst.".into(),
         done: 0,
         failed: 0,
         note: None,
+        free_before: None,
+        free_after: None,
     }
 }
 
@@ -470,6 +473,7 @@ fn enrich(s: &mut Snapshot, now: i64) {
         class,
         label: label.into(),
         bytes,
+        allocated: bytes,
         evidence: evidence.into(),
         modified_at: Some(now - 30 * DAY),
     };
@@ -517,9 +521,12 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 path: r"C:\dev\my-app".into(),
                 total: Some(12 * gib),
                 regenerable: 9 * gib,
+                regenerable_allocated: 9 * gib,
                 review: gib,
                 vcs: gib / 3,
                 test_data: gib,
+                agent: 0,
+                kept: Vec::new(),
                 items: vec![
                     tidy_item("node_modules", TidyClass::Regenerable, "Abhängigkeiten (node_modules)", 6 * gib, "package-lock.json daneben"),
                     tidy_item(".next", TidyClass::Regenerable, "Build-Ausgabe", 3 * gib, "package.json daneben"),
@@ -536,9 +543,12 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 path: r"D:\archive\experiments".into(),
                 total: Some(5 * gib),
                 regenerable: 4 * gib,
+                regenerable_allocated: 4 * gib,
                 review: gib / 2,
                 vcs: 0,
                 test_data: 0,
+                agent: 0,
+                kept: Vec::new(),
                 items: Vec::new(),
                 last_change: Some(now - 400 * DAY),
                 complete: true,
@@ -715,6 +725,8 @@ fn main() {
     slint::platform::set_platform(Box::new(RenderPlatform(window.clone()))).unwrap();
     let renderer = Renderer { window, output };
     let ui = Dashboard::new().unwrap();
+    // One frame per state: transitions would be captured halfway.
+    ui.global::<Motion>().set_on(false);
     ui.show().unwrap();
     let now = SystemClock.now();
     let mut snapshot = fixture(now);

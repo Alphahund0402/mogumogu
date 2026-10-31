@@ -1,6 +1,6 @@
 //! Translates UI intents into owner requests and wires callbacks in one place.
 use super::{Desktop, defer_hide, dialogs, later, ui::*, with};
-use mogumogu::domain::{DiskQuery, DiskSort, DiskView, PackageFilter, ScopeKind, SearchArea};
+use mogumogu::domain::{DatabasePlace, DiskQuery, DiskSort, DiskView, PackageFilter, ScopeKind, SearchArea};
 use mogumogu::limits::PACKAGE_PAGE;
 use mogumogu::service::Request;
 use slint::{ComponentHandle, SharedString, TimerMode};
@@ -38,6 +38,63 @@ impl Desktop {
         if let Some(value) = id.strip_prefix("keep-package:") {
             if let Some((retained, key)) = value.split_once(':') {
                 self.submit(Request::RetainPackage { key: key.to_string(), retained: retained == "1" });
+            }
+            return;
+        }
+        if id == "agents" {
+            self.submit(Request::AgentsOverview);
+            return;
+        }
+        if id == "databases" {
+            self.submit(Request::Databases);
+            return;
+        }
+        if id == "db-measure" {
+            self.submit(Request::DbMeasure { id: None });
+            return;
+        }
+        if let Some(path) = id.strip_prefix("db-register-path:") {
+            let place = DatabasePlace::Path(path.to_string());
+            self.submit(Request::DbRegister { place, name: None, engine: None });
+            return;
+        }
+        // `db-register-volume:CONTEXT/VOLUME`; neither name holds `/`.
+        if let Some((context, volume)) = id.strip_prefix("db-register-volume:").and_then(|v| v.split_once('/')) {
+            let place = DatabasePlace::Volume { context: context.to_string(), volume: volume.to_string() };
+            self.submit(Request::DbRegister { place, name: None, engine: None });
+            return;
+        }
+        if let Some(Ok(id)) = id.strip_prefix("db-unregister:").map(str::parse::<i64>) {
+            self.submit(Request::DbUnregister { id });
+            return;
+        }
+        if let Some(Ok(run_id)) = id.strip_prefix("run-release:").map(str::parse::<i64>) {
+            self.submit(Request::RunRelease { run_id });
+            return;
+        }
+        if let Some(allowed) = id.strip_prefix("runs-allow:") {
+            self.submit(Request::RunsAllow { allowed: allowed == "1" });
+            return;
+        }
+        if let Some(context) = id.strip_prefix("docker-approve:") {
+            self.submit(Request::DockerApprove { context: context.to_string() });
+            return;
+        }
+        if let Some(context) = id.strip_prefix("docker-revoke:") {
+            self.submit(Request::DockerRevoke { context: context.to_string() });
+            return;
+        }
+        if let Some(context) = id.strip_prefix("docker-inventory:") {
+            self.submit(Request::DockerInventory { context: Some(context.to_string()), usage: true });
+            return;
+        }
+        // `keep-folder:PROJECT:1|0:REL_PATH`; a project path never holds `:`.
+        if let Some(value) = id.strip_prefix("keep-folder:") {
+            let mut parts = value.splitn(3, ':');
+            if let (Some(Ok(project_id)), Some(keep), Some(rel_path)) =
+                (parts.next().map(str::parse::<i64>), parts.next(), parts.next())
+            {
+                self.submit(Request::KeepFolder { project_id, rel_path: rel_path.to_string(), keep: keep == "1" });
             }
             return;
         }
@@ -142,13 +199,15 @@ impl Desktop {
         match hit.area {
             SearchArea::Project => {
                 store.invoke_open(1, 0);
-                if let Ok(id) = hit.key.parse() {
+                if let Ok(id) = hit.key.parse::<i64>() {
+                    jump_to(&store, "project", id);
                     later(move |d| d.open_project(id));
                 }
             }
             SearchArea::Resource => {
                 let id: i64 = hit.key.parse().unwrap_or(-1);
                 store.invoke_open(1, 1);
+                jump_to(&store, "resource", id);
                 later(move |d| d.open_resource(id));
             }
             SearchArea::Package => {
@@ -188,6 +247,14 @@ impl Desktop {
         let path = (kind != ScopeKind::Winget).then_some(finding.path);
         self.submit(Request::ApproveSystem { kind, path });
     }
+}
+
+/// Selects the row a search hit leads to and lights it up once. The detail
+/// dialog opens over it; the selection stays when the dialog closes.
+fn jump_to(store: &Store<'_>, kind: &str, id: i64) {
+    store.set_selection_kind(kind.into());
+    store.set_selection_key(id.to_string().into());
+    store.set_flash(true);
 }
 
 pub(super) fn wire(ui: &Dashboard) {

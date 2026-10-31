@@ -254,9 +254,9 @@ er steht aus.
 **Speicher → Aufräumen** (CLI `tidy [--project ID]`) misst auf Anfrage jedes
 Projekt mit Lesefreigabe in einem begrenzten Durchgang ab der
 identitätsgeprüften Wurzel: handle-relativ, ohne Links und Cloud-Platzhalter,
-höchstens 2 Mio. Einträge und 120 Sekunden, ohne eine Datei zu öffnen. Jeder
-Ordner wird mit seinen Nachbardateien gelesen
-([Regeln](../src/inventory/tidy.rs)):
+höchstens 2 Mio. Einträge und 120 Sekunden. Geöffnet werden nur `.git/config`
+und `.git/index` eines Repositorys im Projekt (siehe unten). Jeder Ordner wird
+mit seinen Nachbardateien gelesen ([Regeln](../src/inventory/tidy.rs)):
 
 | Klasse | Ordner oder Datei | Beleg |
 |---|---|---|
@@ -274,6 +274,89 @@ Ordner wird mit seinen Nachbardateien gelesen
 | Prüfen | `allure-report`, `test-reports`, `.stryker-tmp`, `.hypothesis` | Der Allure-Bericht hält den Verlauf früherer Läufe; Erzeuger von `test-reports` unbekannt; der Stryker-Arbeitsordner kann nach einem abgebrochenen Lauf Originaldateien enthalten; gefundene Hypothesis-Beispiele entstehen nicht sicher neu |
 | Prüfen (Testdaten) | `testdata`, `test-data`, `test_data`, `testfiles`, `test-files`, `test-fixtures`, `test_fixtures`, `test-resources`, `test_resources`, `fixtures`, `__fixtures__`, `__snapshots__`, `cassettes` überall; `data`, `resources`, `samples`, `assets`, `fixtures`, `snapshots`, `golden`, `goldens` nur direkt in einem Testordner (`test`, `tests`, `spec`, `specs`, `__tests__`, `e2e`, `cypress`, `testing` … wie unter [Tests](#tests)) | Kann selbst gepflegt sein; eigene Summe, „Viele Testdaten“ ab 1 GB oder ab 100 MB bei mindestens der Hälfte des eigenen Projektinhalts |
 | Prüfen | `logs`, Datenbankdateien, Logs ab 10 MB, jede Datei ab 100 MB | Zweck unbekannt |
+| Prüfen (KI-Agent) | `.claude/worktrees` (Git-Arbeitskopien von Claude Code), `.playwright-mcp` (Screenshots, Mitschnitte, Konsolenprotokolle), `.aider.tags.cache.v3`/`.v4`, `.serena/cache`, `.specstory`, `.crush`, `.swarm`, `.hive-mind` | Nur am Namen erkannt, Herkunft also nicht belegt; eine Arbeitskopie kann unveröffentlichte Commits enthalten, ein Mitschnitt die einzige Spur eines Fehlschlags. Eigene Summe, nie wiederherstellbar |
+
+**Git.** Liegt ein wiederherstellbarer Ordner in Git-Repositorys des Projekts
+(`.git`-Ordner im Projekt oder darunter), liest der Bericht einmal je
+Repository dessen Index (Version 2–4, SHA-1 und SHA-256, höchstens 128 MB; Git
+wird nicht gestartet). **Jedes** Repository auf dem Weg muss bestätigen, dass es
+keine Datei in dem Ordner führt – auch ein äußeres, das Dateien unter einem
+inneren Repository eingecheckt hat. Führt ein Index eine Datei darin, wird der
+Ordner zu „Prüfen · N Dateien darin sind in Git versioniert“ – etwa das
+eingecheckte `dist/` einer GitHub Action. Sonst trägt der Beleg „nicht in Git“.
+Lässt sich der Stand nicht lesen, bleibt der Ordner „Prüfen · Git-Stand
+unbekannt“: ein beschädigter, geteilter (split) oder Sparse-Index, eine
+unbekannte Pflichterweiterung, ein fehlender Index trotz Commits, Tags oder
+abgekoppeltem HEAD, ein laufender Git-Befehl (`index.lock`), eine `.git`-Datei
+(Worktrees, Submodule), deren Index woanders liegt, und ein Repository
+**oberhalb** der freigegebenen Wurzel – etwa ein Paket, das einzeln aus einem
+Monorepo registriert ist. Dort prüft mogumogu nur, ob es `.git` gibt, und liest
+nichts darin; aufräumen lässt sich dann über das äußere Projekt. `.gitignore`
+belegt nichts. Der Papierkorb-Plan prüft dasselbe direkt vor jedem Verschieben
+erneut.
+
+**Behalten.** Im Aufräumen-Dialog behält **„…“ behalten** einen der größten
+wiederherstellbaren Ordner (auch per CLI `cleanup keep --project ID --path
+web/dist`; wieder vorschlagen nur im Dashboard, denn das hebt einen Schutz auf). Ein behaltener Ordner, alles darin und jeder
+Ordner, der ihn enthält, wird zu „Prüfen · von dir behalten“ und erscheint in
+keinem Plan; ein schon bestätigter Plan stoppt vor dem Verschieben. Behalten
+braucht die Lesefreigabe des Projekts: mogumogu öffnet den Weg dorthin ohne
+Verknüpfungen und speichert den echten Ort, wie das Laufwerk ihn nennt (lange
+Namen statt `LONGFO~1`). Darum gilt die Entscheidung für **jedes** Projekt, das
+den Ordner erreicht – auch für eine zweite Registrierung in anderer
+Schreibweise oder ein darin verschachteltes Projekt. Ein Ordner, der noch nicht
+existiert, wird so behalten, wie er geschrieben ist, aber nie unter einem
+Kurznamen. Die Entscheidung steht in der Datenbank (Schema v8, höchstens 500 je
+Projekt und 5.000 insgesamt), nicht im Projekt. Sie nimmt nur heraus, sie macht
+nie etwas wiederherstellbar; Groß- und Kleinschreibung werden Zeichen für
+Zeichen wie unter Windows verglichen.
+
+**Läufe und Docker.** Wie ein behaltener Ordner bleibt auch stehen, was ein
+registrierter KI-Lauf gemeldet hat („gehört zu Lauf #3 claude-code
+(fehlgeschlagen) (Arbeitsordner)“), und was ein Container eines freigegebenen
+Docker-Kontexts einbindet („Container „web-1“ (exited) bindet ihn ein“), auch
+über ein Volume, das einen Ordner bindet. Eine Haltung gilt unter der
+Schreibweise, die sie nennt, und am echten Ort; jeder Ordner wird an seinem
+echten Ort und in der registrierten Schreibweise verglichen, sodass Kurznamen,
+Junctions und SUBST-Laufwerke nichts ausnehmen. Führt ein symbolischer Link
+oder eine Junction auf dem Weg zu einer Freigabe oder einem nicht festen
+Laufwerk, wird der echte Ort nicht bestimmt; die Haltung gilt dann in der
+Schreibweise, die sie nennt. Den echten Ort bestimmt mogumogu je Entwurf oder
+Ausführung einmal je Haltung. Ein Lauf hält seine Artefakte, bis du ihn nach
+seinem Ende im Dashboard freigibst.
+Einen Rest eines Agenten, den ein Lauf gemeldet hat, nennt der Bericht mit
+diesem Lauf statt mit „nur am Namen erkannt“. Ist eine freigegebene Engine
+nicht erreichbar, nennt sie nicht mehr die freigegebene Pipe oder antwortet
+sie zu viel oder in falscher Form, steht das als Hinweis am Projekt, nichts im
+Projekt ist wiederherstellbar, und jeder Papierkorb-Plan wird blockiert.
+
+**Überwachte Datenbanken.** Eine registrierte Datenbankdatei oder ein
+Datenordner steht als „Prüfen · überwachte Datenbank „…““ im Bericht, mit
+jedem Ordner, der sie enthält, und erscheint in keinem Plan. Die Registrierung
+speichert den Ort wie geschrieben und den echten Ort, gebunden an die Identität
+des Ordners (bei einer Datei die ihres Ordners); Verknüpfungen, Freigaben und
+Wechsellaufwerke werden abgelehnt. Erkannt wird die Engine an Namen: an der
+Dateiendung (`.sqlite`, `.db`, `.duckdb` …), an Dateien im Datenordner
+(`PG_VERSION`, `ibdata1`, `WiredTiger`, `dump.rdb`) oder am Namen eines
+Volumes (`pgdata`, `mysql`, `mongo` …). Ein Datenordner namens `data` oder
+`db` heißt nach Engine und übergeordnetem Ordner, etwa „PostgreSQL 16“. Jeder
+vollständige Bericht misst überwachte Dateien und Ordner und speichert die
+Messung (je Datenbank die letzten 100); das Wachstum vergleicht die älteste und
+neueste Messung der letzten 90 Tage. Eine Messung, die nicht gelingt, steht mit
+Grund im Verlauf, ohne Größe.
+
+**Verlauf.** Jeder gemessene Bericht wird je Projekt gespeichert: Größen und
+die 20 größten Einträge, die neuesten 30 je Projekt. Das Wachstum vergleicht
+den ältesten und den neuesten vollständigen Bericht der letzten 90 Tage und
+nennt die drei am stärksten wachsenden Einträge. Ein Eintrag, der früher nicht
+unter den größten war, zählt dabei ab null.
+
+**Belegter Platz.** Neben der logischen Größe summiert der Bericht den Platz,
+den das Laufwerk für wiederherstellbare Ordner reserviert hat (auf Cluster
+gerundet, kleiner bei Kompression). Eine Datei ab 64 KiB, die das Projekt über
+mehrere Hardlinks erreicht, zählt dabei einmal (erkannt an der Datei-ID);
+kleinere zählen je Name, und ein Hardlink in ein anderes Projekt zählt in
+beiden. Die logische Größe zählt weiter je Name.
 
 Alles andere zählt zum Projekt, auch Testordner und Testdateien; `.git`, `.hg`
 und `.svn` erscheinen getrennt als Versionsverwaltung. Als letzte Änderung gilt
@@ -293,8 +376,8 @@ Maven-Repository bleibt „Prüfen“, weil es mit `mvn install` selbst gebaute
 Artefakte enthalten kann. Ein Cache wird nur gemessen, nie als Paketbestand
 gelistet, und mogumogu führt keinen Aufräumbefehl aus. Projekte ohne Lesefreigabe
 werden gezählt, aber nicht gemessen. Der Bericht bleibt im Speicher des
-Besitzerprozesses, bis er neu erstellt wird oder mogumogu endet; nur die
-gemessene Projektgröße wird gespeichert. Er entfernt nichts. Eine Freigabe
+Besitzerprozesses, bis er neu erstellt wird oder mogumogu endet; gespeichert
+werden die gemessene Projektgröße und der Verlauf (siehe oben). Er entfernt nichts. Eine Freigabe
 zu widerrufen nimmt das Projekt aus dem Bericht.
 
 **Alle übernehmen** (CLI `scratch adopt-found`) erfasst jeden aktuellen

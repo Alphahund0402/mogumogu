@@ -46,7 +46,15 @@ component AttentionLine inherits Rectangle {
             Text { text: root.data.count + " · " + root.data.title; font-size: 12px; font-weight: 700; color: Theme.ink; overflow: elide; }
             Text { text: root.data.detail; font-size: 11px; color: Theme.muted; overflow: elide; }
         }
-        UiButton { y: (parent.height - self.height) / 2; small: true; label: root.data.action; available: true; activated => { Store.open(root.data.page, root.data.tab); } }
+        UiButton { y: (parent.height - self.height) / 2; small: true; label: root.data.action; available: true; activated => {
+                Store.open(root.data.page, root.data.tab);
+                if root.data.select-kind != "" {
+                    Store.selection-kind = root.data.select-kind;
+                    Store.selection-key = root.data.select-key;
+                    Store.flash = true;
+                }
+            }
+        }
     }
 }
 

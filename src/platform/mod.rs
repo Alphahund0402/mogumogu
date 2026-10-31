@@ -14,6 +14,32 @@ mod fallback;
 #[cfg(not(windows))]
 pub use self::fallback::*;
 
+/// The real place of `path` (see `real_location`), or of its longest
+/// existing part with the rest appended: a hold on a folder that does not
+/// exist yet still covers the folders around it under every spelling.
+/// `None` when nothing on the way resolves.
+pub fn real_place(path: &std::path::Path) -> Option<String> {
+    let mut rest: Vec<String> = Vec::new();
+    let mut current = path;
+    loop {
+        match real_location(current) {
+            Ok(real) => {
+                let mut place = real.trim_end_matches('\\').to_string();
+                for part in rest.iter().rev() {
+                    place.push('\\');
+                    place.push_str(part);
+                }
+                return Some(place);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                rest.push(current.file_name()?.to_string_lossy().into_owned());
+                current = current.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
 /// Volume serial plus 128-bit file id: the identity of a filesystem object,
 /// independent of the path used to reach it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -73,6 +99,8 @@ pub struct DirEntryInfo {
     pub allocated: u64,
     /// Last write time, unix seconds.
     pub modified: i64,
+    /// The file's id on its volume: hard links to one file share it.
+    pub file_id: [u8; 16],
 }
 
 impl DirEntryInfo {

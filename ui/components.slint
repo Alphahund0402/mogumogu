@@ -1,6 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { Theme, Icons } from "theme.slint";
 import { Store, Actions, ProjectRow } from "store.slint";
+import { Motion } from "motion.slint";
 
 // A white cloud on the sky canvas.
 export component Card inherits Rectangle {
@@ -42,12 +43,14 @@ export component Mascot inherits Image {
 // creme plate so the paper edge reads as intended.
 export component MascotPlate inherits Rectangle {
     in property <int> pose: 1;
+    // Vertical offset of the figure on its plate (Mochi chewing).
+    in property <length> bob: 0px;
     // The software renderer does not clip images to rounded corners, so the
     // paper (≈ creme) sits inside the plate with a margin instead.
     property <length> margin: self.width / 14;
     background: Theme.creme;
     border-radius: min(18px, self.width / 4);
-    Mascot { pose: root.pose; x: root.margin; y: root.margin; width: parent.width - 2 * root.margin; height: parent.height - 2 * root.margin; }
+    Mascot { pose: root.pose; x: root.margin; y: root.margin + root.bob; width: parent.width - 2 * root.margin; height: parent.height - 2 * root.margin; }
 }
 
 // One short sentence from Mochi. Bubble and tail are one outline, so the
@@ -118,6 +121,9 @@ export component Activatable inherits Rectangle {
     out property <bool> pressed: touch.pressed && root.active;
     out property <bool> focused: focus.has-focus && root.active;
     property <bool> active: root.interactive && root.available && (Store.modal == 0 || root.in-dialog);
+    // The row a jump landed on, while Store.flash is set.
+    property <bool> flashing: Store.flash && root.selection-kind != ""
+        && Store.selection-kind == root.selection-kind && Store.selection-key == root.selection-key;
     callback activated();
     forward-focus: focus;
     border-width: Theme.stroke;
@@ -142,6 +148,16 @@ export component Activatable inherits Rectangle {
     accessible-checkable: root.interactive && root.checkable;
     accessible-checked: root.selected;
     accessible-action-default => { root.trigger(); }
+    // A jump target lights up in sky and runs out into the selection. Inset by
+    // the stroke so the outline stays visible.
+    Rectangle {
+        x: Theme.stroke; y: Theme.stroke;
+        width: root.width - 2 * Theme.stroke; height: root.height - 2 * Theme.stroke;
+        border-radius: max(0px, root.border-radius - Theme.stroke);
+        background: root.flashing ? Theme.sky : Theme.sky.transparentize(1.0);
+        animate background { duration: root.flashing ? 0ms : Motion.highlight; easing: ease-out; }
+        accessible-role: none;
+    }
     focus := FocusScope {
         width: root.width; height: root.height;
         enabled: root.active;

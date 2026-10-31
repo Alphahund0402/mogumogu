@@ -16,7 +16,8 @@ export struct PackageRow { key: string, name: string, version: string, source: s
 // One finding: a name-based discovery or a scanned environment/build output.
 export struct CandidateRow { index: int, artifact: bool, path: string, evidence: string, status: string }
 // Something that needs a decision outside the hint list, with where to act.
-export struct AttentionCard { kind: string, label: string, count: string, title: string, detail: string, action: string, page: int, tab: int }
+// A non-empty selection names the row the jump lands on.
+export struct AttentionCard { kind: string, label: string, count: string, title: string, detail: string, action: string, page: int, tab: int, select-kind: string, select-key: string }
 // One metadata-only system finding; `approvable` offers a read approval.
 export struct SystemRow { id: string, name: string, location: string, evidence: string, evidence-kind: string, note: string, approvable: bool, approved: bool, coverage: string, scope-id: int }
 // One hit of the global search.
@@ -183,6 +184,9 @@ export global Store {
     // Stable keys keep the last opened row visible across view/model rebuilds.
     in-out property <string> selection-kind;
     in-out property <string> selection-key;
+    // Set by a jump (search, overview): the selected row lights up once.
+    // The window resets it after a moment and the colour runs out.
+    in-out property <bool> flash: false;
 
     // Modal layer: 0 none, 1 detail, 2 form, 3 read-only content
     in-out property <int> modal: 0;

@@ -132,6 +132,9 @@ fn plan(plan: &PlanSummary) -> String {
     if plan.done + plan.failed > 0 {
         lines.push(format!("  Ergebnis: {} verschoben, {} nicht verschoben", plan.done, plan.failed));
     }
+    if let Some(space) = plan.space_text() {
+        lines.push(format!("  Laufwerk: {space}"));
+    }
     if let Some(note) = &plan.note {
         lines.push(format!("  Hinweis: {note}"));
     }

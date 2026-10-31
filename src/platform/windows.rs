@@ -328,21 +328,28 @@ impl DirHandle {
             FILE_NAME_NORMALIZED, GetFinalPathNameByHandleW, VOLUME_NAME_DOS,
         };
         let mut buffer = vec![0_u16; 1024];
-        // SAFETY: the buffer is writable for its stated length; the handle is open.
-        let len = unsafe {
-            GetFinalPathNameByHandleW(
-                raw(&self.handle),
-                buffer.as_mut_ptr(),
-                buffer.len() as u32,
-                FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
-            )
-        } as usize;
-        if len == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if len >= buffer.len() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Pfad zu lang"));
-        }
+        let len = loop {
+            // SAFETY: the buffer is writable for its stated length; the handle is open.
+            let len = unsafe {
+                GetFinalPathNameByHandleW(
+                    raw(&self.handle),
+                    buffer.as_mut_ptr(),
+                    buffer.len() as u32,
+                    FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
+                )
+            } as usize;
+            if len == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // Too small: the call returned the size it needs, at most once.
+            if len < buffer.len() {
+                break len;
+            }
+            if buffer.len() > 1024 || len > 32_768 {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "Pfad zu lang"));
+            }
+            buffer = vec![0_u16; len + 1];
+        };
         let text = String::from_utf16(&buffer[..len]).map_err(|_| io::Error::other("Pfad nicht darstellbar"))?;
         Ok(match text.strip_prefix(r"\\?\UNC\") {
             Some(share) => format!(r"\\{share}"),
@@ -395,6 +402,7 @@ impl DirHandle {
                         size: header.EndOfFile.max(0) as u64,
                         allocated: header.AllocationSize.max(0) as u64,
                         modified: filetime_to_unix(header.LastWriteTime),
+                        file_id: header.FileId.Identifier,
                     });
                 }
                 if header.NextEntryOffset == 0 {
@@ -959,6 +967,385 @@ pub fn pipe_connect(name: &str, timeout: Duration) -> io::Result<Option<File>> {
     }
 }
 
+// ------------------------------------------------------ docker engine pipe
+
+/// The client end of a local Docker engine's named pipe `\\.\pipe\NAME`,
+/// opened for overlapped I/O so that every write and read ends at a
+/// deadline: a hanging engine cannot stall the owner. What is sent is up to
+/// the caller; `crate::docker` sends fixed GET requests only.
+#[derive(Debug)]
+pub struct EnginePipe {
+    handle: OwnedHandle,
+    event: OwnedHandle,
+}
+
+impl EnginePipe {
+    /// `name` is the bare pipe name, e.g. `dockerDesktopLinuxEngine`. An
+    /// engine that is not running is `NotFound`.
+    pub fn connect(name: &str, deadline: Instant) -> io::Result<Self> {
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
+        use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
+        use windows_sys::Win32::System::Threading::CreateEventW;
+        let plain = |c: char| c.is_ascii_alphanumeric() || "_.-".contains(c);
+        let named = name.chars().any(|c| c.is_ascii_alphanumeric());
+        if !named || name.len() > 128 || !name.chars().all(plain) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "ungültiger Pipe-Name"));
+        }
+        let path = wide(OsStr::new(&format!(r"\\.\pipe\{name}")));
+        let handle = loop {
+            // SAFETY: NUL-terminated pipe path, no optional pointers.
+            // SECURITY_IDENTIFICATION keeps the engine from impersonating this
+            // process beyond identification.
+            let handle = unsafe {
+                CreateFileW(
+                    path.as_ptr(),
+                    GENERIC_READ | GENERIC_WRITE,
+                    0,
+                    ptr::null(),
+                    OPEN_EXISTING,
+                    FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                    ptr::null_mut(),
+                )
+            };
+            if handle != INVALID_HANDLE_VALUE {
+                break owned(handle)?;
+            }
+            let error = io::Error::last_os_error();
+            match error.raw_os_error().map(|c| c as u32) {
+                Some(ERROR_FILE_NOT_FOUND) => {
+                    return Err(io::Error::new(io::ErrorKind::NotFound, "Docker-Engine läuft nicht"));
+                }
+                Some(ERROR_PIPE_BUSY) if Instant::now() < deadline => {
+                    let left = deadline.saturating_duration_since(Instant::now()).as_millis().clamp(1, 5_000) as u32;
+                    // SAFETY: NUL-terminated pipe path.
+                    unsafe { WaitNamedPipeW(path.as_ptr(), left) };
+                }
+                _ => return Err(error),
+            }
+        };
+        if !trusted_owner(&handle)? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Die Pipe gehört einem fremden Konto; mogumogu fragt sie nicht",
+            ));
+        }
+        // SAFETY: no security attributes, manual reset, not signalled, unnamed.
+        let event = owned(unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) })?;
+        Ok(Self { handle, event })
+    }
+
+    pub fn send(&mut self, mut bytes: &[u8], deadline: Instant) -> io::Result<()> {
+        while !bytes.is_empty() {
+            let (data, len) = (bytes.as_ptr(), bytes.len().min(1 << 20) as u32);
+            let written = self.complete(deadline, |handle, overlapped| {
+                // SAFETY: `bytes` outlives the operation: `complete` waits for it.
+                unsafe { WriteFile(handle, data, len, ptr::null_mut(), overlapped) }
+            })?;
+            if written == 0 {
+                return Err(io::ErrorKind::WriteZero.into());
+            }
+            bytes = &bytes[(written as usize).min(bytes.len())..];
+        }
+        Ok(())
+    }
+
+    /// Reads what the engine sent; `Ok(0)` once it closed its end.
+    pub fn receive(&mut self, buffer: &mut [u8], deadline: Instant) -> io::Result<usize> {
+        use windows_sys::Win32::Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED};
+        let (data, len) = (buffer.as_mut_ptr(), buffer.len().min(1 << 20) as u32);
+        let read = self.complete(deadline, |handle, overlapped| {
+            // SAFETY: `buffer` outlives the operation: `complete` waits for it.
+            unsafe { ReadFile(handle, data, len, ptr::null_mut(), overlapped) }
+        });
+        match read {
+            Ok(read) => Ok((read as usize).min(buffer.len())),
+            Err(e)
+                if matches!(e.raw_os_error().map(|c| c as u32), Some(ERROR_BROKEN_PIPE | ERROR_PIPE_NOT_CONNECTED)) =>
+            {
+                Ok(0)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Starts one overlapped operation and waits for it until `deadline`. A
+    /// late one is cancelled and its end awaited, so the buffer it uses is
+    /// never touched after this returns.
+    fn complete(
+        &self,
+        deadline: Instant,
+        start: impl FnOnce(HANDLE, *mut windows_sys::Win32::System::IO::OVERLAPPED) -> i32,
+    ) -> io::Result<u32> {
+        use windows_sys::Win32::Foundation::{ERROR_IO_PENDING, WAIT_OBJECT_0};
+        use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
+        use windows_sys::Win32::System::Threading::{ResetEvent, WaitForSingleObject};
+        // SAFETY: an all-zero OVERLAPPED is a valid initial state.
+        let mut overlapped: OVERLAPPED = unsafe { zeroed() };
+        overlapped.hEvent = raw(&self.event);
+        // The kernel may write to it until the operation ended: only this raw
+        // pointer is used from here on, never a reference.
+        let pending: *mut OVERLAPPED = &mut overlapped;
+        // SAFETY: the event handle is owned by `self` and valid.
+        unsafe { ResetEvent(raw(&self.event)) };
+        if start(raw(&self.handle), pending) == 0 {
+            let error = io::Error::last_os_error();
+            match error.raw_os_error().map(|c| c as u32) {
+                Some(ERROR_IO_PENDING) => {
+                    let left = deadline.saturating_duration_since(Instant::now()).as_millis().min(600_000) as u32;
+                    // SAFETY: the event handle is owned by `self` and valid.
+                    if unsafe { WaitForSingleObject(raw(&self.event), left) } != WAIT_OBJECT_0 {
+                        let mut done = 0_u32;
+                        // SAFETY: cancels only this operation, then waits until it
+                        // no longer uses the caller's buffer.
+                        unsafe {
+                            CancelIoEx(raw(&self.handle), pending);
+                            GetOverlappedResult(raw(&self.handle), pending, &mut done, 1);
+                        }
+                        return Err(io::Error::new(io::ErrorKind::TimedOut, "Docker-Engine antwortet nicht"));
+                    }
+                }
+                // A message longer than the buffer: the part read counts.
+                Some(ERROR_MORE_DATA) => {}
+                _ => return Err(error),
+            }
+        }
+        let mut done = 0_u32;
+        // SAFETY: the operation has completed; this only reads its result.
+        if unsafe { GetOverlappedResult(raw(&self.handle), pending, &mut done, 0) } == 0 {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(ERROR_MORE_DATA as i32) {
+                return Err(error);
+            }
+        }
+        Ok(done)
+    }
+}
+
+/// Whether a pipe was created by this user, LocalSystem or the
+/// Administrators group, read from the pipe's own security descriptor. A name
+/// another unprivileged account created first (squatting) is not trusted.
+fn trusted_owner(handle: &OwnedHandle) -> io::Result<bool> {
+    use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SE_FILE_OBJECT};
+    use windows_sys::Win32::Security::{
+        IsWellKnownSid, OWNER_SECURITY_INFORMATION, PSID, WinBuiltinAdministratorsSid, WinLocalSystemSid,
+    };
+    let mut owner: PSID = ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+    // SAFETY: the handle is open with READ_CONTROL (part of GENERIC_READ); the
+    // out pointers are writable and the descriptor is freed below.
+    let status = unsafe {
+        GetSecurityInfo(
+            raw(handle),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            &mut owner,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if status != 0 {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+    // SAFETY: pseudo handle of this process.
+    let ours = token_user_sid(unsafe { GetCurrentProcess() });
+    // SAFETY: `owner` points into `descriptor`, which is still alive; `ours`
+    // holds a complete SID.
+    let trusted = unsafe {
+        IsWellKnownSid(owner, WinLocalSystemSid) != 0
+            || IsWellKnownSid(owner, WinBuiltinAdministratorsSid) != 0
+            || ours.as_ref().is_ok_and(|ours| EqualSid(owner, ours.as_ptr() as *mut c_void) != 0)
+    };
+    // SAFETY: allocated by GetSecurityInfo, freed exactly once.
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    Ok(trusted)
+}
+
+/// Every link on the way to `path` – and on the way to each link's target –
+/// leads to a fixed local disk. Resolving `path` then asks nothing over the
+/// network; a link to a share (or a chain deeper than eight) is refused.
+fn local_links(path: &Path, depth: u32) -> io::Result<()> {
+    // The link itself, not what it names: nothing beyond it is opened.
+    let link = |prefix: &Path| -> io::Result<Option<std::path::PathBuf>> {
+        match std::fs::symlink_metadata(prefix) {
+            Ok(meta) if meta.file_type().is_symlink() => std::fs::read_link(prefix).map(Some),
+            Ok(_) => Ok(None),
+            Err(e) => Err(e),
+        }
+    };
+    links_stay_local(path, depth, &link, &|p| fixed_disk(p)).map(|_| ())
+}
+
+/// A link's target as a Win32 path: `\\?\C:\x` → `C:\x`, `\\?\UNC\h\s` →
+/// `\\h\s`; `None` for a volume or device name, which is never followed.
+fn plain_target(target: &Path) -> Option<std::path::PathBuf> {
+    let text = target.to_string_lossy();
+    let Some(rest) = text.strip_prefix(r"\\?\").or_else(|| text.strip_prefix(r"\??\")) else {
+        return Some(target.to_path_buf());
+    };
+    if let Some(share) = rest.strip_prefix(r"UNC\") {
+        return Some(format!(r"\\{share}").into());
+    }
+    let drive = rest.as_bytes();
+    (drive.len() >= 2 && drive[0].is_ascii_alphabetic() && drive[1] == b':').then(|| rest.into())
+}
+
+/// `..` and `.` taken away by name, as Windows does before it opens a path.
+fn lexical(path: &Path) -> std::path::PathBuf {
+    let mut out = std::path::PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// The decision of [`local_links`], with the filesystem passed in: `link`
+/// tells a link's target (`Ok(None)` for no link, `Err` for a part that
+/// does not exist, where the walk ends). Returns the place reached. A link's
+/// target takes the place of the way to it, as Windows reparses, so a
+/// relative target counts from the folder the link really lies in.
+fn links_stay_local(
+    path: &Path,
+    depth: u32,
+    link: &dyn Fn(&Path) -> io::Result<Option<std::path::PathBuf>>,
+    fixed: &dyn Fn(&Path) -> bool,
+) -> io::Result<std::path::PathBuf> {
+    let elsewhere =
+        || io::Error::new(io::ErrorKind::Unsupported, "Verknüpfung auf eine Freigabe oder zu tief verschachtelt");
+    if depth > 8 || !fixed(path) {
+        return Err(elsewhere());
+    }
+    let path = lexical(path);
+    let mut reached = std::path::PathBuf::new();
+    let mut components = path.components();
+    while let Some(component) = components.next() {
+        let next = reached.join(component.as_os_str());
+        // A missing part ends the walk; any other doubt refuses.
+        let target = match link(&next) {
+            Ok(target) => target,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(next.join(components.as_path())),
+            Err(e) => return Err(e),
+        };
+        reached = match target {
+            Some(target) => {
+                let target = plain_target(&target).ok_or_else(elsewhere)?;
+                links_stay_local(&reached.join(target), depth + 1, link, fixed)?
+            }
+            None => next,
+        };
+    }
+    Ok(reached)
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn check(path: &str, links: &[(&str, &str)]) -> bool {
+        let link = |p: &Path| -> io::Result<Option<PathBuf>> {
+            let text = p.to_string_lossy().to_string();
+            Ok(links.iter().find(|(from, _)| from.eq_ignore_ascii_case(&text)).map(|(_, to)| PathBuf::from(to)))
+        };
+        let fixed = |p: &Path| {
+            let t = p.to_string_lossy();
+            t.len() >= 3 && t.as_bytes()[1] == b':' && !t.starts_with(r"\\")
+        };
+        links_stay_local(Path::new(path), 0, &link, &fixed).is_ok()
+    }
+
+    fn reached(path: &str, links: &[(&str, &str)]) -> String {
+        let link = |p: &Path| -> io::Result<Option<PathBuf>> {
+            let text = p.to_string_lossy().to_string();
+            Ok(links.iter().find(|(from, _)| from.eq_ignore_ascii_case(&text)).map(|(_, to)| PathBuf::from(to)))
+        };
+        links_stay_local(Path::new(path), 0, &link, &|_| true).unwrap().to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn only_links_that_stay_on_local_disks_are_followed() {
+        assert!(check(r"C:\dev\app\node_modules", &[]));
+        assert!(check(r"C:\dev\app", &[(r"C:\dev", r"D:\work")]), "a junction to another local disk");
+        assert!(!check(r"C:\dev\app", &[(r"C:\dev", r"\\?\UNC\host\share")]), "a link to a share");
+        assert!(!check(r"C:\dev\app", &[(r"C:\dev", r"\\host\share")]));
+        assert!(!check(r"C:\dev\app", &[(r"C:\dev", r"\??\UNC\host\share")]), "as a junction names it");
+        assert!(!check(r"C:\dev\app", &[(r"C:\dev", r"\\?\Volume{0b1c2d3e-0000-0000-0000-100000000000}\x")]));
+        assert!(check(r"C:\dev\app", &[(r"C:\dev", r"\\?\D:\work")]), "as `read_link` names a junction");
+        // A chain: the first link is local, a link in its target leads to a share.
+        assert!(!check(r"C:\a\c", &[(r"C:\a", r"C:\b"), (r"C:\b\c", r"\\host\x")]));
+        // A link inside a link's target, reached through the target's own path.
+        assert!(!check(r"C:\a\c", &[(r"C:\a", r"C:\x\y"), (r"C:\x", r"\\host\share")]));
+        assert!(check(r"C:\dev\app", &[(r"C:\dev\app", r"..\other")]), "relative to its folder");
+        // A relative link below a junction counts from the junction's target:
+        // `C:\j\l` is `C:\real\deep\l`, so `..\z` is `C:\real\z`, not `C:\z`.
+        let below = [(r"C:\j", r"\??\C:\real\deep"), (r"C:\real\deep\l", r"..\z"), (r"C:\real\z", r"\\host\share")];
+        assert!(!check(r"C:\j\l\file", &below));
+        assert!(check(r"C:\j\l\file", &below[..2]));
+        assert!(!check(r"C:\a", &[(r"C:\a", r"C:\b"), (r"C:\b", r"C:\a")]), "a loop ends at the depth limit");
+        assert!(!check(r"\\host\share\x", &[]), "not a fixed disk at all");
+    }
+
+    #[test]
+    fn the_walk_reaches_the_place_windows_would_open() {
+        assert_eq!(reached(r"C:\dev\app", &[]), r"C:\dev\app");
+        assert_eq!(
+            reached(r"C:\j\l\file", &[(r"C:\j", r"C:\real\deep"), (r"C:\real\deep\l", r"..\z")]),
+            r"C:\real\z\file"
+        );
+        assert_eq!(
+            reached(r"C:\a\b", &[(r"C:\a", r"C:\x\y"), (r"C:\x", r"D:\w")]),
+            r"D:\w\y\b",
+            "nested links resolved"
+        );
+        assert_eq!(reached(r"C:\a\.\b\..\c", &[]), r"C:\a\c");
+    }
+
+    #[test]
+    fn an_unreadable_link_refuses_and_only_a_missing_part_ends_the_walk() {
+        let fixed = |_: &Path| true;
+        let unreadable = |p: &Path| -> io::Result<Option<PathBuf>> {
+            if p.ends_with("dev") { Err(io::ErrorKind::PermissionDenied.into()) } else { Ok(None) }
+        };
+        assert!(links_stay_local(Path::new(r"C:\dev\app"), 0, &unreadable, &fixed).is_err());
+        let missing = |p: &Path| -> io::Result<Option<PathBuf>> {
+            if p.ends_with("gone") { Err(io::ErrorKind::NotFound.into()) } else { Ok(None) }
+        };
+        assert!(links_stay_local(Path::new(r"C:\dev\gone\x"), 0, &missing, &fixed).is_ok());
+    }
+}
+
+/// The real place of an existing file or folder on a fixed local disk, as
+/// the drive names it: long names, links and SUBST resolved. Only its
+/// metadata is opened, nothing inside. A hold uses it to cover the folder
+/// under every spelling; it never permits anything.
+pub fn real_location(path: &Path) -> io::Result<String> {
+    if !fixed_disk(path) {
+        return Err(io::Error::new(io::ErrorKind::Unsupported, "kein festes lokales Laufwerk"));
+    }
+    local_links(path, 0)?;
+    let name = wide_long_path(path);
+    // SAFETY: NUL-terminated path, no optional pointers.
+    let handle = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            ptr::null_mut(),
+        )
+    };
+    DirHandle { handle: owned(handle)? }.final_path()
+}
+
 // ---------------------------------------------------------------- registry
 
 struct RegKey(HKEY);
@@ -1050,6 +1437,26 @@ pub fn recycle(path: &Path) -> io::Result<()> {
         return Err(io::Error::new(io::ErrorKind::Interrupted, "im Dialog abgebrochen"));
     }
     Ok(())
+}
+
+/// Free bytes for this user on the volume holding the folder `path`
+/// (`X:\…` on a fixed disk; a volume mounted in a folder counts as its own).
+/// Measured around a cleanup: the recycle bin frees nothing until emptied.
+pub fn free_space(path: &Path) -> io::Result<u64> {
+    if !fixed_disk(path) {
+        return Err(io::Error::new(io::ErrorKind::Unsupported, "kein festes lokales Laufwerk"));
+    }
+    // The API wants a directory with a trailing backslash.
+    let folder = format!("{}\\", path.as_os_str().to_string_lossy().trim_end_matches('\\'));
+    let folder = wide(OsStr::new(&folder));
+    let mut free = 0_u64;
+    // SAFETY: `folder` is a live NUL-terminated directory path; `free` is a
+    // writable u64 and the other outputs are null, as the API allows.
+    let ok = unsafe { GetDiskFreeSpaceExW(folder.as_ptr(), &mut free, ptr::null_mut(), ptr::null_mut()) };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(free)
 }
 
 /// A plain `X:\…` path on a fixed disk; RAM disks have no recycle bin.
@@ -1207,6 +1614,16 @@ fn own_window() -> windows_sys::Win32::Foundation::HWND {
     // synchronous call on the current thread.
     unsafe { EnumThreadWindows(GetCurrentThreadId(), Some(first_dashboard), &mut found as *mut HWND as LPARAM) };
     found
+}
+
+/// "Animationen in Windows anzeigen". Unknown counts as on.
+pub fn animations_enabled() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SPI_GETCLIENTAREAANIMATION, SystemParametersInfoW};
+    let mut enabled: windows_sys::core::BOOL = 1;
+    // SAFETY: SPI_GETCLIENTAREAANIMATION writes one BOOL to the out-parameter,
+    // which points to a live local; nothing else is read or written.
+    let ok = unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&raw mut enabled).cast::<c_void>(), 0) };
+    ok == 0 || enabled != 0
 }
 
 /// Modal error box for GUI builds without a console.

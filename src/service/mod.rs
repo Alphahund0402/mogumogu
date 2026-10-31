@@ -7,19 +7,22 @@
 //!
 //! `request` defines intent and dispatch, `snapshot` assembles dashboard data,
 //! and `status` reads totals. Use cases live in `inventory`, `discovery`,
-//! `packages`, `resources`, `tidy`, `filters` and `maintenance`. Package analysis is
+//! `packages`, `resources`, `tidy`, `filters`, `runs`, `docker` and `maintenance`. Package analysis is
 //! private and takes only metadata; repository access stays in its facade.
 mod access;
 mod ai_content;
+mod databases;
 mod discovery;
 mod disk;
 mod disk_analysis;
+mod docker;
 mod filters;
 mod inventory;
 mod maintenance;
 mod packages;
 mod request;
 mod resources;
+mod runs;
 mod search;
 mod snapshot;
 mod status;
@@ -35,6 +38,7 @@ pub use filters::{FilterBatch, FilterFile, FilterPlan, FilterSkip};
 pub use inventory::ScanReport;
 pub use request::Request;
 pub use resources::Explanation;
+pub use runs::{ArtifactRequest, ProjectRef};
 pub use status::Status;
 
 use crate::Result;
@@ -44,6 +48,9 @@ use crate::config::Config;
 use crate::domain::SystemReport;
 use crate::storage::Repository;
 use std::sync::Arc;
+
+/// Reads one environment variable.
+type EnvFn = dyn Fn(&str) -> Option<String> + Send;
 
 pub struct Core {
     config: Config,
@@ -63,8 +70,11 @@ pub struct Core {
     disk_index: Option<crate::inventory::disk::DiskIndex>,
     /// Analyses started by this owner; part of each analysis token.
     disk_runs: u64,
-    /// Last tidy-up report; measured only on request, never persisted.
+    /// Last tidy-up report; measured on request. Its sizes are also saved as
+    /// history, the report itself is not.
     tidy: Option<crate::domain::TidyReport>,
+    /// Environment the Docker client configuration is found through.
+    env: Box<EnvFn>,
     /// Progress and cancel requests shared with the dashboard.
     scan_control: Arc<ScanControl>,
 }
@@ -96,6 +106,7 @@ impl Core {
             disk_index: None,
             disk_runs: 0,
             tidy: None,
+            env: Box::new(|key| std::env::var(key).ok()),
             scan_control: Arc::new(ScanControl::default()),
         };
         core.repo.recover_after_restart()?;
@@ -123,6 +134,11 @@ impl Core {
     /// Replaces the recycle bin for tests, which must never fill the real one.
     pub fn use_recycler(&mut self, recycler: Box<dyn Recycler + Send>) {
         self.recycler = recycler;
+    }
+
+    /// Replaces the environment for tests (Docker client configuration).
+    pub fn use_env(&mut self, env: impl Fn(&str) -> Option<String> + Send + 'static) {
+        self.env = Box::new(env);
     }
 
     /// Shared with the dashboard: read progress, request a cancel.

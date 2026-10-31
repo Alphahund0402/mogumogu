@@ -109,6 +109,9 @@ class Contracts(unittest.TestCase):
             'SetFileInformationByHandle': {'src/platform/windows.rs'},
             'SHFileOperationW': {'src/platform/windows.rs'},
             'platform::recycle(': {'src/cleanup/executor.rs'},
+            # Real places of holds: metadata only, and only to block.
+            'real_location(': {'src/platform/windows.rs', 'src/platform/fallback.rs', 'src/platform/mod.rs'},
+            'real_place(': {'src/platform/mod.rs', 'src/cleanup/holds.rs', 'src/docker/mod.rs'},
             # Calls to `recycle` by any other name or import.
             'recycle(': {'src/cleanup/executor.rs', 'src/platform/windows.rs', 'src/platform/fallback.rs'},
             # `DeleteFile` only as the disposition field that discards that temporary file.
@@ -159,6 +162,26 @@ class Contracts(unittest.TestCase):
                 if rel.startswith('src/desktop/'):
                     self.assertNotRegex(code, io, 'presentation has no direct I/O')
                     self.assertNotRegex(code, presentation_io, 'presentation calls use cases through service')
+
+    def test_docker_and_runs_stay_read_only(self):
+        # The engine pipe is used by the one GET client; no other method, no
+        # path that changes Docker, and no SQL that removes runs or artifacts.
+        for path, text in rust_sources().items():
+            rel = path.relative_to(ROOT).as_posix()
+            code = production_rust(text)
+            if 'EnginePipe' in code:
+                self.assertIn(rel, {'src/docker/http.rs', 'src/platform/windows.rs', 'src/platform/fallback.rs'})
+            if rel.startswith('src/docker/'):
+                for method in ['"POST', '"PUT', '"DELETE', '"PATCH', '"HEAD', 'POST ', 'PUT ', 'DELETE ', 'PATCH ']:
+                    self.assertNotIn(method, code, f'{method} in {rel}')
+                for verb in ['/prune', '/kill', '/stop', '/start', '/restart', '/exec', '/attach', '/pause',
+                             '/create', '/update', '/rename', '/build', '/push', '/pull', '/commit', '/load']:
+                    self.assertNotIn(verb, code, f'{verb} in {rel}')
+            if rel.startswith('src/storage/'):
+                self.assertNotRegex(code, r'(?i)DELETE\s+FROM\s+(agent_runs|run_artifacts)\b', rel)
+                self.assertNotRegex(code, r'(?i)DROP\s+TABLE', rel)
+        http = (ROOT / 'src/docker/http.rs').read_text(encoding='utf-8')
+        self.assertEqual(production_rust(http).count('"GET '), 1, 'one request line, always GET')
 
     def test_every_unsafe_block_is_documented(self):
         text = (ROOT / 'src/platform/windows.rs').read_text(encoding='utf-8')

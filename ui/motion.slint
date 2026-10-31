@@ -1,0 +1,15 @@
+import { Store } from "store.slint";
+
+// Motion answers a state change and costs nothing at rest. Rust turns it off
+// when Windows hides animations; states then change at once. The software
+// renderer animates position, size, opacity and colour only.
+export global Motion {
+    in property <bool> on: true;
+    out property <duration> fast: self.on ? 120ms : 0ms;
+    out property <duration> base: self.on ? 180ms : 0ms;
+    out property <duration> slow: self.on ? 280ms : 0ms;
+    out property <duration> highlight: self.on ? 900ms : 0ms;
+    // Mochi chews while a pass runs. Outside a pass this binding does not read
+    // animation-tick(), so an idle window is never redrawn.
+    out property <length> chew: Store.scan-running && self.on ? 1.5px * sin(animation-tick() / 600ms * 360deg) : 0px;
+}

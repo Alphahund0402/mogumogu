@@ -1,9 +1,11 @@
 //! Maps command lines to owner requests. Every command is explicit; no
 //! command combines registration, protection and approval.
 use crate::args::Options;
-use mogumogu::domain::{PackageFilter, PackageQuery, ScopeKind};
+use mogumogu::domain::{
+    ArtifactKind, DatabaseEngine, DatabasePlace, DockerObject, PackageFilter, PackageQuery, RunState, ScopeKind,
+};
 use mogumogu::limits::PACKAGE_PAGE;
-use mogumogu::service::Request;
+use mogumogu::service::{ArtifactRequest, ProjectRef, Request};
 use mogumogu::{Error, Result};
 
 pub const HELP: &str = r#"mogumogu-cli 0.1.0 — lokales Entwicklungsinventar (Windows 10/11)
@@ -58,6 +60,32 @@ Papierkorb-Plan (nur „Wiederherstellbar“; bis zum Review nur in Wegwerf-Test
   cleanup plan --project ID [--path RELATIVER_PFAD …]
   cleanup approve --plan ID --confirm FINGERABDRUCK
   cleanup apply|cancel|reconcile --plan ID
+  cleanup keep --project ID --path RELATIVER_PFAD
+                                         Ordner aus jedem Plan heraushalten (wieder vorschlagen nur im Dashboard)
+  tidy history --project ID              gespeicherte Aufräumberichte und Wachstum
+
+KI-Läufe (nur Herkunft und Schutz; kein Befehl entfernt etwas)
+  run allow off                          Registrierung beenden; einschalten nur im Dashboard (Standard: aus)
+  run list [--project ID]
+  run start --harness NAME (--project ID | --path ORDNER) [--purpose TEXT]
+  run artifact --run ID --kind workspace|scratch|diagnostic|test|code|state|output --path PFAD [--purpose TEXT]
+  run artifact --run ID --kind docker --context NAME --type container|image|volume|network --id OBJEKT [--purpose TEXT]
+  run state --run ID --state running|paused|succeeded|failed|cancelled [--note TEXT]
+                                         Docker-Objekte eines Laufs auch per Label io.mogumogu.run=ID
+
+Datenbanken überwachen (nur Größe aus Metadaten; nie verbunden, nie gelesen; immer geschützt)
+  db list | db suggest                   überwachte Datenbanken und Vorschläge
+  db register --path ORDNER_ODER_DATEI [--name NAME] [--engine sqlite|duckdb|postgres|mysql|mongodb|redis|other]
+  db register --docker-volume NAME --context KONTEXT [--name NAME] [--engine …]
+  db measure [--id ID]                   messen (ohne --id alle)
+  db history --id ID
+                                         Überwachung beenden und Läufe freigeben nur im Dashboard
+
+Docker (nur lesend, nur Kontexte mit lokaler Named Pipe)
+  docker contexts                        Kontexte der Docker-Konfiguration (nur meta.json gelesen)
+  docker approve --context NAME         Freigabe widerrufen nur im Dashboard (Einbindungen hielten dann nicht mehr)
+  docker inventory [--context NAME] [--usage]
+                                         Container, Images, Volumes, Netze; --usage mit Docker-Speicherbilanz
 
 Einstellungen und Daten
   settings
@@ -164,6 +192,9 @@ pub fn parse(args: &[String]) -> Result<Action> {
                 Some(fingerprint) => call(Request::ApplyContextFilter { scope_id, fingerprint }, View::Json),
                 None => call(Request::ContextFilter { scope_id }, View::Json),
             }
+        }
+        ["tidy", "history", ..] => {
+            call(Request::TidyHistory { project_id: opts(rest(2), &["--project"])?.id("--project")? }, View::Json)
         }
         ["tidy", ..] => {
             let o = opts(rest(1), &["--project"])?;
@@ -296,6 +327,89 @@ pub fn parse(args: &[String]) -> Result<Action> {
             let o = opts(rest(2), &["--plan", "--confirm"])?;
             call(Request::CleanupApprove { plan_id: o.id("--plan")?, confirmation: o.text("--confirm")? }, View::Plan)
         }
+        ["run", "allow", "off"] => call(Request::RunsAllow { allowed: false }, View::Json),
+        ["run", "allow", "on"] => Err(Error::blocked(
+            "KI-Läufe lassen sich nur im Dashboard einschalten (Speicher → Aufräumen → Läufe & Docker …).",
+        )),
+        ["run", "list", ..] => {
+            call(Request::Runs { project_id: opts(rest(2), &["--project"])?.optional_id("--project")? }, View::Json)
+        }
+        ["run", "start", ..] => {
+            let o = opts(rest(2), &["--harness", "--project", "--path", "--purpose"])?;
+            let project = match (o.optional_id("--project")?, o.optional("--path")) {
+                (Some(id), None) => ProjectRef::Id(id),
+                (None, Some(path)) => ProjectRef::Path(path),
+                _ => return Err(Error::invalid("Genau eines von --project oder --path angeben.")),
+            };
+            call(
+                Request::RunStart { project, harness: o.text("--harness")?, purpose: o.optional("--purpose") },
+                View::Json,
+            )
+        }
+        ["run", "artifact", ..] => {
+            let o = opts(rest(2), &["--run", "--kind", "--path", "--context", "--type", "--id", "--purpose"])?;
+            let kind = ArtifactKind::parse(&o.text("--kind")?).ok_or_else(|| {
+                Error::invalid("--kind: workspace, scratch, diagnostic, test, code, state, output oder docker.")
+            })?;
+            let docker = match (o.optional("--context"), o.optional("--type"), o.optional("--id")) {
+                (Some(context), Some(object), Some(id)) => Some((
+                    context,
+                    DockerObject::parse(&object)
+                        .ok_or_else(|| Error::invalid("--type: container, image, volume oder network."))?,
+                    id,
+                )),
+                (None, None, None) => None,
+                _ => return Err(Error::invalid("Ein Docker-Objekt braucht --context, --type und --id.")),
+            };
+            let artifact =
+                ArtifactRequest { kind, path: o.optional("--path"), docker, purpose: o.optional("--purpose") };
+            call(Request::RunArtifact { run_id: o.id("--run")?, artifact }, View::Json)
+        }
+        ["run", "state", ..] => {
+            let o = opts(rest(2), &["--run", "--state", "--note"])?;
+            let state = RunState::parse(&o.text("--state")?)
+                .ok_or_else(|| Error::invalid("--state: running, paused, succeeded, failed oder cancelled."))?;
+            call(Request::RunState { run_id: o.id("--run")?, state, note: o.optional("--note") }, View::Json)
+        }
+        ["db", "list"] | ["db", "suggest"] => call(Request::Databases, View::Json),
+        ["db", "register", ..] => {
+            let o = opts(rest(2), &["--path", "--docker-volume", "--context", "--name", "--engine"])?;
+            let place = match (o.optional("--path"), o.optional("--docker-volume"), o.optional("--context")) {
+                (Some(path), None, None) => DatabasePlace::Path(path),
+                (None, Some(volume), Some(context)) => DatabasePlace::Volume { context, volume },
+                _ => return Err(Error::invalid("Entweder --path oder --docker-volume mit --context angeben.")),
+            };
+            let engine = match o.optional("--engine") {
+                Some(text) => Some(DatabaseEngine::parse(&text).ok_or_else(|| {
+                    Error::invalid("--engine: sqlite, duckdb, postgres, mysql, mongodb, redis oder other.")
+                })?),
+                None => None,
+            };
+            call(Request::DbRegister { place, name: o.optional("--name"), engine }, View::Json)
+        }
+        ["db", "measure", ..] => {
+            call(Request::DbMeasure { id: opts(rest(2), &["--id"])?.optional_id("--id")? }, View::Json)
+        }
+        ["db", "history", ..] => call(Request::DbHistory { id: opts(rest(2), &["--id"])?.id("--id")? }, View::Json),
+        ["db", "unregister", ..] | ["run", "release", ..] | ["cleanup", "unkeep", ..] | ["docker", "revoke", ..] => {
+            Err(Error::blocked("Schutz aufheben geht nur im Dashboard (Speicher → Aufräumen)."))
+        }
+        ["docker", "contexts"] => call(Request::DockerContexts, View::Json),
+        ["docker", "approve", ..] => {
+            call(Request::DockerApprove { context: opts(rest(2), &["--context"])?.text("--context")? }, View::Json)
+        }
+        ["docker", "inventory", ..] => {
+            let usage = words.contains(&"--usage");
+            let options: Vec<String> = rest(2).iter().filter(|a| *a != "--usage").cloned().collect();
+            let context = opts(&options, &["--context"])?.optional("--context");
+            call(Request::DockerInventory { context, usage }, View::Json)
+        }
+        ["cleanup", "keep", ..] => {
+            let o = opts(rest(2), &["--project", "--path"])?;
+            let request =
+                Request::KeepFolder { project_id: o.id("--project")?, rel_path: o.text("--path")?, keep: true };
+            call(request, View::Json)
+        }
         ["cleanup", verb @ ("apply" | "cancel" | "reconcile"), ..] => {
             let plan_id = opts(rest(2), &["--plan"])?.id("--plan")?;
             let request = match *verb {
@@ -354,7 +468,48 @@ mod tests {
         assert!(parse(&words("run --scratch 2 -- cmd /C echo hi")).is_err(), "no program start");
         assert!(parse(&words("cleanup apply --plan 1 --yes")).is_err(), "no generic --yes");
         assert!(parse(&words("delete --all")).is_err());
+        assert!(matches!(
+            parse(&words("cleanup keep --project 3 --path web\\dist")).unwrap(),
+            Action::Call(Request::KeepFolder { project_id: 3, keep: true, .. }, View::Json)
+        ));
         assert!(matches!(parse(&words("storage")).unwrap(), Action::Call(Request::StorageOverview, View::Json)));
+        assert!(matches!(
+            parse(&words(r"run start --harness claude-code --path C:\dev\app")).unwrap(),
+            Action::Call(Request::RunStart { project: ProjectRef::Path(_), .. }, View::Json)
+        ));
+        assert!(parse(&words(r"run start --harness x --project 1 --path C:\dev")).is_err(), "one project only");
+        assert!(matches!(
+            parse(&words("run artifact --run 2 --kind docker --context default --type volume --id pgdata")).unwrap(),
+            Action::Call(Request::RunArtifact { run_id: 2, .. }, View::Json)
+        ));
+        assert!(parse(&words("run artifact --run 2 --kind docker --context default")).is_err());
+        assert!(matches!(
+            parse(&words("docker inventory --usage --context desktop-linux")).unwrap(),
+            Action::Call(Request::DockerInventory { usage: true, context: Some(_) }, View::Json)
+        ));
+        assert!(matches!(
+            parse(&words(r"db register --path C:\data\app.sqlite")).unwrap(),
+            Action::Call(Request::DbRegister { place: DatabasePlace::Path(_), .. }, View::Json)
+        ));
+        assert!(matches!(
+            parse(&words("db register --docker-volume pgdata --context default --engine postgres")).unwrap(),
+            Action::Call(Request::DbRegister { engine: Some(DatabaseEngine::Postgres), .. }, View::Json)
+        ));
+        assert!(parse(&words(r"db register --path C:\x --docker-volume v --context c")).is_err(), "one place");
+        for refused in [
+            "run delete --run 1",
+            "run clean",
+            "run release --run 1",
+            "db unregister --id 1",
+            "cleanup unkeep --project 3 --path web/dist",
+            "docker revoke --context default",
+            "db drop",
+            "docker prune",
+            "docker rm --id x",
+            "docker stop",
+        ] {
+            assert!(parse(&words(refused)).is_err(), "{refused}");
+        }
         assert!(matches!(
             parse(&words("resource adopt --scope 2 --relative test.db --project 3")).unwrap(),
             Action::Call(Request::AdoptCandidate { scope_id: 2, project_id: 3, .. }, View::Json)

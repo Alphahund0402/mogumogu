@@ -61,7 +61,8 @@ läuft derselbe Besitzer ohne Oberfläche. Die CLI hält keine zweite Datenbank.
 | [adapters/](../src/adapters/mod.rs), [profiles/](../src/profiles/mod.rs), [parsers/](../src/parsers/mod.rs) | Unterstützte Formate in begrenzte Metadaten übersetzen | Gefundene Inhalte als Anweisungen behandeln |
 | [fsread.rs](../src/fsread.rs), [platform/](../src/platform/mod.rs) | Freigegebene Lesezugriffe und gekapselte Windows-Operationen | Links oder ausgetauschten Wurzelidentitäten vertrauen |
 | [review.rs](../src/review.rs) | Prüfhinweise mit Evidenz | Fehlende Beobachtung als Entbehrlichkeit ausgeben |
-| [cleanup/](../src/cleanup/mod.rs) | Papierkorb-Pläne für wiederherstellbar belegte Ordner, erneute Prüfung an gehaltenen Handles, Journal je Ordner, Wiederanlauf | Ohne Beleg, Identitätsprüfung und dauerhaftes Journal verschieben; je endgültig löschen |
+| [cleanup/](../src/cleanup/mod.rs) | Papierkorb-Pläne für wiederherstellbar belegte Ordner, erneute Prüfung an gehaltenen Handles (mit Git-Stand aus [inventory/git.rs](../src/inventory/git.rs) und Haltungen aus [holds.rs](../src/cleanup/holds.rs): behalten, Artefakt eines nicht freigegebenen Laufs, überwachte Datenbank, Docker-Einbindung; Git-Index und echte Orte je Vorgang zwischengespeichert), Journal je Ordner, gemessener freier Speicher, Wiederanlauf | Ohne Beleg, Identitätsprüfung und dauerhaftes Journal verschieben; versionierte oder gehaltene Ordner verschieben; je endgültig löschen |
+| [docker/](../src/docker/mod.rs) | Kontexte aus `meta.json`, feste `GET`-Fragen an die Named Pipe einer freigegebenen lokalen Engine (`platform::EnginePipe` mit Fristen), Abbildung auf Domänentypen, Bind-Quellen als Windows-Pfade | Andere Methoden oder Pfade senden, `config.json`, TLS-Material oder Docker-Daten lesen, entfernte Engines fragen |
 
 SQL bleibt ausschließlich in `storage/`, `unsafe` ausschließlich in
 `platform/windows.rs`. [validate.py](../scripts/validate.py) prüft diese

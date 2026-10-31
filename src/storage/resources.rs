@@ -32,7 +32,7 @@ fn map_resource(row: &Row<'_>) -> rusqlite::Result<Resource> {
     })
 }
 
-fn require_project(tx: &Transaction<'_>, project_id: i64) -> Result<()> {
+pub(super) fn require_project(tx: &Transaction<'_>, project_id: i64) -> Result<()> {
     let exists: bool =
         tx.query_row("SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?1)", [project_id], |r| r.get(0))?;
     if !exists {

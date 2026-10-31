@@ -68,6 +68,27 @@ pub fn recycle(_: &Path) -> io::Result<()> {
 pub fn fixed_disk(_: &Path) -> bool {
     false
 }
+pub fn free_space(_: &Path) -> io::Result<u64> {
+    unsupported()
+}
+pub fn real_location(_: &Path) -> io::Result<String> {
+    unsupported()
+}
+
+#[derive(Debug)]
+pub struct EnginePipe;
+
+impl EnginePipe {
+    pub fn connect(_: &str, _: std::time::Instant) -> io::Result<Self> {
+        unsupported()
+    }
+    pub fn send(&mut self, _: &[u8], _: std::time::Instant) -> io::Result<()> {
+        unsupported()
+    }
+    pub fn receive(&mut self, _: &mut [u8], _: std::time::Instant) -> io::Result<usize> {
+        unsupported()
+    }
+}
 
 pub fn current_user_sid() -> io::Result<String> {
     unsupported()
@@ -117,6 +138,9 @@ pub fn local_utc_offset_seconds() -> i64 {
 }
 pub fn show_error(title: &str, message: &str) {
     eprintln!("{title}: {message}");
+}
+pub fn animations_enabled() -> bool {
+    true
 }
 /// Portable core tests only check absolute local paths.
 pub fn local_fixed_path(path: &Path) -> bool {

@@ -270,6 +270,13 @@ impl std::fmt::Display for ReadIssue {
 
 /// Reads a child file of `dir` as UTF-8 text, at most `max` bytes.
 pub fn read_text(dir: &DirHandle, name: &OsStr, max: u64, budget: &mut Budget) -> Result<String, ReadIssue> {
+    let bytes = read_bytes(dir, name, max, budget)?;
+    let text = String::from_utf8(bytes).map_err(|_| ReadIssue::NotText)?;
+    Ok(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
+}
+
+/// Reads a child file of `dir`, at most `max` bytes.
+pub fn read_bytes(dir: &DirHandle, name: &OsStr, max: u64, budget: &mut Budget) -> Result<Vec<u8>, ReadIssue> {
     if budget.exhausted() {
         return Err(ReadIssue::Budget);
     }
@@ -288,8 +295,7 @@ pub fn read_text(dir: &DirHandle, name: &OsStr, max: u64, budget: &mut Budget) -
     if !budget.charge_bytes(bytes.len() as u64) {
         return Err(ReadIssue::Budget);
     }
-    let text = String::from_utf8(bytes).map_err(|_| ReadIssue::NotText)?;
-    Ok(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
+    Ok(bytes)
 }
 
 /// Lists a directory within the remaining entry budget.

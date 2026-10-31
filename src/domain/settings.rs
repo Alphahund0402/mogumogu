@@ -7,11 +7,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     pub scratch_review_days: i64,
+    /// Cooperating harnesses may register runs and artifacts. Off until the
+    /// person asks for it; a run never makes anything removable.
+    #[serde(default)]
+    pub agent_runs: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { scratch_review_days: 7 }
+        Self { scratch_review_days: 7, agent_runs: false }
     }
 }
 

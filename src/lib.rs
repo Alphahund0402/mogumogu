@@ -12,7 +12,8 @@
 //! - **Static inventory:** [`inventory`] reads through [`fsread`], then hands
 //!   bounded data to [`adapters`] and [`profiles`], using [`parsers`].
 //! - **Effects:** [`storage`] owns SQL, [`platform`] owns Windows FFI, and
-//!   [`cleanup`] owns journaled moves to the recycle bin (production disabled).
+//!   [`cleanup`] owns journaled moves to the recycle bin (production disabled),
+//!   [`docker`] asks an approved local Docker engine read-only questions.
 //!
 //! See `docs/ARCHITEKTUR.md` for process/data-flow diagrams and a reading path;
 //! `docs/ENTWICKLUNG.md` maps common changes to their implementation and checks.
@@ -20,6 +21,7 @@ pub mod adapters;
 pub mod cleanup;
 pub mod clock;
 pub mod config;
+pub mod docker;
 pub mod domain;
 pub mod error;
 pub mod fsread;

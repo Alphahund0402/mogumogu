@@ -35,6 +35,21 @@ pub fn windows_path(value: &str) -> Result<String> {
     Ok(normalized)
 }
 
+/// A folder below a project root, as the tidy-up report names it:
+/// `/`-separated, without drive, `.`/`..` or names Windows would alter.
+pub fn project_rel_path(value: &str) -> Result<String> {
+    let value = value.trim().replace('\\', "/");
+    let value = value.trim_matches('/');
+    let invalid = || Error::Invalid("Ein Ordner im Projekt wie web/dist ist erforderlich.".into());
+    if value.is_empty() || value.len() > 1024 || value.chars().any(|c| c.is_control() || ":*?\"<>|".contains(c)) {
+        return Err(invalid());
+    }
+    if value.split('/').any(|part| part.is_empty() || part == "." || part == ".." || part.ends_with([' ', '.'])) {
+        return Err(invalid());
+    }
+    Ok(value.to_string())
+}
+
 /// A whole local drive such as `D:\`. Only a names-only project search may
 /// use one; every other approval keeps the stricter [`windows_path`] rule.
 pub fn drive_root(value: &str) -> Result<String> {

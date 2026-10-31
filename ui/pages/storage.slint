@@ -155,6 +155,18 @@ export component StoragePage inherits VerticalLayout {
                         available: !Store.demo && !Store.busy;
                         activated => { Actions.tidy-report(-1); }
                     }
+                    UiButton {
+                        y: (parent.height - self.height) / 2;
+                        small: true; label: "Läufe & Docker …";
+                        available: !Store.demo && !Store.busy;
+                        activated => { Actions.detail-action("agents"); }
+                    }
+                    UiButton {
+                        y: (parent.height - self.height) / 2;
+                        small: true; label: "Datenbanken …";
+                        available: !Store.demo && !Store.busy;
+                        activated => { Actions.detail-action("databases"); }
+                    }
                 }
                 Text {
                     text: "Wiederherstellbar: Ein Werkzeug baut es aus dem Projekt neu – Lockfile oder Build-Datei daneben, Cache oder Test-Ausgabe. Prüfen: Zweck unbekannt. Gemessen wird nur in Projekten mit Lesefreigabe; entfernt wird nichts.";

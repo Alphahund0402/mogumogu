@@ -8,20 +8,25 @@
 //! share `Repository::write`, including the revision used by report caches.
 mod activity;
 mod cleanup;
+mod databases;
 mod decisions;
 mod demo;
 mod generations;
+mod history;
 mod migrations;
 mod projects;
 mod resources;
+mod runs;
 mod scopes;
 mod settings;
 mod summary;
 
 pub use cleanup::{NewTarget, StoredPlan, StoredTarget};
+pub use databases::{NewDatabase, StoredDatabase};
 pub use demo::FIXTURE as DEMO_FIXTURE;
 pub use generations::{GenerationResult, PublishReport, PublishedItem};
 pub use migrations::SCHEMA_VERSION;
+pub use runs::NewArtifact;
 
 use crate::clock::{Clock, SystemClock, Timestamp};
 use crate::config::Config;

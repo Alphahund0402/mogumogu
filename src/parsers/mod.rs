@@ -4,8 +4,10 @@
 //! import, expand variables, resolve entities or fetch anything; nesting is
 //! checked before structured parsing.
 pub mod frontmatter;
+pub mod git_index;
 pub mod json;
 pub mod lines;
+pub mod sha1;
 pub mod xml;
 
 use std::fmt;
