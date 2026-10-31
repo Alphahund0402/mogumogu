@@ -48,6 +48,7 @@ Voraussetzungen: Windows 10/11 x64 und **entweder** nur [Docker Desktop](https:/
 .\build.ps1 -ShowDashboard           # lokales Inventar direkt öffnen
 .\start.ps1 -ShowDashboard           # bereits gebaut mit lokalen Daten starten
 .\rebuild.ps1                        # nur neu bauen (ohne Tests, -Test mit) und den EXE-Pfad zeigen
+.\rebuild.ps1 -Docker -Fast          # schnelle lokale Iteration, inkrementell und ohne LTO
 ```
 
 Alternativ `build.cmd` doppelklicken (setzt die Execution Policy nur für diesen Prozess). Zum reinen Neubauen `rebuild.cmd` doppelklicken: Eine laufende Instanz aus `dist` wird über die CLI geordnet beendet und danach wieder im Tray gestartet, am Ende steht der Pfad der EXE. Ausgabe: `dist\mogumogu\mogumogu.exe` und `mogumogu-cli.exe`. Kein Dienst, kein Autostart, keine Installation von Voraussetzungen und keine Netzwerkverbindungen.

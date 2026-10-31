@@ -158,7 +158,6 @@ component ScanStrip inherits Rectangle {
 component StatusBar inherits Rectangle {
     height: 28px;
     background: Theme.creme;
-    Rectangle { height: 1.5px; background: Theme.edge; }
     HorizontalLayout {
         padding-left: Theme.page-padding; padding-right: Theme.page-padding; spacing: 12px;
         Rectangle { width: 8px; height: 8px; y: (parent.height - self.height) / 2; border-radius: 4px; background: Store.busy ? Theme.chart-amber : Theme.chart-fog; }

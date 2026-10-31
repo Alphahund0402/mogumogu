@@ -5,7 +5,7 @@ Does not install prerequisites, set autostart or change machine settings.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Release','Debug')][string]$Configuration = 'Release',
+    [ValidateSet('Release','Debug','Fast')][string]$Configuration = 'Release',
     [ValidateSet('Demo','Local')][string]$Mode = 'Local',
     [switch]$ShowDashboard,
     [switch]$NoRun,
@@ -44,6 +44,7 @@ try {
     $Build = @('build', '--locked', '--bins', '--target', $Target, '--target-dir', $TargetDir)
     $Folder = 'debug'
     if ($Configuration -eq 'Release') { $Build += '--release'; $Folder = 'release' }
+    if ($Configuration -eq 'Fast') { $Build += @('--profile', 'fast'); $Folder = 'fast' }
     Invoke-Cargo $Build
 
     New-Item -ItemType Directory -Path $OutDir -Force | Out-Null

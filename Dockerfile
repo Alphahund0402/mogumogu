@@ -35,10 +35,11 @@ ENV CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
     AR_x86_64_pc_windows_gnu=x86_64-w64-mingw32-ar
 COPY . .
 USER 10001:10001
+ARG BUILD_PROFILE=release
 RUN --mount=type=cache,id=mogumogu-cargo,target=/cache/cargo,uid=10001,gid=10001,sharing=locked \
     --mount=type=cache,id=mogumogu-target-windows,target=/workspace/target,uid=10001,gid=10001,sharing=locked \
-    cargo build --locked --release --bins --target x86_64-pc-windows-gnu \
-    && cp target/x86_64-pc-windows-gnu/release/mogumogu.exe target/x86_64-pc-windows-gnu/release/mogumogu-cli.exe \
+    cargo build --locked --profile "$BUILD_PROFILE" --bins --target x86_64-pc-windows-gnu \
+    && cp target/x86_64-pc-windows-gnu/"$BUILD_PROFILE"/mogumogu.exe target/x86_64-pc-windows-gnu/"$BUILD_PROFILE"/mogumogu-cli.exe \
        LICENSE README.md THIRD_PARTY.md Cargo.lock /out/ \
     && cp assets/fonts/zen-maru-gothic/OFL.txt /out/FONT-LICENSE.txt
 

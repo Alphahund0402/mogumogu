@@ -105,9 +105,6 @@ use crate::domain::{AGENT_LABEL as AGENT, TEST_DATA_LABEL as TEST_DATA};
 
 /// Evidence suffix of a recoverable folder in a work tree without versioned files.
 pub const NOT_IN_GIT: &str = "nicht in Git";
-/// Evidence suffix of a folder the person keeps.
-#[cfg(test)]
-const KEPT: &str = "von dir behalten";
 /// Provenance of an agent leftover known by its name only.
 const BY_NAME: &str = "nur am Namen erkannt";
 

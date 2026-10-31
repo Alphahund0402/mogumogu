@@ -84,5 +84,14 @@ lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
 
+# Local iteration: retain optimization without release's expensive whole-program link.
+[profile.fast]
+inherits = "dev"
+opt-level = 1
+incremental = true
+codegen-units = 256
+debug = 0
+lto = false
+
 [profile.dev]
 debug = 1

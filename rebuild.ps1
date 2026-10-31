@@ -12,12 +12,13 @@ nativ unter Windows laufen.
 
   .\rebuild.ps1               Release-Build ohne Tests (schnell)
   .\rebuild.ps1 -Docker       im Container bauen, auch wenn Rust installiert ist
+  .\rebuild.ps1 -Docker -Fast  inkrementell, ohne LTO; für schnelle lokale Iteration
   .\rebuild.ps1 -Test         vorher die Testsuite (im Container: die Kernprüfungen)
   .\rebuild.ps1 -Open         danach den Ausgabeordner im Explorer öffnen
   .\rebuild.ps1 -NoRestart    beendete Instanzen nicht wieder starten
 #>
 [CmdletBinding()]
-param([switch]$Test, [switch]$Open, [switch]$NoRestart, [switch]$Docker)
+param([switch]$Test, [switch]$Open, [switch]$NoRestart, [switch]$Docker, [switch]$Fast)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
@@ -47,6 +48,8 @@ function Get-CliFlags([string]$Arguments) {
     $Flags
 }
 
+$Configuration = if ($Fast) { 'Fast' } else { 'Release' }
+$Profile = $Configuration.ToLowerInvariant()
 $Started = Get-Date
 $Restart = @()
 $Failed = $false
@@ -78,11 +81,11 @@ try {
             & docker build --target validated $Root
             if ($LASTEXITCODE -ne 0) { throw "Kernprüfungen im Container fehlgeschlagen (Exit $LASTEXITCODE)." }
         }
-        & docker build --target windows-exe --output "type=local,dest=$OutDir" $Root
+        & docker build --target windows-exe --build-arg "BUILD_PROFILE=$Profile" --output "type=local,dest=$OutDir" $Root
         if ($LASTEXITCODE -ne 0) { throw "docker build fehlgeschlagen (Exit $LASTEXITCODE)." }
     }
     else {
-        $Build = @{ NoRun = $true }
+        $Build = @{ NoRun = $true; Configuration = $Configuration }
         if (-not $Test) { $Build.SkipTests = $true }
         & (Join-Path $Root 'build.ps1') @Build
     }
@@ -109,7 +112,7 @@ $Seconds = [int]((Get-Date) - $Started).TotalSeconds
 $Item = Get-Item -LiteralPath $Exe
 Write-Host ''
 $Way = if ($UseDocker) { 'Docker' } else { 'lokal' }
-Write-Host ("Fertig in {0} s (Release, {1}, {2}). Ergebnis:" -f $Seconds, $Way, $(if ($Test) { 'mit Tests' } else { 'ohne Tests' })) -ForegroundColor Green
+Write-Host ("Fertig in {0} s ({1}, {2}, {3}). Ergebnis:" -f $Seconds, $Configuration, $Way, $(if ($Test) { 'mit Tests' } else { 'ohne Tests' })) -ForegroundColor Green
 Write-Output $Exe
 Write-Host ("  {0:N1} MB · gebaut {1:g}" -f ($Item.Length / 1MB), $Item.LastWriteTime)
 Write-Host "  CLI:    $Cli"
