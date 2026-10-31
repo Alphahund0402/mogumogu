@@ -58,8 +58,9 @@ Scratchpads
 Papierkorb-Plan (nur „Wiederherstellbar“; bis zum Review nur in Wegwerf-Testwurzeln, G5 offen)
   cleanup test-root --path PFAD           Ordner mit Markierungsdatei registrieren
   cleanup plan --project ID [--path RELATIVER_PFAD …]
-  cleanup approve --plan ID --confirm FINGERABDRUCK
-  cleanup apply|cancel|reconcile --plan ID
+                                         Vorschau mit Fingerabdruck; bestätigen und ausführen
+                                         nur im Dashboard (Übersicht → Bereinigungspläne)
+  cleanup cancel|reconcile --plan ID
   cleanup keep --project ID --path RELATIVER_PFAD
                                          Ordner aus jedem Plan heraushalten (wieder vorschlagen nur im Dashboard)
   tidy history --project ID              gespeicherte Aufräumberichte und Wachstum
@@ -323,10 +324,9 @@ pub fn parse(args: &[String]) -> Result<Action> {
             let o = Options::parse(rest(2), &["--project", "--path"], &["--path"])?;
             call(Request::CleanupPlan { project_id: o.id("--project")?, paths: o.texts("--path") }, View::Plan)
         }
-        ["cleanup", "approve", ..] => {
-            let o = opts(rest(2), &["--plan", "--confirm"])?;
-            call(Request::CleanupApprove { plan_id: o.id("--plan")?, confirmation: o.text("--confirm")? }, View::Plan)
-        }
+        ["cleanup", "approve" | "apply", ..] => Err(Error::blocked(
+            "Einen Papierkorb-Plan bestätigen und ausführen geht nur im Dashboard (Übersicht → Bereinigungspläne).",
+        )),
         ["run", "allow", "off"] => call(Request::RunsAllow { allowed: false }, View::Json),
         ["run", "allow", "on"] => Err(Error::blocked(
             "KI-Läufe lassen sich nur im Dashboard einschalten (Speicher → Aufräumen → Läufe & Docker …).",
@@ -410,10 +410,9 @@ pub fn parse(args: &[String]) -> Result<Action> {
                 Request::KeepFolder { project_id: o.id("--project")?, rel_path: o.text("--path")?, keep: true };
             call(request, View::Json)
         }
-        ["cleanup", verb @ ("apply" | "cancel" | "reconcile"), ..] => {
+        ["cleanup", verb @ ("cancel" | "reconcile"), ..] => {
             let plan_id = opts(rest(2), &["--plan"])?.id("--plan")?;
             let request = match *verb {
-                "apply" => Request::CleanupApply { plan_id },
                 "cancel" => Request::CleanupCancel { plan_id },
                 _ => Request::CleanupReconcile { plan_id },
             };
@@ -466,7 +465,11 @@ mod tests {
         assert!(matches!(parse(&words("cleanup plan --project 3 --path web/node_modules --path target")).unwrap(),
             Action::Call(Request::CleanupPlan { project_id: 3, paths }, View::Plan) if paths.len() == 2));
         assert!(parse(&words("run --scratch 2 -- cmd /C echo hi")).is_err(), "no program start");
-        assert!(parse(&words("cleanup apply --plan 1 --yes")).is_err(), "no generic --yes");
+        assert!(parse(&words("cleanup cancel --plan 1 --yes")).is_err(), "no generic --yes");
+        assert!(matches!(
+            parse(&words("cleanup reconcile --plan 4")).unwrap(),
+            Action::Call(Request::CleanupReconcile { plan_id: 4 }, View::Plan)
+        ));
         assert!(parse(&words("delete --all")).is_err());
         assert!(matches!(
             parse(&words("cleanup keep --project 3 --path web\\dist")).unwrap(),
@@ -500,6 +503,8 @@ mod tests {
             "run delete --run 1",
             "run clean",
             "run release --run 1",
+            "cleanup approve --plan 1 --confirm 1a2b3c4d5e6f",
+            "cleanup apply --plan 1",
             "db unregister --id 1",
             "cleanup unkeep --project 3 --path web/dist",
             "docker revoke --context default",

@@ -16,7 +16,7 @@ KI-Läufe, die kooperierende Harnesses auf Wunsch per CLI registrieren (Schema v
 Schutz; einen beendeten Lauf gibt nur die Person frei, Schema v10), ein schreibgeschütztes
 Docker-Inventar freigegebener lokaler Kontexte, überwachte Datenbanken (Schema v10; Datei, Ordner
 oder Docker-Volume, nur aus Metadaten gemessen, mit Größenverlauf) und ein
-**Papierkorb-Plan** für wiederherstellbar belegte Ordner. Spezifikation und Abgrenzung:
+**Papierkorb-Plan** für wiederherstellbar belegte Ordner (bestätigt und ausgeführt nur im Dashboard). Spezifikation und Abgrenzung:
 `docs/PROJEKTBEWUSSTE-BEREINIGUNG.md`. Netzwerkzugriffe, Programmstarts und verwaltete Läufe gibt es
 keine; mogumogu startet und überwacht keinen Lauf, es nimmt nur Meldungen an. Ausgeführt wird ein Plan bis zum
 unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PRODUCTION_ENABLED = false`). README,
@@ -57,7 +57,9 @@ unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PR
   des Ordners gebunden und ohne Verknüpfung auf dem Weg (`ScopeRoot::open_local`).
 - Schutz hinzufügen darf die CLI, Schutz aufheben nur das Dashboard: `owner.rs` lehnt über die Pipe
   `RunRelease`, `DbUnregister`, `KeepFolder { keep: false }`, `DockerRevoke` und
-  `RunsAllow { allowed: true }` ab, die CLI bietet sie nicht an.
+  `RunsAllow { allowed: true }` ab, die CLI bietet sie nicht an. Ebenso bestätigt und führt nur das
+  Dashboard einen Papierkorb-Plan aus: `CleanupApprove` und `CleanupApply` lehnt `owner.rs` über die
+  Pipe ab, auch mit richtigem Fingerabdruck; die CLI plant, bricht ab und gleicht ab.
 - `src/desktop/`, `ui/`: nur Darstellung. Kein SQL, keine Dateisystemzugriffe, keine Löschung in Callbacks.
 - `scripts/validate.py` prüft diese Grenzen lexikalisch (Allowlist).
 

@@ -41,7 +41,10 @@ flowchart LR
 ```
 
 Nur der Kern-Worker koordiniert Anwendungsfälle und Datenbankänderungen.
-Der Pipe-Server reicht Befehle weiter und wartet auf deren Ergebnis. Erfasst
+Der Pipe-Server reicht Befehle weiter und wartet auf deren Ergebnis. Was einen
+Schutz aufhebt, Läufe annimmt oder einen Papierkorb-Plan bestätigt oder
+ausführt, lehnt der Worker über die Pipe ab; das kommt nur vom Dashboard im
+selben Prozess ([owner.rs](../src/owner.rs)). Erfasst
 wird nur auf Anfrage; es gibt keine Ordnerüberwachung, keinen Thread pro
 Projekt und keine zusätzliche Async-Laufzeit.
 

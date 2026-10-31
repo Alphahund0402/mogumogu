@@ -8,6 +8,8 @@ use mogumogu::service::{Core, Request};
 use serde_json::Value;
 use std::path::Path;
 use std::process::{Command, Output};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::Duration;
 
 pub struct Quiet;
 
@@ -20,16 +22,55 @@ impl OwnerEvents for Quiet {
     fn shutdown(&self) {}
 }
 
-pub fn start_owner(data: &Path) -> Owner {
-    start_owner_with_bin(data).0
+/// Hands each result of a dashboard request back to the test: the value,
+/// or the error code.
+struct Recorder(Sender<Result<Value, String>>);
+
+impl OwnerEvents for Recorder {
+    fn snapshot(&self, _: Snapshot) {}
+    fn outcome(&self, _: &Request, result: &mogumogu::Result<Value>) {
+        let _ = self.0.send(match result {
+            Ok(value) => Ok(value.clone()),
+            Err(e) => Err(e.code().to_string()),
+        });
+    }
+    fn busy(&self, _: bool) {}
+    fn show_dashboard(&self) {}
+    fn hide_dashboard(&self) {}
+    fn shutdown(&self) {}
 }
 
-/// The owner and the test bin it moves folders into.
-pub fn start_owner_with_bin(data: &Path) -> (Owner, TestBin) {
+/// The owner as the dashboard reaches it: in the same process, not over the
+/// pipe. Only this way does it bind a plan to its fingerprint or run it.
+pub struct Dashboard {
+    owner: Owner,
+    outcomes: Receiver<Result<Value, String>>,
+}
+
+impl Dashboard {
+    pub fn send(&self, request: Request) -> Result<Value, String> {
+        assert!(self.owner.submit(request), "the owner takes the request");
+        self.outcomes.recv_timeout(Duration::from_secs(120)).expect("the owner answers")
+    }
+}
+
+fn core_with_bin(data: &Path) -> (Core, TestBin) {
     let mut core = Core::open(Config::new(Some(data.to_path_buf()), false).unwrap()).unwrap();
     let bin = TestBin::new(data.with_extension("papierkorb"));
     core.use_recycler(Box::new(bin.clone()));
-    (Owner::start_with(core, Quiet).expect("owner starts"), bin)
+    (core, bin)
+}
+
+pub fn start_owner(data: &Path) -> Owner {
+    Owner::start_with(core_with_bin(data).0, Quiet).expect("owner starts")
+}
+
+/// The owner with its dashboard side, and the test bin it moves folders into.
+pub fn start_dashboard(data: &Path) -> (Dashboard, TestBin) {
+    let (core, bin) = core_with_bin(data);
+    let (sender, outcomes) = channel();
+    let owner = Owner::start_with(core, Recorder(sender)).expect("owner starts");
+    (Dashboard { owner, outcomes }, bin)
 }
 
 /// Runs the real CLI against `data`; never auto-starts another owner.
