@@ -76,7 +76,10 @@ Images. Ein gecachter erfolgreicher Build gilt für denselben Quellstand;
 Compose führt die Prüfungen bei jedem Aufruf erneut aus.
 
 Die Rust-Version entspricht `rust-toolchain.toml`; das Basisimage ist zusätzlich
-per Digest festgelegt. Bei einem Toolchainwechsel Dockerfile, Toolchain-Datei
+per Digest festgelegt. Es ist die schlanke Variante (`rust:<Version>-slim-bookworm`):
+gcc und die C-Header reichen für das gebündelte SQLite, OpenSSL und pkg-config
+braucht kein Crate. Python, rustfmt und Clippy installiert nur die Stufe
+`checks`, mingw-w64 nur die Stufe `windows`. Bei einem Toolchainwechsel Dockerfile, Toolchain-Datei
 und Digest gemeinsam aktualisieren. `scripts/check.py` verweigert eine
 abweichende Compiler-Version. `.dockerignore` erlaubt ausschließlich die
 benötigten Repository-Eingaben, einschließlich `rustfmt.toml` und der

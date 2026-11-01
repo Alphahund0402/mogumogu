@@ -1,7 +1,7 @@
 use super::{InstallState, SourceClass};
 use crate::clock::Timestamp;
+use crate::sha256::{Sha256, hex};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// One registry identity, independent of the project that consumes it.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -18,7 +18,7 @@ impl PackageId {
         // Opaque, unambiguous and shell-friendly. The readable identity remains
         // in separate fields; no quoting of a JSON object is needed in a CLI.
         let identity = serde_json::to_vec(self).expect("string-only package identity");
-        format!("{:x}", Sha256::digest(identity))
+        hex(&Sha256::digest(identity))
     }
 }
 

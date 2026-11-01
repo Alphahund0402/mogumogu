@@ -3,9 +3,9 @@
 use super::Core;
 use crate::domain::*;
 use crate::limits::UI_PAGE;
+use crate::sha256::{Sha256, hex};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// Outer projects of complete searches that nothing tracks yet, for one
 /// confirmed step that registers them and approves them for reading.
@@ -131,7 +131,7 @@ impl Core {
                 });
             }
         }
-        batch.fingerprint = format!("{:x}", hash.finalize())[..16].to_string();
+        batch.fingerprint = hex(&hash.finalize()[..8]);
         Ok(batch)
     }
 

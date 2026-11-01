@@ -7,7 +7,7 @@
 //! the one thread holding the core. [`domain::Snapshot`] is the bounded read
 //! model returned to presentation; [`service::Status`] is a separate summary.
 //!
-//! - **Rules and records:** [`domain`], [`review`], [`validation`], [`privacy`].
+//! - **Rules and records:** [`domain`], [`review`], [`validation`], [`privacy`], [`sha256`].
 //! - **Use cases and coordination:** [`service`], [`owner`], [`ipc`].
 //! - **Static inventory:** [`inventory`] reads through [`fsread`], then hands
 //!   bounded data to [`adapters`] and [`profiles`], using [`parsers`].
@@ -35,6 +35,7 @@ pub mod privacy;
 pub mod profiles;
 pub mod review;
 pub mod service;
+pub mod sha256;
 pub mod storage;
 pub mod validation;
 

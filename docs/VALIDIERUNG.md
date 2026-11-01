@@ -2,6 +2,46 @@
 
 Stand: 5. Oktober 2026, ergänzt bis 31. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 31. Oktober: schlankerer Build, weniger Abhängigkeiten
+
+**Abhängigkeiten:** `pep440_rs` entfernt (nirgends verwendet). `sha2` samt
+`digest`, `generic-array`, `typenum`, `block-buffer`, `crypto-common` und
+`cpufeatures` ersetzt eine eigene SHA-256-Umsetzung nach FIPS 180-4
+(`src/sha256.rs`), wie zuvor schon SHA-1; Fingerabdrücke, Paket-IDs und
+Pipe-Namen bleiben bitgleich. `toml` 0.9 → 1, nur zum Lesen und in derselben
+Hauptversion wie embed-resource: `toml`, `toml_datetime` und `winnow` gibt es
+nicht mehr doppelt. `regex` nur noch mit den Unicode-Tabellen für `\w`, `\s`,
+`\d`, `\b` und `(?i)`. Vier ungenutzte windows-sys-Features entfernt.
+`Cargo.lock` 569 → 557 Pakete; der Kern-Release-Build kompiliert 39 statt 54
+Crates; `mogumogu-cli.exe` 6,80 → 6,54 MB, `mogumogu.exe` 44,36 → 44,10 MB. Die
+Release-Bauzeit bleibt praktisch gleich (83 → 88 s Kern, 264 → 259 s Desktop,
+mit Messrauschen); sie bestimmen SQLite, Slint und das Paket selbst.
+
+**Build:** `build.ps1` übergibt `--target` nur, wenn der Host nicht schon
+`x86_64-pc-windows-msvc` ist. Tests, `check.py` und `cargo` teilen so
+`target\debug`; bisher entstand unter `target\x86_64-pc-windows-msvc` ein
+zweiter Debug-Baum (hier 4 GB). Docker: `rust:1.98.0-slim-bookworm` statt des
+vollen Images (313 statt 562 MB komprimiert), ohne `libssl-dev` und
+`pkg-config`; Python, rustfmt und Clippy nur in der Stufe `checks`.
+`scripts/release.ps1` inventarisiert nur die Pakete des Windows-Builds (335 statt
+557). `rebuild.ps1 -Fast` gilt auch ohne `-Docker`. Die seit `a43b88b` fehlende
+Testkonstante `KEPT` in `src/inventory/tidy.rs` ist zurück, jetzt wie die Tests,
+die sie nutzen, nur unter Windows (`cfg(all(test, windows))`): ohne sie
+kompilierten die Windows-Tests nicht, mit bloßem `cfg(test)` meldete Clippy sie
+unter Linux als unbenutzt.
+
+**Prüfungen:** `python scripts/check.py` (15 Verträge, `cargo fmt`, Clippy mit
+Desktop, Tests) mit **458 Tests** bestanden (457 Kern, darunter zwei neue für
+SHA-256: FIPS-Testvektoren sowie jede Länge von 0 bis 299 Byte, ganz und in
+Stücken, gegen Python `hashlib`; 1 Desktop), 3 ignoriert. `.\build.ps1 -NoRun`
+bestanden; der Testschritt nutzte den Stand von `check.py` (0,13 s). Ein
+Besitzer aus dem alten Build (mit `sha2`) nahm Befehle der neuen CLI an, also
+derselbe Pipe-Name; der neue Besitzer las danach dessen Datenbank.
+Docker auf dem schlanken Image: `validated` bestanden (291 portable Tests),
+`windows-exe` gebaut; Besitzer und CLI daraus bestanden denselben Rauchtest
+(Registrieren, Liste, Beenden) unter Windows 10. Nicht ausgeführt: GitHub-CI
+(erst nach dem Push), Windows 11.
+
 ## Ergänzung vom 31. Oktober: Papierkorb-Plan nur im Dashboard ausführen
 
 **Geändert** auf Entscheidung der Person: Einen Papierkorb-Plan bestätigen und

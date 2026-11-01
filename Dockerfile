@@ -1,18 +1,14 @@
 # syntax=docker/dockerfile:1
 
 # Keep this version aligned with rust-toolchain.toml. scripts/check.py verifies it.
-FROM rust:1.98.0-bookworm@sha256:82150a52ec202c1b14d7817e14516c392bb7f5cfebd88f1ed531cb37ebd39922 AS toolchain
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 pkg-config libssl-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && rustup component add rustfmt clippy
+# The slim image already has gcc and the C library headers the bundled SQLite
+# needs; nothing in the build links OpenSSL or asks pkg-config.
+FROM rust:1.98.0-slim-bookworm@sha256:1469a27c125cb5a3aebfa4f4e4665d935b02fb72cc093b2c974b3d740e43f157 AS toolchain
 
 # An explicit override avoids installing the Windows target inside Linux.
 ENV RUSTUP_TOOLCHAIN=1.98.0 \
     CARGO_HOME=/cache/cargo \
-    CARGO_TARGET_DIR=/workspace/target \
-    PYTHONDONTWRITEBYTECODE=1
+    CARGO_TARGET_DIR=/workspace/target
 
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin mogumogu \
     && mkdir -p /workspace/target /cache/cargo \
@@ -48,7 +44,13 @@ FROM scratch AS windows-exe
 COPY --from=windows /out/ /
 
 # Source is copied into the image; checks never need a host filesystem mount.
+# Only the checks need Python (scripts/check.py) and rustfmt/Clippy.
 FROM toolchain AS checks
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup component add rustfmt clippy --toolchain 1.98.0
+ENV PYTHONDONTWRITEBYTECODE=1
 COPY . .
 USER 10001:10001
 ENTRYPOINT ["python3", "scripts/check.py"]

@@ -1,6 +1,6 @@
 //! Where mogumogu keeps its own data. Project files are never stored here.
+use crate::sha256::Sha256;
 use crate::{Error, Result};
-use sha2::{Digest, Sha256};
 use std::env;
 use std::path::{Path, PathBuf};
 

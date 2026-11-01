@@ -151,14 +151,14 @@ pub fn tracked_below_checked(
 /// The trailing hash covers everything before it. With `index.skipHash`
 /// Git writes zeros instead; then the structure checks alone decide.
 fn checksum_matches(index: &[u8], hash_len: usize) -> bool {
-    use sha2::{Digest, Sha256};
+    use crate::sha256::Sha256;
     let (content, stored) = index.split_at(index.len() - hash_len);
     if stored.iter().all(|b| *b == 0) {
         return true;
     }
     match hash_len {
         20 => super::sha1::sha1(content) == stored,
-        _ => Sha256::digest(content).as_slice() == stored,
+        _ => Sha256::digest(content) == stored,
     }
 }
 
@@ -269,7 +269,7 @@ pub(crate) mod tests {
         }
         let hash = match hash_len {
             20 => super::super::sha1::sha1(&out).to_vec(),
-            _ => <sha2::Sha256 as sha2::Digest>::digest(&out).to_vec(),
+            _ => crate::sha256::Sha256::digest(&out).to_vec(),
         };
         out.extend(hash);
         out

@@ -32,23 +32,32 @@ foreach ($Tool in @('cargo', 'rustc', 'rustup')) {
 Push-Location -LiteralPath $Root
 try {
     Write-Host 'mogumogu · Windows-Build' -ForegroundColor Cyan
-    & rustc --version
+    $Version = @(& rustc -vV)
     if ($LASTEXITCODE -ne 0) { throw 'Die in rust-toolchain.toml festgelegte Toolchain ist nicht verfügbar (rustup toolchain install).' }
-    $Installed = @(& rustup target list --installed)
-    if ($Installed -notcontains $Target) { throw "Ziel fehlt: rustup target add $Target (plus MSVC C++ Build Tools und Windows SDK)." }
+    $Version[0]
+    # On an MSVC x64 host, no --target: tests, check.py and plain cargo then share
+    # target\debug and target\release instead of compiling everything twice.
+    $Common = @('--locked', '--target-dir', $TargetDir)
+    $BinRoot = $TargetDir
+    if ($Version -notcontains "host: $Target") {
+        $Installed = @(& rustup target list --installed)
+        if ($Installed -notcontains $Target) { throw "Ziel fehlt: rustup target add $Target (plus MSVC C++ Build Tools und Windows SDK)." }
+        $Common += @('--target', $Target)
+        $BinRoot = Join-Path $TargetDir $Target
+    }
 
     if (-not $SkipTests) {
         # Core, contracts, Windows read boundary, IPC and end-to-end pilot.
-        Invoke-Cargo @('test', '--locked', '--no-default-features', '--target', $Target, '--target-dir', $TargetDir)
+        Invoke-Cargo (@('test', '--no-default-features') + $Common)
     }
-    $Build = @('build', '--locked', '--bins', '--target', $Target, '--target-dir', $TargetDir)
+    $Build = @('build', '--bins') + $Common
     $Folder = 'debug'
     if ($Configuration -eq 'Release') { $Build += '--release'; $Folder = 'release' }
     if ($Configuration -eq 'Fast') { $Build += @('--profile', 'fast'); $Folder = 'fast' }
     Invoke-Cargo $Build
 
     New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
-    $BinDir = Join-Path $TargetDir "$Target\$Folder"
+    $BinDir = Join-Path $BinRoot $Folder
     foreach ($File in @('mogumogu.exe', 'mogumogu-cli.exe')) {
         $Source = Join-Path $BinDir $File
         if (-not (Test-Path -LiteralPath $Source)) { throw "Build-Artefakt fehlt: $Source" }

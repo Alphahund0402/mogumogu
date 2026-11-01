@@ -12,7 +12,7 @@ nativ unter Windows laufen.
 
   .\rebuild.ps1               Release-Build ohne Tests (schnell)
   .\rebuild.ps1 -Docker       im Container bauen, auch wenn Rust installiert ist
-  .\rebuild.ps1 -Docker -Fast  inkrementell, ohne LTO; für schnelle lokale Iteration
+  .\rebuild.ps1 -Fast         inkrementell, ohne LTO; für schnelle Iteration (auch mit -Docker)
   .\rebuild.ps1 -Test         vorher die Testsuite (im Container: die Kernprüfungen)
   .\rebuild.ps1 -Open         danach den Ausgabeordner im Explorer öffnen
   .\rebuild.ps1 -NoRestart    beendete Instanzen nicht wieder starten
@@ -49,7 +49,7 @@ function Get-CliFlags([string]$Arguments) {
 }
 
 $Configuration = if ($Fast) { 'Fast' } else { 'Release' }
-$Profile = $Configuration.ToLowerInvariant()
+$CargoProfile = $Configuration.ToLowerInvariant()
 $Started = Get-Date
 $Restart = @()
 $Failed = $false
@@ -81,7 +81,7 @@ try {
             & docker build --target validated $Root
             if ($LASTEXITCODE -ne 0) { throw "Kernprüfungen im Container fehlgeschlagen (Exit $LASTEXITCODE)." }
         }
-        & docker build --target windows-exe --build-arg "BUILD_PROFILE=$Profile" --output "type=local,dest=$OutDir" $Root
+        & docker build --target windows-exe --build-arg "BUILD_PROFILE=$CargoProfile" --output "type=local,dest=$OutDir" $Root
         if ($LASTEXITCODE -ne 0) { throw "docker build fehlgeschlagen (Exit $LASTEXITCODE)." }
     }
     else {

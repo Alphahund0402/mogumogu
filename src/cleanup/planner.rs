@@ -7,9 +7,9 @@ use crate::domain::{JournalState, PlanState, PlanSummary, PlanTarget, Scope, Sco
 use crate::inventory::git::IndexCache;
 use crate::limits::CLEANUP_MAX_TARGETS;
 use crate::platform::FileIdentity;
+use crate::sha256::Sha256;
 use crate::storage::{NewTarget, Repository};
 use crate::{Error, Result};
-use sha2::{Digest, Sha256};
 use std::path::Path;
 
 /// A recoverable folder from a fresh tidy-up walk of the project.

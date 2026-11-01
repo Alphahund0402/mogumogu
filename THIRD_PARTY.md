@@ -4,12 +4,12 @@
 - Slint wird über den GPL-3.0-only-Lizenzpfad eingebunden.
 - SQLite ist gemeinfrei und wird über rusqlite (`bundled`) eingebunden; tatsächlich gebaute
   Engine: 3.53.2.
-- Weitere Rust-Abhängigkeiten (u. a. serde, toml, quick-xml, regex, notify, sha2, semver,
-  pep440_rs für PEP-440-Versionen, ureq mit
-  native-tls/SChannel, windows-sys und der Buildhelfer embed-resource) behalten ihre eigenen, GPL-kompatiblen Lizenzen
-  (überwiegend MIT/Apache-2.0). `scripts/release.ps1` erzeugt je Release ein vollständiges
-  Abhängigkeits- und Lizenzinventar (`dependencies.json`, `licenses.txt`) aus `Cargo.lock`.
-  Dieses Dokument ist kein SBOM.
+- Weitere Rust-Abhängigkeiten (u. a. serde, serde_json, toml, quick-xml, regex, semver,
+  windows-sys und der Buildhelfer embed-resource) behalten ihre eigenen, GPL-kompatiblen Lizenzen
+  (überwiegend MIT/Apache-2.0). SHA-1 und SHA-256 sind eigene, kurze Umsetzungen nach FIPS 180-4
+  (`src/parsers/sha1.rs`, `src/sha256.rs`). `scripts/release.ps1` erzeugt je Release ein vollständiges
+  Abhängigkeits- und Lizenzinventar (`dependencies.json`, `licenses.txt`) aus `Cargo.lock`,
+  beschränkt auf den Windows-Build. Dieses Dokument ist kein SBOM.
 - `assets/mountains.jpg` ist ein bereinigter Ausschnitt der vom Auftraggeber bereitgestellten
   Dashboard-Referenz. Die externen Verwertungsrechte sind nicht unabhängig geprüft; vor
   öffentlicher Distribution die Freigabe dokumentieren oder ein selbst lizenziertes Motiv verwenden.

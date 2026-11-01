@@ -24,8 +24,9 @@ try {
     Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
     Copy-Item -LiteralPath (Join-Path $Root 'dist\mogumogu') -Destination $Stage -Recurse
 
-    # Dependency and license inventory from the locked graph (not an SBOM standard).
-    $Metadata = & cargo metadata --locked --format-version 1 | ConvertFrom-Json
+    # Dependency and license inventory from the locked graph (not an SBOM standard),
+    # only what the Windows build resolves, not the Linux/macOS crates in Cargo.lock.
+    $Metadata = & cargo metadata --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc | ConvertFrom-Json
     $Packages = $Metadata.packages | Sort-Object name, version | ForEach-Object {
         [pscustomobject]@{ name = $_.name; version = $_.version; license = $_.license; source = $_.source }
     }

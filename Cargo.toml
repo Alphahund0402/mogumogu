@@ -28,32 +28,28 @@ default = ["desktop"]
 desktop = ["dep:slint", "dep:slint-build", "dep:embed-resource"]
 
 [dependencies]
-pep440_rs = "0.7.3"
 quick-xml = "0.41"
-regex = "1"
+# Patterns use \w, \s, \d, \b and (?i); no \p{..} classes, so the other Unicode tables stay out.
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode-case", "unicode-perl"] }
 rusqlite = { version = "=0.40.2", features = ["bundled", "backup"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 semver = "1"
-sha2 = "0.10"
 slint = { version = "=1.18.1", optional = true, default-features = false, features = ["std", "backend-winit", "renderer-software", "system-tray", "accessibility", "compat-1-18"] }
-toml = "0.9"
+# Only parsed, never written. Major 1 is the one embed-resource already uses.
+toml = { version = "1", default-features = false, features = ["std", "serde", "parse"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Wdk_Foundation",
     "Wdk_Storage_FileSystem",
-    "Wdk_System_SystemServices",
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_IO",
-    "Win32_System_JobObjects",
-    "Win32_System_Memory",
     "Win32_System_Pipes",
-    "Win32_System_ProcessStatus",
     "Win32_System_Registry",
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",

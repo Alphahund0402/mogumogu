@@ -54,7 +54,8 @@ Offizielle Dokumentation, die der Umsetzung zugrunde liegt (Stand Oktober 2026).
 - NuGet-Metadaten/Abkündigung und Versionsnormalisierung: https://learn.microsoft.com/en-us/nuget/api/registration-base-url-resource · https://learn.microsoft.com/en-us/nuget/concepts/package-versioning
 - uv-Datenorte: https://docs.astral.sh/uv/reference/storage/ · https://docs.astral.sh/uv/configuration/environment/
 - Einfache GitHub-Workflow-Referenzen: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
-- Konkrete Versionsordnung: https://docs.rs/pep440_rs/0.7.3/pep440_rs/struct.Version.html · https://docs.rs/semver/1.0.28/semver/struct.Version.html
+- Semantische Versionen: https://docs.rs/semver/1.0.28/semver/struct.Version.html
+- SHA-1 und SHA-256 (eigene Umsetzung, Testvektoren): https://csrc.nist.gov/pubs/fips/180-4/upd1/final
 
 Dokumentationsseiten werden von der Anwendung nicht abgerufen, Registries
 fragt sie nicht ab; Abkündigungen stammen aus lokalen Lockfiles.

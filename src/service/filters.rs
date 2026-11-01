@@ -11,10 +11,10 @@ use crate::fsread::{self, Budget, ScopeRoot};
 use crate::limits::{AI_FILE_MAX_BYTES, AI_MAX_NESTING, ScanLimits};
 use crate::parsers::json;
 use crate::platform::DirHandle;
+use crate::sha256::{Sha256, hex};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::ffi::OsStr;
 use std::path::Path;
 use std::time::Duration;
@@ -154,7 +154,7 @@ impl Core {
                 Err(e) => batch.skipped.push(FilterSkip { project: self.project_label(scope)?, reason: e.to_string() }),
             }
         }
-        batch.fingerprint = format!("{:x}", hash.finalize())[..16].to_string();
+        batch.fingerprint = hex(&hash.finalize()[..8]);
         Ok(batch)
     }
 
@@ -266,7 +266,7 @@ impl Core {
             hash.update(b"\n");
             hash.update(rule.as_bytes());
         }
-        let fingerprint = format!("{:x}", hash.finalize())[..16].to_string();
+        let fingerprint = hex(&hash.finalize()[..8]);
         let mut hints = Vec::new();
         if !settings.shared_denies.is_empty() {
             hints.push(format!(
