@@ -4,10 +4,13 @@ Creates a versioned release ZIP from a clean, tested build (F-27):
 executables, license texts, Cargo.lock, dependency/license inventory,
 source commit and SHA-256 checksums. Signing is a separate, later decision.
 
-  .\scripts\release.ps1 [-AllowDirty]
+  .\scripts\release.ps1 [-AllowDirty] [-NoBuild]
+
+-NoBuild verpackt den schon geprüften Build aus dist\mogumogu, statt erneut zu
+bauen; so verpackt die CI einen Versionstag nach Tests und Build.
 #>
 [CmdletBinding()]
-param([switch]$AllowDirty)
+param([switch]$AllowDirty, [switch]$NoBuild)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
@@ -17,8 +20,15 @@ try {
     if ($Dirty.Count -gt 0 -and -not $AllowDirty) { throw 'Arbeitskopie hat Änderungen: Release nur aus einem sauberen, committeten Stand.' }
     $Commit = (& git rev-parse HEAD).Trim()
     $Version = ((Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value)
-    & (Join-Path $Root 'build.ps1') -NoRun
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Build fehlgeschlagen.' }
+    if ($NoBuild) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root 'dist\mogumogu\mogumogu.exe'))) {
+            throw 'Kein Build in dist\mogumogu: ohne -NoBuild aufrufen.'
+        }
+    }
+    else {
+        & (Join-Path $Root 'build.ps1') -NoRun
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Build fehlgeschlagen.' }
+    }
 
     $Stage = Join-Path $Root "dist\mogumogu-$Version"
     Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue

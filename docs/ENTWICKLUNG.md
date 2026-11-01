@@ -128,6 +128,34 @@ eine Layoutschleife.
 Die HTML-Designvorschau ist ein unabhängiger früherer Entwurf. Änderungen an
 der Windows-Oberfläche werden am kompilierten Slint-Layout geprüft.
 
+## Auf schwächeren Rechnern entwickeln
+
+Teuer ist allein das Desktop-Programm: Slint erzeugt aus `ui/` 14,7 MB Rust, und
+der Compiler braucht dafür im Release-Profil bis 3,1 GB Arbeitsspeicher, in
+`fast` 1,9 GB. Der Kern ohne Oberfläche kostet einen Bruchteil. Werte vom
+1. November 2026 im [Messbericht](MESSBERICHT.md#schwächere-rechner-und-buildzeit-1-november-2026).
+
+| Arbeit | Weg | Bedarf |
+|---|---|---|
+| Kern, Erfassung, Speicher, CLI | `cargo test --locked --no-default-features` | Rust und ein C-Compiler für SQLite; größter Compilerprozess 0,5 GB, nach einer Änderung 5 s |
+| Oberfläche ausprobieren | `.\rebuild.ps1 -Fast` | bis 1,9 GB; nach einer Änderung 12–19 s |
+| Release-EXE | `.\rebuild.ps1` | bis 3,1 GB; etwa 2 Minuten nach einer Änderung |
+| Gar nicht bauen | committen und pushen; der Windows-Workflow prüft und baut, `.\rebuild.ps1 -Download` lädt genau diesen Build | nur die angemeldete GitHub-CLI `gh` |
+| Release für andere | Version in `Cargo.toml` setzen, Tag `v<Version>` pushen | nichts: der Workflow verpackt den geprüften Build und veröffentlicht ihn |
+
+Ein geladener Build nennt in `BUILDINFO.txt` seinen Commit; `scripts/download.ps1`
+nimmt einen CI-Build nur, wenn er den verlangten Commit nennt, und ein Release nur
+mit passender SHA-256-Prüfsumme. CI-Builds bleiben 90 Tage als Artefakt, Releases
+dauerhaft; beide sind nicht signiert. Docker lohnt sich für die portablen
+Kernprüfungen und den GNU-Build ohne lokales Rust, nicht als Erleichterung für
+schwache Rechner.
+
+Den Umfang des erzeugten Codes bestimmen vor allem bedingte und wiederholte
+Elemente: 225 solche Komponenten machen 9,2 der 14,7 MB aus, jedes `if` wird eine
+eigene Komponente mit rund 40 KB Rust. Seiten und Reiter bleiben bedingt, damit
+zur Laufzeit nur die sichtbare Seite Speicher belegt. Für kleine Elemente wie
+einen einzelnen Text lohnt ein `if` nur, wenn das Element wirklich fehlen muss.
+
 ## Performance nachvollziehbar prüfen
 
 ```powershell

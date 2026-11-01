@@ -39,7 +39,9 @@ Die Basis des [Implementierungsplans](docs/IMPLEMENTIERUNGSPLAN.md) ist innerhal
 
 Die neuen Ansichten und ihre Grenzen beschreibt [Entwicklungsfunde, Speicher und Skill-Inhalte](docs/ENTWICKLUNGSFUNDE.md).
 
-Voraussetzungen: Windows 10/11 x64 und **entweder** nur [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Linux-Container) **oder** [rustup](https://rustup.rs) mit MSVC-Toolchain (die Version legt `rust-toolchain.toml` fest) samt Visual Studio C++ Build Tools und Windows SDK.
+Voraussetzungen: Windows 10/11 x64. Zum Ausführen braucht mogumogu weder Rust noch Docker. Wer selbst baut, braucht **entweder** [rustup](https://rustup.rs) mit MSVC-Toolchain (die Version legt `rust-toolchain.toml` fest) samt Visual Studio C++ Build Tools und Windows SDK **oder** nur [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Linux-Container). Beides ist auf schwächeren Rechnern schwer: Der Compiler braucht für das Desktop-Programm über 3 GB Arbeitsspeicher, Docker Desktop eine eigene virtuelle Maschine.
+
+**Ohne Rust und ohne Docker (schwächere Rechner):** `rebuild.cmd` doppelklicken. Ist keins von beiden installiert, lädt es den fertigen Build nach `dist\mogumogu`, statt zu bauen: den CI-Build genau dieses Commits (braucht die angemeldete [GitHub-CLI](https://cli.github.com) `gh`), sonst das neueste Release (ohne Anmeldung, SHA-256 geprüft, nicht signiert). Erzwingen lässt sich das mit `.\rebuild.ps1 -Download`, nur das Release lädt `.\scripts\download.ps1 -Release`. Ein Release entsteht, sobald ein Versionstag wie `v0.1.0` gepusht ist; lokale, nicht gepushte Änderungen enthält kein geladener Build. Details: [Entwicklung](docs/ENTWICKLUNG.md#auf-schwächeren-rechnern-entwickeln).
 
 **Ohne Rust, nur mit Docker:** `rebuild.cmd` doppelklicken. Fehlt Rust, baut es die Windows-Programme im Container mit der GNU-Toolchain (mingw-w64) und legt sie nach `dist\mogumogu`; erzwingen lässt sich das mit `.\rebuild.ps1 -Docker`, direkt mit `docker build --target windows-exe --output dist/mogumogu .`. mogumogu selbst läuft danach wie immer nativ unter Windows, nicht im Container. Details: [Docker](docs/DOCKER.md#windows-programme-im-container-bauen).
 
@@ -49,9 +51,10 @@ Voraussetzungen: Windows 10/11 x64 und **entweder** nur [Docker Desktop](https:/
 .\start.ps1 -ShowDashboard           # bereits gebaut mit lokalen Daten starten
 .\rebuild.ps1                        # Release neu bauen (ohne Tests, -Test mit), etwa 2 Min. nach einer Änderung¹
 .\rebuild.ps1 -Fast                  # schnelle Iteration: inkrementell, opt-level 1, etwa 15 s¹ (auch mit -Docker)
+.\rebuild.ps1 -Download              # nicht bauen: den geprüften Build laden (CI dieses Commits, sonst Release)
 ```
 
-Alternativ `build.cmd` doppelklicken (setzt die Execution Policy nur für diesen Prozess). Zum reinen Neubauen `rebuild.cmd` doppelklicken: Eine laufende Instanz aus `dist` wird über die CLI geordnet beendet und danach wieder im Tray gestartet, am Ende steht der Pfad der EXE. Ausgabe: `dist\mogumogu\mogumogu.exe` und `mogumogu-cli.exe`. Kein Dienst, kein Autostart, keine Installation von Voraussetzungen und keine Netzwerkverbindungen.
+Alternativ `build.cmd` doppelklicken (setzt die Execution Policy nur für diesen Prozess). Zum reinen Neubauen `rebuild.cmd` doppelklicken: Eine laufende Instanz aus `dist` wird über die CLI geordnet beendet und danach wieder im Tray gestartet, am Ende steht der Pfad der EXE. Ausgabe: `dist\mogumogu\mogumogu.exe` und `mogumogu-cli.exe`. Kein Dienst, kein Autostart und keine Installation von Voraussetzungen. mogumogu selbst stellt keine Netzwerkverbindungen her; nur das Laden eines fertigen Builds (`-Download`) verbindet sich mit GitHub.
 
 ¹ Gemessen auf einem Rechner mit 16 Threads. Weitere Kerne helfen nur zum Teil: Den aus `ui/` erzeugten Code liest und prüft der Compiler auf einem Kern. Werte und schwächere Rechner: [Messbericht](docs/MESSBERICHT.md#schwächere-rechner-und-buildzeit-1-november-2026).
 

@@ -1,8 +1,9 @@
 name: Windows
 on: [push, pull_request, workflow_dispatch]
 
-# Least privilege: no write tokens, no release secrets. Fork pull requests run
-# the same unprivileged checks and never see secrets.
+# Least privilege: the build runs with a read-only token and no secrets. Fork
+# pull requests run the same unprivileged checks. Only the publish job of a
+# pushed version tag may write, and it runs no repository code.
 permissions:
   contents: read
 
@@ -26,6 +27,10 @@ jobs:
           rustup show active-toolchain
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # Compiled dependencies carry over between runs, so checks and the release
+      # build start warm. Pinned to the commit of Swatinem/rust-cache v2.9.2.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
       - name: Contracts, formatting, Clippy and tests
         run: python scripts/check.py
 
@@ -48,13 +53,75 @@ jobs:
           & $cli --data-dir $data --no-start owner stop
           if (-not $owner.WaitForExit(15000)) { throw 'Owner did not stop.' }
 
-      - name: Bootstrap build evidence (not a signed release)
+      # scripts/download.ps1 checks that a downloaded build names the commit it
+      # was asked for.
+      - name: Build information
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          @(
+            "mogumogu $version",
+            "Quellstand: $env:GITHUB_SHA",
+            "Rust: $(rustc --version)",
+            "Gebaut: GitHub Actions, Lauf $env:GITHUB_RUN_ID",
+            'Nicht signiert. Quellcode: GPL-3.0-only; der zugehörige Quellstand ist der oben genannte Commit.'
+          ) | Set-Content -Encoding UTF8 dist/mogumogu/BUILDINFO.txt
+
+      # Weaker computers load this instead of building: rebuild.ps1 -Download.
+      - name: Windows build of this commit (not a signed release)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mogumogu-windows
           path: |
             dist/mogumogu/
             Cargo.lock
+
+      - name: Release package for a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: .\scripts\release.ps1 -NoBuild
+
+      - name: Keep the release package for the publish job
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mogumogu-release
+          path: |
+            dist/mogumogu-*.zip
+            dist/mogumogu-*.zip.sha256
+
+  # A pushed tag v<version> publishes the package the build job tested. This
+  # job checks out nothing and runs only the GitHub CLI.
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # Pinned to the commit of v4.3.0, the major of upload-artifact above.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mogumogu-release
+          path: release
+
+      - name: Publish the tested package as a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          zip="release/mogumogu-${TAG#v}.zip"
+          if [ ! -f "$zip" ]; then
+            echo "Tag $TAG passt nicht zur Version in Cargo.toml:"; ls release; exit 1
+          fi
+          expected=$(cut -d' ' -f1 "$zip.sha256" | tr -d '\r')
+          actual=$(sha256sum "$zip" | cut -d' ' -f1)
+          if [ "$expected" != "$actual" ]; then echo "Prüfsumme stimmt nicht."; exit 1; fi
+          gh release create "$TAG" "$zip" "$zip.sha256" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "mogumogu ${TAG#v}" \
+            --notes "Windows 10/11 x64, nicht signiert. Entpacken und mogumogu.exe starten; kein Rust und kein Docker nötig. Prüfsumme: $(basename "$zip").sha256. Quellstand: $GITHUB_SHA."
 
 # windows-latest is a CI host, not proof of Windows 10/11 desktop behaviour.
 # Tray, DPI, Explorer restart and sleep remain manual checks (docs/WINDOWS-ABNAHME.md).

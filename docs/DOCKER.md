@@ -7,6 +7,11 @@ die identitätsgebundene Windows-Lesegrenze laufen und werden geprüft nur nativ
 auf Windows 10/11. Docker stellt keinen Zugriff auf das Inventar des
 Hostrechners bereit.
 
+Docker Desktop braucht eine eigene virtuelle Maschine und mehrere GB
+Arbeitsspeicher. Auf schwächeren Rechnern lädt `.\rebuild.ps1 -Download` statt
+eines Builds den geprüften Build aus der CI oder das neueste Release; siehe
+[Entwicklung](ENTWICKLUNG.md#auf-schwächeren-rechnern-entwickeln).
+
 ## Windows-Programme im Container bauen
 
 Voraussetzung ist nur Docker Desktop mit Linux-Containern. Am einfachsten
