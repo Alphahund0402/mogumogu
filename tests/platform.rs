@@ -82,7 +82,7 @@ fn a_busy_owner_counts_as_running() {
 fn a_symbolic_link_to_a_share_is_not_followed() {
     let temp = tempfile::tempdir().unwrap();
     let link = temp.path().join("share");
-    if let Err(e) = std::os::windows::fs::symlink_dir(r"\127.0.0.1\mogumogu-none", &link) {
+    if let Err(e) = std::os::windows::fs::symlink_dir(r"\\127.0.0.1\mogumogu-none", &link) {
         println!("Symbolischer Link nicht anlegbar ({e}); nichts geprüft.");
         return;
     }
