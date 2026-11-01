@@ -1,6 +1,8 @@
 //! Translates UI intents into owner requests and wires callbacks in one place.
 use super::{Desktop, defer_hide, dialogs, later, ui::*, with};
-use mogumogu::domain::{DatabasePlace, DiskQuery, DiskSort, DiskView, PackageFilter, ScopeKind, SearchArea};
+use mogumogu::domain::{
+    DatabasePlace, DiskQuery, DiskSort, DiskView, PackageFilter, ProjectTidy, ScopeKind, SearchArea, TidyClass,
+};
 use mogumogu::limits::PACKAGE_PAGE;
 use mogumogu::service::Request;
 use slint::{ComponentHandle, SharedString, TimerMode};
@@ -137,6 +139,40 @@ impl Desktop {
             _ => return,
         };
         self.submit(request);
+    }
+
+    /// Leaves a recoverable entry out of the next plan, or takes it back in.
+    fn project_toggle(&mut self, rel_path: String) {
+        if !self.cleanup_skip.remove(&rel_path) {
+            self.cleanup_skip.insert(rel_path);
+        }
+        self.render_project();
+    }
+
+    fn project_select_all(&mut self, all: bool) {
+        self.cleanup_skip.clear();
+        if !all && let Some(report) = self.project_report() {
+            let paths: Vec<String> =
+                report.items.iter().filter(|i| i.class == TidyClass::Regenerable).map(|i| i.rel_path.clone()).collect();
+            self.cleanup_skip.extend(paths);
+        }
+        self.render_project();
+    }
+
+    /// Drafts a plan for the selected entries. The owner measures the project
+    /// again and refuses any path that is no longer recoverable.
+    fn project_plan(&mut self) {
+        let (Some(project_id), Some(report)) = (self.project_page, self.project_report()) else { return };
+        let paths: Vec<String> =
+            super::project::selected(report, &self.cleanup_skip).map(|i| i.rel_path.clone()).collect();
+        if !paths.is_empty() {
+            self.submit(Request::CleanupPlan { project_id, paths });
+        }
+    }
+
+    fn project_report(&self) -> Option<&ProjectTidy> {
+        let id = self.project_page?;
+        self.snapshot.tidy.projects.iter().find(|p| p.project_id == id)
     }
 
     fn storage_approval(&mut self, path: &str) {
@@ -485,13 +521,13 @@ pub(super) fn wire(ui: &Dashboard) {
     actions.on_tidy_report(|project| {
         with(move |d| d.submit(Request::Tidy { project_id: (project >= 0).then_some(i64::from(project)) }))
     });
-    actions.on_open_tidy(|project| {
-        later(move |d| {
-            if let Some(found) = d.snapshot.tidy.projects.iter().find(|p| p.project_id == i64::from(project)).cloned() {
-                d.dialog(dialogs::tidy(&found));
-            }
-        })
+    actions.on_project_back(|| later(Desktop::project_back));
+    actions.on_project_toggle(|rel_path| {
+        let rel_path = rel_path.to_string();
+        later(move |d| d.project_toggle(rel_path))
     });
+    actions.on_project_select_all(|all| later(move |d| d.project_select_all(all)));
+    actions.on_project_plan(|| later(Desktop::project_plan));
     actions.on_adopt_scratchpads(|| with(|d| d.submit(Request::AdoptScratchpads)));
     actions.on_search_drive(|root| {
         let root = root.to_string();

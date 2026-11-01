@@ -78,7 +78,12 @@ Datei; `page-card.slint` teilt den Rahmen. Die sechs Seiten (Übersicht,
 Projekte, Pakete, KI-Konfiguration, Speicher, Einstellungen) tragen
 Unterbereiche als Reiter; `Store.open(seite, reiter)` öffnet beide zusammen.
 `system.slint` liefert die Systemfunde für die Reiter in Pakete und
-KI-Konfiguration, `discoveries.slint` die Funde in Projekte. Jede Schaltfläche
+KI-Konfiguration, `discoveries.slint` die Funde in Projekte. Die Projektseite
+(`project.slint`, Seite 6, nicht in der Seitenleiste) füllt
+`src/desktop/project.rs` aus Snapshot und letztem Aufräumbericht. Ihre Auswahl
+hält der Desktop nur als ausgelassene Pfade (`cleanup_skip`); die übrigen gehen
+als `CleanupPlan { paths }` an den Kern, der neu misst und jeden Pfad prüft.
+Der Renderer bindet `project.rs` wie `view.rs` ein. Jede Schaltfläche
 muss eine sichtbare Wirkung haben: Ergebnisse von Hintergrundaktionen erscheinen
 über `Desktop::notify` in der Ergebnisleiste, nicht nur in der Statuszeile. Klickbare Flächen verwenden
 `Activatable` für Enter, Leertaste, Fokusrahmen und Accessibility-Aktionen.
@@ -116,7 +121,7 @@ eine Layoutschleife.
 | Fenster und Platz | Start 1080 × 680, Minimum 900 × 560 logische Pixel; 188 px Navigation, 52 px Befehlsleiste, 28 px Statusleiste |
 | Arbeitsfläche | Kennzahlen nur in der Übersicht; Projekte als Hauptliste, Speicher und letzte Aktivität daneben; andere Bereiche nutzen die gesamte Inhaltshöhe |
 | Dichte und Lesbarkeit | Projektzeilen 32 px, zweizeilige Einträge 48 px, Schaltflächen 28 px; gemeinsame Maße in `ui/theme.slint`, lesbare Schrift statt kleiner skalierter Gesamtansicht |
-| Eingabe und Fokus | Strg+K/Strg+F Suche über alle Bereiche, Strg+N Projekt hinzufügen, F5 Ansicht, F1 Hilfe, Alt+1…7 Navigation; Esc schließt Dialog, Suche oder „Projekt hinzufügen“; Dialogschluss stellt das Tastaturziel wieder her |
+| Eingabe und Fokus | Strg+K/Strg+F Suche über alle Bereiche, Strg+N Projekt hinzufügen, F5 Ansicht, F1 Hilfe, Alt+1…6 Navigation; Esc schließt Dialog, Suche oder „Projekt hinzufügen“; Dialogschluss stellt das Tastaturziel wieder her |
 | Große Bestände | Listen bleiben virtualisiert; KI-Profile scrollen horizontal, Pläne in einer eigenen begrenzten Liste, Einstellungen vertikal |
 | Verbindung und Schutz | Keine zusätzliche Netzaktivität; Modus, Unbekannt-Zustände, Lesefreigaben und Planbestätigungen bleiben sichtbar |
 

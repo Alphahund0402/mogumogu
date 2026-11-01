@@ -1,0 +1,277 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons } from "../theme.slint";
+import { Store, Actions, CleanupRow, HoldRow, DetailRow } from "../store.slint";
+import { Card, UiButton, StatusChip, Activatable, Callout, Icon } from "../components.slint";
+
+// One part of the project page; its height follows its content.
+component Section inherits Card {
+    in property <string> title;
+    in property <string> eyebrow;
+    VerticalLayout {
+        padding: 12px; spacing: 8px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: root.title; font-size: 13.5px; font-weight: 700; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; accessible-role: AccessibleRole.text; }
+            if root.eyebrow != "" : Text { text: root.eyebrow; font-size: 11px; color: Theme.muted; vertical-alignment: center; horizontal-alignment: right; overflow: elide; }
+        }
+        @children
+    }
+}
+
+// Label and wrapped value; repeated rows report their wrapped height.
+component Fact inherits Rectangle {
+    in property <DetailRow> data;
+    min-width: 0px;
+    preferred-width: 0px;
+    height: max(label.preferred-height, value.preferred-height);
+    label := Text {
+        x: 0px; y: 0px; width: 128px; height: self.preferred-height;
+        text: root.data.label; font-size: 11.5px; color: Theme.muted; wrap: word-wrap;
+    }
+    value := Text {
+        x: 138px; y: 0px; width: max(0px, root.width - 138px); height: self.preferred-height;
+        text: root.data.value; font-size: 11.5px; color: Theme.ink; wrap: word-wrap;
+    }
+}
+
+component Legend inherits HorizontalLayout {
+    in property <color> swatch;
+    in property <string> text;
+    spacing: 6px; horizontal-stretch: 1; min-width: 0px;
+    Rectangle { width: 10px; height: 10px; y: (parent.height - self.height) / 2; border-radius: 3px; background: root.swatch; accessible-role: none; }
+    Text { text: root.text; font-size: 11.5px; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+}
+
+// One entry of the last report. A box selects a recoverable folder for this
+// plan only; the action keeps it out of every plan or monitors a database.
+component CleanupLine inherits Rectangle {
+    in property <CleanupRow> data;
+    min-width: 0px;
+    preferred-width: 0px;
+    accessible-role: none;
+    VerticalLayout {
+        padding-top: 4px; padding-bottom: 4px; spacing: 1px;
+        HorizontalLayout {
+            spacing: 10px;
+            if root.data.recoverable : Activatable {
+                width: 22px; height: 22px; y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                checkable: true;
+                selected: root.data.selected;
+                available: !Store.demo && !Store.busy;
+                resting-background: Theme.surface;
+                resting-border: Theme.input-border;
+                label: "Für diesen Plan auswählen: " + root.data.title;
+                activated => { Actions.project-toggle(root.data.rel-path); }
+                if root.data.selected : Icon { source: Icons.check; x: 4px; y: 4px; width: 14px; height: 14px; tone: Theme.ink; }
+            }
+            if !root.data.recoverable : Rectangle { width: 22px; accessible-role: none; }
+            Text {
+                text: root.data.title;
+                font-size: 12.5px; font-weight: 700;
+                color: root.data.recoverable && !root.data.selected ? Theme.muted : Theme.ink;
+                horizontal-stretch: 1; vertical-alignment: center; overflow: elide;
+            }
+            Text { text: root.data.size; font-size: 12px; font-weight: 700; color: Theme.protected-ink; vertical-alignment: center; horizontal-alignment: right; }
+            if root.data.action-id != "" : UiButton {
+                y: (parent.height - self.height) / 2;
+                small: true; label: root.data.action-label;
+                available: !Store.demo && !Store.busy;
+                activated => { Actions.detail-action(root.data.action-id); }
+            }
+        }
+        VerticalLayout {
+            padding-left: 32px;
+            Text { text: root.data.detail; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        }
+    }
+}
+
+// Something that holds a folder of the project; lifted only here, never over
+// the CLI.
+component HoldLine inherits Rectangle {
+    in property <HoldRow> data;
+    min-width: 0px;
+    preferred-width: 0px;
+    accessible-role: none;
+    VerticalLayout {
+        padding-top: 4px; padding-bottom: 4px; spacing: 1px;
+        HorizontalLayout {
+            spacing: 10px;
+            Icon { source: Icons.lock; width: 16px; height: 16px; y: (parent.height - self.height) / 2; tone: Theme.protected-ink; }
+            Text { text: root.data.title; font-size: 12.5px; font-weight: 700; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+            if root.data.action-id != "" : UiButton {
+                y: (parent.height - self.height) / 2;
+                small: true; label: root.data.action-label;
+                available: !Store.demo && !Store.busy;
+                activated => { Actions.detail-action(root.data.action-id); }
+            }
+        }
+        VerticalLayout {
+            padding-left: 26px;
+            Text { text: root.data.detail; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        }
+    }
+}
+
+// One project on its own page: what it holds, what can go to the recycle bin
+// and why, what protects it, how far AI tools reach and how it grew.
+export component ProjectPage inherits VerticalLayout {
+    min-width: 0px;
+    preferred-width: 0px;
+    spacing: 10px;
+    HorizontalLayout {
+        spacing: 10px;
+        UiButton {
+            y: (parent.height - self.height) / 2;
+            small: true; has-icon: true; icon: Icons.folder; label: "Alle Projekte";
+            available: true;
+            accessible-label: "Zurück zur Projektliste";
+            activated => { Actions.project-back(); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1; min-width: 0px; spacing: 1px; alignment: center;
+            Text {
+                text: Store.project-name != "" ? Store.project-name : "Projekt nicht mehr registriert";
+                font-size: 19px; font-weight: 700; color: Theme.ink; overflow: elide;
+                accessible-role: AccessibleRole.text;
+            }
+            if Store.project-path != "" : Text { text: Store.project-path; font-size: 11px; color: Theme.muted; overflow: elide; }
+        }
+        for action in Store.project-actions : UiButton {
+            y: (parent.height - self.height) / 2;
+            small: true; primary: action.primary; label: action.label;
+            available: !Store.demo && !Store.busy;
+            activated => { Actions.detail-action(action.id); }
+        }
+    }
+    if Store.project-chips.length > 0 : HorizontalLayout {
+        spacing: 6px; alignment: start;
+        // Six chips exceed 900 px; they then shorten, the full word stays accessible.
+        for chip in Store.project-chips : StatusChip { label: chip.label; kind: chip.kind; constrained: true; }
+    }
+    if Store.project-name == "" : Text {
+        text: "Die Registrierung wurde aufgehoben oder die Daten sind neu geladen. Zurück zur Liste führt zu den übrigen Projekten.";
+        font-size: 12px; color: Theme.muted; wrap: word-wrap;
+    }
+    if Store.project-name != "" : ScrollView {
+        vertical-stretch: 1;
+        content-width: self.visible-width;
+        VerticalLayout {
+            spacing: Theme.gap; padding-right: 16px; padding-bottom: 12px;
+            Section {
+                title: "Speicher";
+                eyebrow: Store.project-checked;
+                if Store.project-report-note == "" : Text { text: Store.project-total; font-size: 15px; font-weight: 700; color: Theme.protected-ink; }
+                if Store.project-report-note == "" : bar := Rectangle {
+                    height: 16px;
+                    border-radius: 8px;
+                    border-width: Theme.stroke;
+                    border-color: Theme.edge-strong;
+                    background: Theme.surface;
+                    clip: true;
+                    accessible-role: AccessibleRole.text;
+                    accessible-label: Store.project-total + ": " + Store.project-legend[0] + ", " + Store.project-legend[1] + ", " + Store.project-legend[2] + ", " + Store.project-legend[3];
+                    property <float> a: Store.project-shares[0];
+                    property <float> b: Store.project-shares[1];
+                    property <float> c: Store.project-shares[2];
+                    property <float> d: Store.project-shares[3];
+                    Rectangle { x: 0px; y: 0px; height: parent.height; width: parent.width * bar.a; background: Theme.chart-blue; }
+                    Rectangle { x: parent.width * bar.a; y: 0px; height: parent.height; width: parent.width * bar.b; background: Theme.chart-amber; }
+                    Rectangle { x: parent.width * (bar.a + bar.b); y: 0px; height: parent.height; width: parent.width * bar.c; background: Theme.chart-fog; }
+                    Rectangle { x: parent.width * (bar.a + bar.b + bar.c); y: 0px; height: parent.height; width: parent.width * bar.d; background: Theme.chart-sage; }
+                }
+                if Store.project-report-note == "" : HorizontalLayout {
+                    spacing: 12px;
+                    Legend { swatch: Theme.chart-blue; text: Store.project-legend[0]; }
+                    Legend { swatch: Theme.chart-amber; text: Store.project-legend[1]; }
+                }
+                if Store.project-report-note == "" : HorizontalLayout {
+                    spacing: 12px;
+                    Legend { swatch: Theme.chart-fog; text: Store.project-legend[2]; }
+                    Legend { swatch: Theme.chart-sage; text: Store.project-legend[3]; }
+                }
+                if Store.project-report-note != "" : Callout { text: Store.project-report-note; }
+                if Store.project-report-action.id != "" : HorizontalLayout {
+                    alignment: start;
+                    UiButton {
+                        small: true; primary: Store.project-report-action.primary; label: Store.project-report-action.label;
+                        available: !Store.demo && !Store.busy;
+                        activated => { Actions.detail-action(Store.project-report-action.id); }
+                    }
+                }
+                for fact in Store.project-facts : Fact { data: fact; }
+            }
+            if Store.project-cleanup.length > 0 : Section {
+                title: "Aufräumen";
+                eyebrow: "Aus dem letzten Bericht";
+                Text {
+                    text: "Ein Häkchen gilt nur für diesen Plan. „Immer behalten“ nimmt einen Ordner dauerhaft aus jedem Plan. Vor dem Verschieben prüft mogumogu jeden Ordner erneut.";
+                    font-size: 11px; color: Theme.muted; wrap: word-wrap;
+                }
+                for row in Store.project-cleanup : CleanupLine { data: row; }
+                Rectangle { height: 1.5px; background: Theme.line; accessible-role: none; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 1; min-width: 0px; spacing: 1px; alignment: center;
+                        Text { text: Store.project-selection; font-size: 12px; font-weight: 700; color: Theme.ink; wrap: word-wrap; }
+                        Text { text: "Frei wird der Platz erst, wenn du den Papierkorb leerst."; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                    }
+                    UiButton { y: (parent.height - self.height) / 2; small: true; quiet: true; label: "Alle"; available: !Store.demo && !Store.busy; activated => { Actions.project-select-all(true); } }
+                    UiButton { y: (parent.height - self.height) / 2; small: true; quiet: true; label: "Keine"; available: !Store.demo && !Store.busy; activated => { Actions.project-select-all(false); } }
+                    UiButton {
+                        y: (parent.height - self.height) / 2;
+                        small: true; primary: true; label: "Papierkorb-Plan prüfen …";
+                        available: Store.project-can-plan && !Store.demo && !Store.busy;
+                        activated => { Actions.project-plan(); }
+                    }
+                }
+            }
+            if Store.project-plans.length > 0 : Section {
+                title: "Papierkorb-Pläne";
+                for plan in Store.project-plans : HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 1; min-width: 0px; spacing: 1px;
+                        Text { text: "Plan " + plan.id + " · " + plan.state; font-size: 12.5px; font-weight: 700; color: Theme.ink; overflow: elide; }
+                        Text { text: plan.summary + " · " + plan.created; font-size: 11px; color: Theme.muted; overflow: elide; }
+                    }
+                    UiButton { y: (parent.height - self.height) / 2; small: true; label: "Öffnen"; available: true; activated => { Actions.open-plan(plan.id); } }
+                }
+            }
+            Section {
+                title: "Schutz";
+                for hold in Store.project-holds : HoldLine { data: hold; }
+                if Store.project-holds-note != "" : Text { text: Store.project-holds-note; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+                HorizontalLayout {
+                    alignment: start; spacing: 6px;
+                    UiButton { small: true; label: "Läufe & Docker …"; available: !Store.demo && !Store.busy; activated => { Actions.detail-action("agents"); } }
+                    UiButton { small: true; label: "Datenbanken …"; available: !Store.demo && !Store.busy; activated => { Actions.detail-action("databases"); } }
+                }
+            }
+            Section {
+                title: "KI-Zugriff";
+                if Store.project-ai-level != "" : HorizontalLayout {
+                    alignment: start;
+                    StatusChip { label: Store.project-ai-level; kind: Store.project-ai-kind; }
+                }
+                Text { text: Store.project-ai-summary; font-size: 11.5px; color: Theme.text; wrap: word-wrap; }
+                if Store.project-ai-action.id != "" || Store.project-ai-index >= 0 : HorizontalLayout {
+                    alignment: start; spacing: 6px;
+                    if Store.project-ai-action.id != "" : UiButton {
+                        small: true; primary: true; label: Store.project-ai-action.label;
+                        available: !Store.demo && !Store.busy;
+                        activated => { Actions.detail-action(Store.project-ai-action.id); }
+                    }
+                    if Store.project-ai-index >= 0 : UiButton { small: true; label: "Befunde"; available: true; activated => { Actions.open-access(Store.project-ai-index); } }
+                }
+            }
+            if Store.project-growth != "" : Section {
+                title: "Verlauf";
+                Text { text: Store.project-growth; font-size: 11.5px; color: Theme.ink; wrap: word-wrap; }
+                for item in Store.project-growth-items : Fact { data: item; }
+            }
+        }
+    }
+}

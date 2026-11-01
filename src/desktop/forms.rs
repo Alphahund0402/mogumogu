@@ -106,10 +106,28 @@ impl Desktop {
         self.snapshot.projects.get(ui.global::<Store>().get_form_project_index() as usize).map(|p| p.id)
     }
 
+    /// Opens the project page; the list keeps the project selected.
     pub(super) fn open_project(&mut self, id: i64) {
-        if let Some(project) = self.snapshot.projects.iter().find(|p| p.id == id).cloned() {
-            let dialog = dialogs::project(&self.snapshot, &project);
-            self.dialog(dialog);
+        if !self.snapshot.projects.iter().any(|p| p.id == id) {
+            return;
+        }
+        if self.project_page != Some(id) {
+            self.cleanup_skip.clear();
+        }
+        self.project_page = Some(id);
+        self.render_project();
+        if let Some(ui) = &self.dashboard {
+            let store = ui.global::<Store>();
+            store.set_selection_kind("project".into());
+            store.set_selection_key(id.to_string().into());
+            store.invoke_open(6, 0);
+        }
+    }
+
+    pub(super) fn project_back(&mut self) {
+        self.project_page = None;
+        if let Some(ui) = &self.dashboard {
+            ui.global::<Store>().invoke_open(1, 0);
         }
     }
 

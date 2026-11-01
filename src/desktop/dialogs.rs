@@ -222,109 +222,6 @@ pub fn found_projects(batch: &mogumogu::service::ProjectBatch) -> Dialog {
 }
 
 /// What one project holds, largest first. Nothing here removes anything.
-/// Keep buttons offered per dialog: the largest recoverable folders.
-const KEEP_ACTIONS: usize = 3;
-
-pub fn tidy(report: &ProjectTidy) -> Dialog {
-    let size = |b: u64| format_bytes(i64::try_from(b).ok());
-    let shown = |rel: &str| rel.replace('/', "\\");
-    let recoverable = match report.regenerable_allocated {
-        0 => size(report.regenerable),
-        allocated => format!("{} · belegt auf dem Laufwerk {}", size(report.regenerable), size(allocated)),
-    };
-    let mut dialog = Dialog::new(format!("Aufräumen · {}", report.name))
-        .path(&report.path)
-        .row("Gesamt", report.total.map_or_else(|| "Unvollständig gemessen".to_string(), size))
-        .row("Wiederherstellbar", recoverable)
-        .row("Prüfen", size(report.review))
-        .row(
-            "Davon Testdaten",
-            match report.own_content().filter(|own| *own > 0) {
-                Some(own) if report.test_data > 0 => format!(
-                    "{} · {} % des eigenen Projektinhalts{}",
-                    size(report.test_data),
-                    report.test_data * 100 / own,
-                    if report.heavy_test_data() { " – auffällig viel" } else { "" }
-                ),
-                _ => size(report.test_data),
-            },
-        )
-        .row("Versionsverwaltung", size(report.vcs))
-        .row("Zuletzt geändert", report.last_change.map_or("Unbekannt".into(), display_local))
-        .row("Gemessen", display_local(report.checked_at));
-    if report.agent > 0 {
-        dialog = dialog.row("Davon Reste von KI-Agenten", size(report.agent));
-    }
-    if !report.kept.is_empty() {
-        dialog = dialog.row("Von dir behalten", report.kept.iter().map(|k| shown(k)).collect::<Vec<_>>().join("\n"));
-    }
-    if let Some(growth) = &report.growth {
-        dialog = dialog.row("Wachstum", growth_text(growth));
-    }
-    if !report.runs.is_empty() {
-        let runs: Vec<String> = report
-            .runs
-            .iter()
-            .map(|r| format!("{} · {} · {} Artefakte", r.title, display_local(r.started_at), r.artifacts))
-            .collect();
-        dialog = dialog.row("Registrierte KI-Läufe", runs.join("\n"));
-    }
-    if !report.note.is_empty() {
-        dialog = dialog.row("Hinweis", &report.note);
-    }
-    for item in report.items.iter().take(20) {
-        dialog = dialog.row(
-            &format!("{} · {}", item.class.label(), item.label),
-            format!("{} · {} · {}", shown(&item.rel_path), size(item.bytes), item.evidence),
-        );
-    }
-    if report.regenerable > 0 {
-        dialog = dialog.action(format!("tidy-plan:{}", report.project_id), "Papierkorb-Plan …", true);
-    }
-    let name = |rel: &str| rel.rsplit('/').next().unwrap_or(rel).to_string();
-    for item in report.items.iter().filter(|i| i.class == TidyClass::Regenerable).take(KEEP_ACTIONS) {
-        let id = format!("keep-folder:{}:1:{}", report.project_id, item.rel_path);
-        dialog = dialog.action(id, format!("„{}“ behalten", name(&item.rel_path)), false);
-    }
-    for kept in report.kept.iter().take(KEEP_ACTIONS) {
-        let id = format!("keep-folder:{}:0:{kept}", report.project_id);
-        dialog = dialog.action(id, format!("„{}“ wieder vorschlagen", name(kept)), false);
-    }
-    for item in report.items.iter().filter(|i| i.label == "Datenbank").take(2) {
-        let path = format!("{}\\{}", report.path.trim_end_matches('\\'), shown(&item.rel_path));
-        dialog =
-            dialog.action(format!("db-register-path:{path}"), format!("„{}“ überwachen", name(&item.rel_path)), false);
-    }
-    dialog
-        .action(format!("tidy:{}", report.project_id), "Neu messen", false)
-        .body("Wiederherstellbar heißt: Lockfile oder Build-Datei daneben, Werkzeugcache oder Test-Ausgabe – ein Werkzeug baut es neu. In einem Git-Repository zählt ein Ordner nur, wenn Git keine Datei darin versioniert. Reste von KI-Agenten, Testdaten und alles, was du behältst, bleiben immer „Prüfen“. Name und Alter allein machen nichts entfernbar. Der Papierkorb-Plan zeigt zuerst, was verschoben würde; ohne Bestätigung passiert nichts.")
-}
-
-pub fn project(snapshot: &Snapshot, project: &Project) -> Dialog {
-    let scope = snapshot.scopes.iter().find(|s| s.project_id == Some(project.id));
-    let dialog = Dialog::new(&project.name)
-        .path(&project.path)
-        .row("Technologie", &project.ecosystem)
-        .row("Beobachtung", format!("{} – {}", project.state.label(), project.evidence))
-        .row("Pakete", project.packages.map_or("Unbekannt (keine vollständige Erfassung)".into(), |n| n.to_string()))
-        .row("Größe", format_bytes(project.bytes))
-        .row(
-            "Lesefreigabe",
-            if project.read_approved { "Erteilt, an Ordneridentität gebunden" } else { "Nicht erteilt" },
-        )
-        .row("Abdeckung", &project.coverage);
-    if snapshot.demo {
-        return dialog.body("Dies sind Beispieldaten. Der Demomodus ist schreibgeschützt.");
-    }
-    match scope {
-        None => dialog.action(format!("approve-project:{}", project.id), "Lesefreigabe erteilen", true),
-        Some(scope) => dialog
-            .action(format!("scan-scope:{}", scope.id), "Jetzt erfassen", true)
-            .action(format!("measure-scope:{}", scope.id), "Größe messen", false)
-            .action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false),
-    }
-}
-
 pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
     let owners: Vec<String> = snapshot
         .owners_of(resource.id)
@@ -412,22 +309,6 @@ pub fn hint(hint: &ReviewHint) -> Dialog {
 
 fn signed(bytes: i64) -> String {
     format!("{}{}", if bytes < 0 { "−" } else { "+" }, format_bytes(Some(bytes.saturating_abs())))
-}
-
-/// `+1,2 GB wiederherstellbar in 14 Tagen (4 Berichte) · target +800 MB …`
-fn growth_text(growth: &Growth) -> String {
-    let days = ((growth.until - growth.since) / 86_400).max(1);
-    let mut text = format!(
-        "{} wiederherstellbar, {} zu prüfen in {days} Tag{} ({} Berichte)",
-        signed(growth.regenerable),
-        signed(growth.review),
-        if days == 1 { "" } else { "en" },
-        growth.reports
-    );
-    for (rel, grown) in &growth.items {
-        text.push_str(&format!("\n{} {}", rel.replace('/', "\\"), signed(*grown)));
-    }
-    text
 }
 
 /// Registered runs and Docker contexts, with what can be switched.

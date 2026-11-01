@@ -24,6 +24,9 @@ mod desktop {
     #[path = "../../../src/desktop/dialogs.rs"]
     #[allow(dead_code)]
     pub mod dialogs;
+    #[path = "../../../src/desktop/project.rs"]
+    #[allow(dead_code)]
+    pub mod project;
 
     /// The drive view shares `Desktop` with the app; rendering never submits.
     pub struct Owner;
@@ -526,11 +529,22 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 vcs: gib / 3,
                 test_data: gib,
                 agent: 0,
-                kept: Vec::new(),
+                kept: vec!["web/dist".into()],
+                runs: vec![RunBrief { id: 4, title: "#4 claude-code (beendet)".into(), started_at: now - 2 * DAY, artifacts: 2 }],
+                growth: Some(Growth {
+                    since: now - 90 * DAY,
+                    until: now - 10 * MINUTE,
+                    reports: 14,
+                    total: Some(2_100_000_000),
+                    regenerable: 1_400_000_000,
+                    review: 300_000_000,
+                    items: vec![("node_modules".into(), 1_400_000_000), ("tests/fixtures".into(), 300_000_000)],
+                }),
                 items: vec![
                     tidy_item("node_modules", TidyClass::Regenerable, "Abhängigkeiten (node_modules)", 6 * gib, "package-lock.json daneben"),
                     tidy_item(".next", TidyClass::Regenerable, "Build-Ausgabe", 3 * gib, "package.json daneben"),
                     tidy_item("tests/fixtures", TidyClass::Review, "Testdaten", gib, "Kann selbst gepflegte Daten enthalten"),
+                    tidy_item("data/app.sqlite", TidyClass::Review, "Datenbank", 180_000_000, "Datenbankdatei; Inhalt unbekannt"),
                 ],
                 last_change: Some(now - 3 * DAY),
                 complete: true,
@@ -549,6 +563,8 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 test_data: 0,
                 agent: 0,
                 kept: Vec::new(),
+                runs: Vec::new(),
+                growth: None,
                 items: Vec::new(),
                 last_change: Some(now - 400 * DAY),
                 complete: true,
@@ -765,8 +781,20 @@ fn main() {
     store.set_overview_tab(1);
     renderer.shot("00-uebersicht-aenderungen", 1080, 680, 1.0);
     store.set_overview_tab(0);
-    show_dialog(&ui, dialogs::project(&snapshot, &snapshot.projects[0]));
-    renderer.shot("16-projekt-dialog", 1080, 680, 1.0);
+    // One project on its own page: storage, cleanup list, holds, AI access.
+    let none = std::collections::BTreeSet::new();
+    desktop::project::render(&ui, &snapshot, 1, &none);
+    store.invoke_open(6, 0);
+    renderer.shot("16-projekt-seite", 1080, 680, 1.0);
+    renderer.shot("16-projekt-seite-ganz", 1080, 1320, 1.0);
+    // One entry left out of this plan only.
+    desktop::project::render(&ui, &snapshot, 1, &std::collections::BTreeSet::from([".next".to_string()]));
+    renderer.shot("16-projekt-seite-auswahl", 1080, 1320, 1.0);
+    renderer.shot("16-projekt-seite-900x560", 900, 560, 1.0);
+    // Without a report the page says how to get one.
+    desktop::project::render(&ui, &snapshot, 2, &none);
+    renderer.shot("16-projekt-ohne-bericht", 1080, 680, 1.0);
+    store.invoke_open(0, 0);
     show_dialog(&ui, dialogs::message("Hilfe", dialogs::HELP));
     renderer.shot("17-hilfe", 1080, 680, 1.0);
     store.set_modal(0);

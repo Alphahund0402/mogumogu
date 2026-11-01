@@ -96,7 +96,7 @@ component TidyCard inherits Card {
         if root.data.note != "" : Text { text: root.data.note; font-size: 11px; color: Theme.review-ink; wrap: word-wrap; }
         HorizontalLayout {
             alignment: start; spacing: 6px;
-            UiButton { small: true; label: "Details"; available: true; activated => { Actions.open-tidy(root.data.id); } }
+            UiButton { small: true; label: "Projekt öffnen"; available: true; activated => { Actions.open-project(root.data.id); } }
             UiButton { small: true; label: "Neu messen"; available: !Store.demo && !Store.busy; activated => { Actions.tidy-report(root.data.id); } }
         }
     }

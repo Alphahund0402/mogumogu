@@ -43,7 +43,7 @@ pub fn owner_text(snapshot: &Snapshot, resource_id: i64) -> String {
 }
 
 /// Short coverage of one project for its table row.
-fn coverage_cell(snapshot: &Snapshot, project: &Project) -> (String, &'static str) {
+pub(super) fn coverage_cell(snapshot: &Snapshot, project: &Project) -> (String, &'static str) {
     if snapshot.demo {
         return ("Beispieldaten".into(), "neutral");
     }

@@ -100,6 +100,24 @@ fn folders_to_review_cannot_be_planned() {
     }
 }
 
+/// The project page plans what the person ticked: a folder left out stays,
+/// although its evidence would have allowed it.
+#[test]
+fn a_selection_plans_and_moves_only_the_chosen_folders() {
+    let mut env = env(false);
+    let all = env.core.cleanup_plan(env.project_id, &[]).unwrap();
+    assert!(all.targets.len() >= 2, "{:#?}", all.targets);
+    env.core.cleanup_cancel(all.id).unwrap();
+    let (chosen, left) = (all.targets[0].rel_path.clone(), all.targets[1].rel_path.clone());
+    let plan = env.core.cleanup_plan(env.project_id, std::slice::from_ref(&chosen)).unwrap();
+    assert_eq!(plan.targets.iter().map(|t| t.rel_path.as_str()).collect::<Vec<_>>(), [chosen.as_str()]);
+    let plan = env.core.cleanup_approve(plan.id, plan.short_fingerprint()).unwrap();
+    env.core.cleanup_apply(plan.id).unwrap();
+    assert_eq!(moved(&env), 1);
+    assert!(!env.project.join(&chosen).exists(), "{chosen} moved");
+    assert!(env.project.join(&left).is_dir(), "{left} was left out and stays");
+}
+
 #[test]
 fn outside_a_test_root_the_plan_stays_locked_until_review() {
     let mut env = env(true);

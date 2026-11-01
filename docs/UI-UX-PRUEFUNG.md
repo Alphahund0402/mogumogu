@@ -70,6 +70,34 @@ und die [Text-Eigenschaften](https://docs.slint.dev/latest/docs/slint/reference/
 mit dem lokal gepinnten 1.18.1-Quellstand abgeglichen; Context7 war wegen seines
 Monatslimits nicht verfügbar.
 
+## Projektseite · 1. November 2026
+
+Anlass war die Prüfung des ursprünglichen Zwecks: Alle Fragen, die mogumogu
+beantworten soll, betreffen ein Ding, meist ein Projekt. Dessen Angaben lagen an
+zehn Stellen auf fünf Seiten, und der Schritt, der den Zweck erfüllt, war der
+tiefste: Speicher, Reiter, Bericht, Details-Dialog, Plan-Dialog darüber,
+Bestätigen, Verschieben. Geändert wurden Darstellung und Desktop-Absichten; der
+Kern plant weiter nur, was er neu misst und als wiederherstellbar belegt.
+
+| Vorher | Jetzt |
+|---|---|
+| Projekt-Dialog mit sechs Zeilen und drei Knöpfen | **Projektseite** (Seite 6, aus Liste, Suche und Aufräumen-Reiter): Chips für Lesefreigabe, Erfassung, Stand des Berichts, Testdaten, „Ruht“ und KI-Stufe; Abschnitte Speicher, Aufräumen, Papierkorb-Pläne, Schutz, KI-Zugriff, Verlauf; „Alle Projekte“ und `Esc` führen zurück |
+| Aufräumen-Dialog mit bis zu 20 Zeilen, „Behalten“ für die drei größten Ordner | Aufräumliste mit jedem Eintrag des Berichts und seinem Beleg; „Immer behalten“ an jedem wiederherstellbaren Ordner, „Überwachen“ an Datenbankdateien |
+| Papierkorb-Plan immer für alle wiederherstellbaren Ordner | Häkchen je Ordner, anfangs alle; ein Häkchen gilt nur für diesen Plan. Die Zeile darunter nennt Auswahl, logische Größe und belegten Platz und dass der Platz erst mit dem Leeren des Papierkorbs frei wird |
+| Behaltene Ordner und Läufe im Aufräumen-Dialog verstreut | Abschnitt **Schutz**: behaltene Ordner mit „Wieder vorschlagen“, registrierte KI-Läufe; Läufe & Docker und Datenbanken von dort erreichbar |
+| „Wachstum“ ohne Datum | **Verlauf** mit beiden Berichtsdaten und der Zahl der Berichte |
+| Ohne Lesefreigabe oder Bericht ein leerer Dialog | Ein Hinweis sagt, was fehlt, und bietet „Lesefreigabe erteilen“ oder „Bericht erstellen“ an |
+
+Geprüft mit dem nativen Renderer (`design/screens/render.ps1`): Projektseite bei
+1080 × 680 und in voller Höhe, mit einem abgewählten Ordner, ohne Bericht und bei
+900 × 560; Chips kürzen sich, wenn sechs nicht in die Breite passen, der volle
+Text bleibt zugänglich. Neue Tests: Eine Auswahl plant und verschiebt nur die
+angehakten Ordner (`a_selection_plans_and_moves_only_the_chosen_folders`), und
+die Auswahl bietet nie einen Eintrag unter „Prüfen“ an. Offen bleiben
+Ressourcenseiten, ein gemeinsames Schutz-Panel und eine Bedienungsstudie.
+
+![Projektseite mit Aufräumliste (synthetische Daten)](screenshots/wolke-projektseite.png)
+
 ## Bewegung und Sprungziele · 31. Oktober 2026
 
 Bewegung zeigt eine Zustandsänderung und kostet im Leerlauf nichts. Der

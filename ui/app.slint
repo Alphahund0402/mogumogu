@@ -8,7 +8,7 @@ import { Store, Actions, ProjectRow, ResourceRow, AiRow, EventRow, HintRow, Scop
 import { Icon, NavItem, UiButton, Mascot, MascotPlate, SpeechBubble, PillField, Card, StatusChip, Activatable } from "components.slint";
 import { OverviewPage } from "pages/overview.slint";
 import { StoragePage } from "pages/storage.slint";
-import { ProjectsPage, PackagesPage, AiPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
+import { ProjectsPage, ProjectPage, PackagesPage, AiPage, SettingsPage, GuideOverlay } from "pages/pages.slint";
 import { DialogLayer } from "dialogs.slint";
 import { Motion } from "motion.slint";
 
@@ -29,7 +29,7 @@ component Sidebar inherits Rectangle {
             Image { source: Icons.wordmark; width: 112px; height: 25px; y: (parent.height - self.height) / 2; image-fit: contain; accessible-role: image; accessible-label: "mogumogu"; }
         }
         NavItem { label: "Übersicht"; icon: Icons.overview; badge: Store.review-count > 0 ? Store.review-count : ""; selected: Store.page == 0; activated => { Store.page = 0; } }
-        NavItem { label: "Projekte"; icon: Icons.folder; selected: Store.page == 1; activated => { Store.page = 1; } }
+        NavItem { label: "Projekte"; icon: Icons.folder; selected: Store.page == 1 || Store.page == 6; activated => { Store.page = 1; } }
         NavItem { label: "Pakete"; icon: Icons.package; selected: Store.page == 2; activated => { Store.page = 2; } }
         NavItem { label: "KI-Konfiguration"; icon: Icons.spark; selected: Store.page == 3; activated => { Store.page = 3; } }
         NavItem { label: "Speicher"; icon: Icons.drive; selected: Store.page == 4; activated => { Store.page = 4; } }
@@ -195,6 +195,7 @@ export component Dashboard inherits Window {
                 if Store.modal != 0 { root.dismiss-dialog(); return accept; }
                 if Store.search-open { Store.search-open = false; keys.focus(); return accept; }
                 if Store.guide-open { Actions.guide-skip(); return accept; }
+                if Store.page == 6 { Actions.project-back(); return accept; }
                 return reject;
             }
             if Store.modal == 0 {
@@ -228,6 +229,7 @@ export component Dashboard inherits Window {
                         if Store.page == 3 : AiPage { }
                         if Store.page == 4 : StoragePage { }
                         if Store.page == 5 : SettingsPage { }
+                        if Store.page == 6 : ProjectPage { }
                     }
                     if Store.guide-open : GuideOverlay { width: parent.width; height: parent.height; }
                 }

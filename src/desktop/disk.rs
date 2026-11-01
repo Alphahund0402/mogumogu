@@ -92,7 +92,7 @@ pub(super) fn render(ui: &Dashboard, report: &StorageOverview) {
 }
 
 /// A project untouched this long is worth a look with its outputs.
-const DORMANT_DAYS: i64 = 180;
+pub(super) const DORMANT_DAYS: i64 = 180;
 
 fn bytes(value: u64) -> String {
     size(Some(value))

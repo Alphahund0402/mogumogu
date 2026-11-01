@@ -30,6 +30,13 @@ export struct AnalysisTile { id: int, label: string, size: string, directory: bo
 // One measured project of the tidy-up report; sizes are formatted text.
 export struct TidyProjectRow { id: int, name: string, path: string, total: string, regenerable: string, review: string, vcs: string, test-data: string, test-heavy: bool, share: float, last-change: string, dormant: bool, note: string }
 export struct TidyStoreRow { name: string, path: string, size: string, regenerable: bool, evidence: string }
+// A status on the project page: colour, icon and word, as everywhere.
+export struct PageChip { label: string, kind: string }
+// One entry of a project's last tidy-up report. Only recoverable entries can
+// be selected; a selection only narrows a plan, the owner checks every folder.
+export struct CleanupRow { rel-path: string, title: string, detail: string, size: string, recoverable: bool, selected: bool, action-id: string, action-label: string }
+// Something that holds a folder of the project, and where it is lifted.
+export struct HoldRow { title: string, detail: string, action-id: string, action-label: string }
 
 export global Store {
     // Set imperatively by the window; layouts read it without a binding loop.
@@ -147,6 +154,36 @@ export global Store {
     in property <string> tidy-checked;
     in property <string> tidy-unapproved;
 
+    // Project page (page 6): one project, its storage, cleanup list, holds,
+    // AI access and growth. Empty `project-name` means it is gone.
+    in property <int> project-id: -1;
+    in property <string> project-name;
+    in property <string> project-path;
+    in property <[PageChip]> project-chips;
+    in property <[DetailAction]> project-actions;
+    in property <[DetailRow]> project-facts;
+    // Why bar and list are empty (no approval, no report); empty otherwise.
+    in property <string> project-report-note;
+    in property <DetailAction> project-report-action;
+    in property <string> project-total;
+    in property <string> project-checked;
+    // Recoverable, review, version control, the rest: shares of the total.
+    in property <[float]> project-shares: [0, 0, 0, 0];
+    in property <[string]> project-legend: ["", "", "", ""];
+    in property <[CleanupRow]> project-cleanup;
+    in property <string> project-selection;
+    in property <bool> project-can-plan: false;
+    in property <[HoldRow]> project-holds;
+    in property <string> project-holds-note;
+    in property <string> project-ai-level;
+    in property <string> project-ai-kind;
+    in property <string> project-ai-summary;
+    in property <DetailAction> project-ai-action;
+    in property <int> project-ai-index: -1;
+    in property <string> project-growth;
+    in property <[DetailRow]> project-growth-items;
+    in property <[PlanRow]> project-plans;
+
     // Settings
     // 0 general, 1 read approvals
     in-out property <int> settings-tab: 0;
@@ -179,7 +216,7 @@ export global Store {
     in-out property <bool> search-open: false;
 
     // Navigation: 0 overview, 1 projects, 2 packages, 3 AI, 4 storage,
-    // 5 settings.
+    // 5 settings, 6 one project (opened from a list, not in the sidebar).
     in-out property <int> page: 0;
     // Stable keys keep the last opened row visible across view/model rebuilds.
     in-out property <string> selection-kind;
@@ -260,8 +297,12 @@ export global Actions {
     callback analysis-export();
     callback search-drive(string);
     callback tidy-report(int);
-    callback open-tidy(int);
     callback adopt-scratchpads();
+    // Project page
+    callback project-back();
+    callback project-toggle(string);
+    callback project-select-all(bool);
+    callback project-plan();
     callback show-help();
     callback detail-action(string);
     callback submit-form(string, string);
