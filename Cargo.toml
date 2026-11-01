@@ -76,11 +76,15 @@ missing_debug_implementations = "warn"
 undocumented_unsafe_blocks = "warn"
 
 [profile.release]
-lto = "thin"
-codegen-units = 1
+# Cargo's defaults of 16 codegen units and no cross-crate LTO. With one unit
+# and thin LTO the 14 MB of Rust that Slint generates from ui/ compiled on a
+# single core: 287 instead of 113 s after a one-file change. Redraws, scans and
+# snapshots stayed within the measured spread, the EXE grew by 1 %
+# (docs/MESSBERICHT.md, 1 November 2026).
+lto = false
 strip = "debuginfo"
 
-# Local iteration: retain optimization without release's expensive whole-program link.
+# Local iteration: this crate at opt-level 1, incremental, no whole-program link.
 [profile.fast]
 inherits = "dev"
 opt-level = 1
@@ -88,6 +92,9 @@ incremental = true
 codegen-units = 256
 debug = 0
 lto = false
+# Redraws cost about twice what they cost in release, and only 20 % less with
+# dependencies at opt-level 3, which add a minute to the first build: most of
+# the work is the generated UI code of this crate. Fine for iteration only.
 
 [profile.dev]
 debug = 1

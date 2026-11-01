@@ -47,11 +47,13 @@ Voraussetzungen: Windows 10/11 x64 und **entweder** nur [Docker Desktop](https:/
 .\build.ps1                          # testen, Release bauen, lokales Inventar im Tray starten
 .\build.ps1 -ShowDashboard           # lokales Inventar direkt öffnen
 .\start.ps1 -ShowDashboard           # bereits gebaut mit lokalen Daten starten
-.\rebuild.ps1                        # nur neu bauen (ohne Tests, -Test mit) und den EXE-Pfad zeigen
-.\rebuild.ps1 -Fast                  # schnelle Iteration, inkrementell und ohne LTO (auch mit -Docker)
+.\rebuild.ps1                        # Release neu bauen (ohne Tests, -Test mit), etwa 2 Min. nach einer Änderung¹
+.\rebuild.ps1 -Fast                  # schnelle Iteration: inkrementell, opt-level 1, etwa 15 s¹ (auch mit -Docker)
 ```
 
 Alternativ `build.cmd` doppelklicken (setzt die Execution Policy nur für diesen Prozess). Zum reinen Neubauen `rebuild.cmd` doppelklicken: Eine laufende Instanz aus `dist` wird über die CLI geordnet beendet und danach wieder im Tray gestartet, am Ende steht der Pfad der EXE. Ausgabe: `dist\mogumogu\mogumogu.exe` und `mogumogu-cli.exe`. Kein Dienst, kein Autostart, keine Installation von Voraussetzungen und keine Netzwerkverbindungen.
+
+¹ Gemessen auf einem Rechner mit 16 Threads. Weitere Kerne helfen nur zum Teil: Den aus `ui/` erzeugten Code liest und prüft der Compiler auf einem Kern. Werte und schwächere Rechner: [Messbericht](docs/MESSBERICHT.md#schwächere-rechner-und-buildzeit-1-november-2026).
 
 Der normale Start verwendet deine lokale Datenbank. Neue Inventare beginnen leer; **Projekt hinzufügen** führt durch Ordnerwahl, Lesefreigabe und erste Erfassung, **Laufwerk durchsuchen** findet viele Projekte auf einmal. Die separate Vorschau mit Beispieldaten startet nur ausdrücklich mit `-Mode Demo`; eine laufende Instanz vorher im Tray beenden.
 

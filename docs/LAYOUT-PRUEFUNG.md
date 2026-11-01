@@ -129,6 +129,8 @@ Kandidaten für Überläufe, zu kleine Textflächen und Überschneidungen.
 - `target/layout-audit/text-metrics.csv`: tatsächliche Textflächen und benötigte Textmaße.
 - `target/layout-audit/review-candidates.json`: gezielt visuell zu prüfende Stellen.
 - `target/layout-audit/*.png`: native Renderbelege, benannt nach Größe, Skalierung und Zustand.
+  `--png` entfernt danach die PPM-Rohbilder; sie sind 30- bis 60-mal größer (bis 5,8 MB je
+  Bild bei 200 %) und füllten je Lauf rund 1,5 GB.
 - `target/preview-layout/measurements.json`: HTML-Komponenten inklusive Bounds, Padding,
   Margin, Gap, Schriftgröße und Zeilenhöhe.
 

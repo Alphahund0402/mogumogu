@@ -204,7 +204,9 @@ impl Desktop {
     fn show(&mut self) -> Result<(), slint::PlatformError> {
         if self.dashboard.is_none() {
             let ui = Dashboard::new()?;
-            ui.window().set_size(slint::PhysicalSize::new(1080, 680));
+            // Logical, like every size in ui/: at 200 % scaling a physical
+            // 1080 × 680 is 540 × 340 and the window opened at its minimum.
+            ui.window().set_size(slint::LogicalSize::new(1080.0, 680.0));
             actions::wire(&ui);
             self.dashboard = Some(ui);
             // Shows the last read model at once; while hidden the owner only

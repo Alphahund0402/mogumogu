@@ -142,3 +142,9 @@ geöffnetes Fenster und Rückkehr zum Tray werden getrennt gemessen. Ein
 Compiler- oder Docker-Lauf beeinflusst die Messung; Hintergrundlast und
 Messdauer gehören deshalb in den Bericht. Ziele sind keine Messergebnisse.
 Sicherheitsprüfungen und Journal-Haltbarkeit werden für Performance nie gelockert.
+
+`measure.ps1 -Redraws` misst zusätzlich die CPU-Zeit, das ganze Fenster neu zu
+zeichnen (Hilfedialog auf und zu; die Tasten gehen nur an dieses Fenster), mit
+physischen Pixeln und Skalierung: Der Software-Renderer zeichnet auf einem Kern,
+seine Kosten folgen der Pixelzahl. Ergebnisse für schwächere Rechner und die
+Buildzeit stehen im [Messbericht](MESSBERICHT.md#schwächere-rechner-und-buildzeit-1-november-2026).

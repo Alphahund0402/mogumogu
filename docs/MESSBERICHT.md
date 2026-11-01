@@ -299,3 +299,104 @@ existiert nur, solange eine Analyse offen ist; Schließen des Fensters gibt es
 frei. Der Tray-Leerlauf (50-MiB-Ziel) ist davon nicht betroffen, gemessen wurde
 das aber noch nicht im laufenden Tray (Punkt in der
 [Windows-Abnahme](WINDOWS-ABNAHME.md)).
+
+## Schwächere Rechner und Buildzeit (1. November 2026)
+
+Derselbe Rechner: Windows 10 Pro 22H2 (Build 19045), AMD Ryzen 7 9800X3D,
+16 Threads, 31 GiB, Bildschirm 3840 × 2160 bei 200 % Skalierung. Rust 1.98.0,
+Slint 1.18.1 mit Software-Renderer. Editor und Werkzeuge offen, Hintergrundlast
+nicht kontrolliert, Schutzsoftware unverändert; während der Laufzeitmessungen lief
+kein Cargo-Build. Laufzeit mit der Demodatenbank in eigenen Wegwerf-Datenordnern,
+die lokale Inventardatenbank blieb unberührt. Rohdaten der Fenstermessung:
+[messung-20261101-184837](messungen/messung-20261101-184837.md).
+
+**Was einen schwächeren Rechner belastet.** Kein `target-cpu`: Die Programme
+verwenden den x86-64-Grundbefehlssatz und laufen auf jedem 64-Bit-Prozessor; eine
+32-Bit- oder ARM64-Ausgabe gibt es nicht. Der Software-Renderer braucht keine
+Grafikkarte und keinen Treiber, zeichnet aber auf einem einzigen CPU-Kern, und
+seine Arbeit wächst mit der Pixelzahl. Der Besitzer arbeitet mit einem Worker- und
+einem IPC-Thread; Erfassungen sind zeitbegrenzt (`ScanLimits`) und enden auf
+langsamen Platten früher als „teilweise“, statt länger zu laufen.
+
+**Laufzeit des Release-Builds mit dem neuen Profil** (`scripts/measure.ps1
+-Cycles 100 -IdleSeconds 60 -Redraws 20`):
+
+| Phase | Private Bytes | Threads |
+|---|---|---|
+| Tray nach dem Start / nach 60 s Leerlauf | 4,3 / 4,2 MiB | 12 / 8 |
+| Dashboard geöffnet | 21,5 MiB | 10 |
+| Tray nach 10 / 50 / 100 Fensterzyklen | 11,2 / 11,6 / 11,6 MiB | 10 / 10 / 6 |
+
+Leerlauf-CPU 0 % eines Kerns über 60 s, Anzeige-Anfrage p95 5,8 ms. Neu misst das
+Skript das Neuzeichnen des ganzen Fensters: F1 öffnet die Hilfe (der Hintergrund
+dunkelt ab, die Karte hebt sich), Esc schließt sie, zusammen etwa 25 Bilder. Bei
+2160 × 1360 Pixeln kostet ein solcher Zyklus 96 ms CPU, also rund 4 ms je
+vollständig gezeichnetem Bild. Das Dashboard mit dem echten Inventar dieses
+Rechners (drei Projekte, 919 Paketversionen) belegte im Build `fast` 25 MiB Private Bytes.
+
+Vergleich der Builds, je eine eigene Demo-Instanz, zwei bis drei Läufe:
+
+| Build | CPU je Dialogzyklus | Fenster erscheint nach |
+|---|---|---|
+| Release bisher (eine Codegen-Einheit, Thin-LTO) | 83–128 ms | 45–105 ms |
+| Release neu (16 Einheiten, ohne LTO) | 80–106 ms | 37–389 ms¹ |
+| `fast` (opt-level 1) | 231–271 ms | 91–116 ms |
+| `fast` mit Abhängigkeiten auf opt-level 3 | 212–215 ms | 71–117 ms |
+
+¹ Einzelne Ausreißer bis 433 ms kamen in jeder Variante vor und folgen dem
+Dateisystem-Cache, nicht dem Profil.
+
+Referenzlast (50 Projekte, 10.000 Pakete), je drei Läufe: Snapshot warm Median
+28,1–29,6 ms bisher und 29,3–31,2 ms neu; mit laufender Uhr 28,1–29,6 und
+29,3–29,7 ms; erste Erfassung 473–506 und 478–488 ms; Neuerfassung 515–576 und
+513–528 ms; erster Snapshot 152–157 und 151–187 ms. Der Verzicht auf LTO kostet
+damit höchstens etwa 1,5 ms beim warmen Snapshot, der Rest liegt in der Streuung.
+
+**Abschätzung für schwächere Hardware, keine Messung.** Einfache x64-Prozessoren
+(Celeron, Pentium Silver, ältere Doppelkerne) erreichen grob ein Viertel bis ein
+Fünftel der Einzelkernleistung dieses Prozessors; das ist eine Annahme, hier nicht
+gemessen. Bei 1080 × 680 logischen Pixeln und 100 % Skalierung (0,73 Mio. Pixel)
+ergäbe das etwa 4–5 ms je vollständigem Bild, bei 125 % (1,15 Mio.) etwa 6–8 ms.
+Animationen laufen nach Zeit: Ein langsamer Rechner zeichnet weniger Zwischenbilder,
+der Dialog ist trotzdem nach 180 ms offen. 25 MiB im Betrieb fallen neben 4 GB
+Arbeitsspeicher nicht ins Gewicht; die Speicheranalyse eines ganzen Laufwerks belegt
+aber, solange sie offen ist, bis etwa 300 MB (siehe 30. Oktober 2026). Belegt wird
+die Abschätzung erst durch eine Messung auf solcher Hardware.
+
+**Buildzeit.** Slint erzeugt aus `ui/` 14,7 MB Rust (143.000 Zeilen) in einer
+Kiste. Mit einer Codegen-Einheit und Thin-LTO übersetzte ein einziger Kern davon das
+Desktop-Programm: 231 der 287 s eines Release-Builds nach einer Dateiänderung.
+
+| Release-Profil | Nach einer Dateiänderung | Sauber | `mogumogu.exe` |
+|---|---|---|---|
+| bisher: eine Einheit, Thin-LTO | 287 s | – | 45,5 MB |
+| 16 Einheiten, Thin-LTO | 158 s | 198 s | 49,5 MB |
+| **neu: 16 Einheiten, ohne LTO** | **113 s** (`rebuild.ps1` samt Stopp und Neustart: 127 s) | **167 s** | **46,1 MB** |
+
+Das Lesen und Prüfen des erzeugten Codes bleibt einkernig; deshalb helfen weitere
+Kerne nur zum Teil, und er braucht Arbeitsspeicher: Der größte Compilerprozess
+belegte für das Desktop-Programm 3,14 GB im Release- und 1,89 GB im `fast`-Profil,
+für die Kerntests ohne Oberfläche 0,53 GB (alle zusammen 0,94 GB, 4,9 s nach
+einer Dateiänderung). `rebuild.ps1 -Fast` braucht nach einer Rust-Änderung 12–19 s,
+nach einer `.slint`-Änderung 12 s. Abhängigkeiten in `fast` auf opt-level 3
+verkürzten das Neuzeichnen nur um 20 %, weil die meiste Arbeit im erzeugten Code
+dieser Kiste liegt, und verlängerten den ersten Build auf 286 s; verworfen. Die
+Tests (`cargo test --no-default-features --no-run`) bauen nach einer Dateiänderung
+in 5,3 s; die 15 Testprogramme linken parallel, sie zusammenzulegen lohnt nicht.
+
+**Nebenbei behoben.** Das Dashboard bekam seine Startgröße in physischen Pixeln:
+Bei 200 % öffnete es mit 540 × 340 logischen Pixeln, also auf der Mindestgröße
+900 × 560. Jetzt sind es wie dokumentiert 1080 × 680 logische Pixel (hier 2160 × 1360
+statt 1800 × 1120). Die Layoutprüfung (`scripts/analyze_layout.py --png`) behielt
+neben jedem PNG das 30- bis 60-mal größere PPM; jeder Lauf belegte so rund 1,5 GB.
+
+**Speicherplatz des Builds.** `target/` war auf diesem Rechner rund 80 GB groß:
+`target/debug` 45 GB, davon 34 GB inkrementelle Caches in 489 Sitzungsordnern, die
+nach Feature-, Profil- und Compilerwechseln liegen bleiben; zwölf alte
+Layoutprüfungen rund 19 GB, fast alles PPM; `release` 3,1 GB, `fast` 2,9 GB. Cargo
+räumt Caches anderer Konfigurationen nicht selbst auf. `cargo clean` oder das
+Löschen von `target\debug\incremental` gibt den Platz frei; der nächste Build ist
+dann ein vollständiger.
+
+Offen: eine Messung auf tatsächlich schwacher Hardware, mit Festplatte statt SSD,
+unter Windows 11 und bei 100 % Skalierung.

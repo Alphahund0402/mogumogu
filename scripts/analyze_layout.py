@@ -33,6 +33,8 @@ def png_from_ppm(source):
         + chunk(b'IHDR', struct.pack('!2I5B', width, height, 8, 2, 0, 0, 0))
         + chunk(b'IDAT', zlib.compress(scanlines))
         + chunk(b'IEND', b''))
+    # The raw frame is 30-60 times larger than its PNG; keep only the PNG.
+    source.unlink()
 
 
 def rectangle(node):
@@ -158,7 +160,7 @@ def analyze(record):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', nargs='?', default='target/layout-audit')
-    parser.add_argument('--png', action='store_true', help='Convert native PPM renders losslessly to PNG')
+    parser.add_argument('--png', action='store_true', help='Convert native PPM renders losslessly to PNG and remove the PPM')
     parser.add_argument('--strict', action='store_true', help='Exit with status 1 if any review candidate remains')
     args = parser.parse_args()
     directory = Path(args.directory)
