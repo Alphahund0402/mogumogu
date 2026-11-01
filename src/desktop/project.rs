@@ -42,6 +42,11 @@ fn when(at: i64, now: i64) -> String {
     if now - at < DAY { format!("heute {}", display_time(at)) } else { display_local(at) }
 }
 
+/// Whether the project page lists a plan: open ones and those that ran.
+fn shows_plan(state: PlanState) -> bool {
+    !matches!(state, PlanState::Cancelled | PlanState::Invalidated)
+}
+
 /// Recoverable entries of a report that the next plan would take.
 pub fn selected<'a>(report: &'a ProjectTidy, skipped: &'a BTreeSet<String>) -> impl Iterator<Item = &'a TidyItem> {
     report.items.iter().filter(move |i| i.class == TidyClass::Regenerable && !skipped.contains(&i.rel_path))
@@ -207,11 +212,12 @@ pub fn render(ui: &Dashboard, snapshot: &Snapshot, project_id: i64, skipped: &BT
     render_cleanup(&store, project, report, approved.is_some() && !demo, skipped);
     render_holds(&store, project, report);
 
+    // Open plans and results; a discarded or invalidated plan moved nothing.
     store.set_project_plans(model(
         snapshot
             .plans
             .iter()
-            .filter(|p| p.project_id == Some(project.id))
+            .filter(|p| p.project_id == Some(project.id) && shows_plan(p.state))
             .map(|plan| PlanRow {
                 id: plan.id as i32,
                 state: plan.state.label().into(),
@@ -451,5 +457,19 @@ mod tests {
         assert_eq!(paths(&BTreeSet::new()), ["node_modules", ".next"], "review entries are never offered");
         assert_eq!(paths(&BTreeSet::from(["node_modules".to_string()])), [".next"]);
         assert!(paths(&BTreeSet::from(["node_modules".to_string(), ".next".to_string()])).is_empty());
+    }
+
+    #[test]
+    fn the_page_lists_open_plans_and_results_but_not_discarded_ones() {
+        for state in [
+            PlanState::Draft,
+            PlanState::Approved,
+            PlanState::RecoveryRequired,
+            PlanState::Completed,
+            PlanState::Failed,
+        ] {
+            assert!(shows_plan(state), "{state:?}");
+        }
+        assert!(!shows_plan(PlanState::Cancelled) && !shows_plan(PlanState::Invalidated));
     }
 }
