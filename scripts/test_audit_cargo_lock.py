@@ -79,6 +79,21 @@ class CargoLockAuditTests(unittest.TestCase):
             watcher.Package("crates.io", "serde", "1.0.219"),
         })
 
+    def test_standard_triage_beside_the_lockfile_is_used_unless_turned_off(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            lock = root / "Cargo.lock"
+            lock.write_text(SAMPLE_LOCK, encoding="utf-8")
+            self.assertIsNone(audit.resolve_triage(lock, None))
+            standard = root / "security" / "advisory-triage.toml"
+            standard.parent.mkdir()
+            standard.write_text(SAMPLE_TRIAGE, encoding="utf-8")
+            explicit = root / "other.toml"
+            explicit.write_text(SAMPLE_TRIAGE, encoding="utf-8")
+            self.assertEqual(audit.resolve_triage(lock, None), standard)
+            self.assertEqual(audit.resolve_triage(lock, explicit), explicit)
+            self.assertIsNone(audit.resolve_triage(lock, explicit, no_triage=True))
+
     def test_triage_distinguishes_active_expired_untriaged_and_unused(self):
         with tempfile.TemporaryDirectory() as directory:
             triage_path = Path(directory) / "triage.toml"

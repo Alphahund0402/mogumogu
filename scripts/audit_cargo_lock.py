@@ -20,7 +20,7 @@ from mogumogu_advisories.lockfiles import CRATES_IO_SOURCE, parse_cargo_lock_det
 from mogumogu_advisories.models import TriageEntry, normalize_package_name  # noqa: E402
 from mogumogu_advisories.report_html import write_audit_html  # noqa: E402
 from mogumogu_advisories.report_sarif import write_sarif  # noqa: E402
-from mogumogu_advisories.triage import evaluate_findings, load_triage  # noqa: E402
+from mogumogu_advisories.triage import discover_triage, evaluate_findings, load_triage  # noqa: E402
 
 
 def normalize_crate(name: str) -> str:
@@ -69,6 +69,13 @@ def run_audit(
     return code, report
 
 
+def resolve_triage(lockfile: Path, triage: Path | None, no_triage: bool = False) -> Path | None:
+    """Like `mogumogu_advisories audit`: an explicit file, else the standard one beside the lockfile."""
+    if no_triage:
+        return None
+    return triage.resolve() if triage else discover_triage(lockfile)
+
+
 def print_summary(report: dict) -> None:
     print_audit_summary(report, title="Cargo.lock Sicherheits-Audit (OSV / RustSec, offline)")
 
@@ -78,7 +85,11 @@ def main() -> int:
     parser.add_argument("--lockfile", type=Path, default=Path("Cargo.lock"), help="Pfad zur Cargo.lock")
     parser.add_argument("--cache", type=Path, help="OSV-Datenbank-Cache (Standard: Benutzer-Cache)")
     parser.add_argument("--scanner", type=watcher.executable, help="Pfad zum verifizierten OSV-Scanner v2")
-    parser.add_argument("--triage", type=Path, help="TOML-Datei mit befristeten Triage-Einträgen")
+    parser.add_argument(
+        "--triage", type=Path,
+        help="TOML-Datei mit befristeten Triage-Einträgen (Standard: security/advisory-triage.toml neben der Cargo.lock)",
+    )
+    parser.add_argument("--no-triage", action="store_true", help="ohne Triage-Liste prüfen")
     parser.add_argument("--refresh", action="store_true", help="crates.io-Feed vor dem Audit aktualisieren")
     parser.add_argument("--refresh-only", action="store_true", help="nur crates.io-Feed herunterladen und prüfen")
     parser.add_argument("--max-age-days", type=int, default=7, help="maximales Feed-Alter in Tagen (Standard 7)")
@@ -102,12 +113,14 @@ def main() -> int:
     if not args.scanner:
         parser.error("--scanner ist für den Audit erforderlich (außer bei --refresh-only).")
 
+    lockfile = args.lockfile.resolve()
+    triage_path = resolve_triage(lockfile, args.triage, args.no_triage)
     try:
         code, report = run_audit(
-            args.lockfile.resolve(),
+            lockfile,
             cache,
             args.scanner,
-            args.triage.resolve() if args.triage else None,
+            triage_path,
             max_age_days=max(1, args.max_age_days),
             allow_stale=args.allow_stale,
             today=args.today,
@@ -115,6 +128,11 @@ def main() -> int:
     except (OSError, ValueError, tomllib.TOMLDecodeError, watcher.WatchError) as error:
         print(f"Audit-Fehler: {error}", file=sys.stderr)
         return 2
+    if triage_path is not None:
+        try:
+            report["triage_file"] = triage_path.relative_to(lockfile.parent).as_posix()
+        except ValueError:
+            report["triage_file"] = triage_path.name
 
     if args.json:
         atomic_write_text(args.json.resolve(), json.dumps(report, indent=2, ensure_ascii=False) + "\n")
