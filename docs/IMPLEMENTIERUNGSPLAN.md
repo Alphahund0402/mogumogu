@@ -280,6 +280,12 @@ fünf dieser IDs dem Windows-Build zu.
   die fehlende Pflege der transitiven Crates `chrono` und `pin-utils`.
   [RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543.html)
   [RUSTSEC-2026-0441](https://rustsec.org/advisories/RUSTSEC-2026-0441.html)
+- **Außerhalb des Windows-Builds aktualisiert.** Seit dem 22. November 2026 stehen
+  `tokio 1.54.1` (Fix ab 1.53.3) und `rustix 1.1.6` in `Cargo.lock`, ohne dass sich
+  andere Pakete ändern; beide Triage-Einträge sind entfernt. Übrig sind sieben
+  Wartungshinweise mit Frist 28. Februar 2027.
+  [RUSTSEC-2026-0386](https://rustsec.org/advisories/RUSTSEC-2026-0386.html)
+  [RUSTSEC-2026-0486](https://rustsec.org/advisories/RUSTSEC-2026-0486.html)
 
 Parallel ab sofort und weiterhin offen:
 

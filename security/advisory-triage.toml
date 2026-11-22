@@ -31,24 +31,6 @@ reason = "Wartungsstatus (unmaintained) einer transitiven Abhängigkeit im Slint
 # --- Nur in Cargo.lock für Nicht-Windows-Ziele (nicht im Windows-Build) ---
 
 [[advisory]]
-id = "RUSTSEC-2026-0486"
-crate = "rustix"
-version = "1.1.5"
-scope = "lockfile-non-windows"
-kind = "vulnerability"
-expires = "2026-12-31"
-reason = "Nicht im Windows-Build; unter Linux nur transitiv (u. a. dev-dependency tempfile). Betrifft xattr-Funktionen mit Pufferlänge 0, die nicht genutzt werden."
-
-[[advisory]]
-id = "RUSTSEC-2026-0386"
-crate = "tokio"
-version = "1.53.2"
-scope = "lockfile-non-windows"
-kind = "vulnerability"
-expires = "2026-12-31"
-reason = "Nicht im Windows-Build und nicht im portablen Kern (`--no-default-features`); nur transitiv über Linux-Desktop-Backends (zbus/Slint) im Lockfile."
-
-[[advisory]]
 id = "RUSTSEC-2025-0141"
 crate = "bincode"
 version = "2.0.1"
