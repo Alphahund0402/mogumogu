@@ -11,15 +11,6 @@
 # --- Im Windows-Build (`x86_64-pc-windows-msvc`, normal + build) enthalten ---
 
 [[advisory]]
-id = "RUSTSEC-2026-0459"
-crate = "libsqlite3-sys"
-version = "0.38.2"
-scope = "windows-build"
-kind = "vulnerability"
-expires = "2026-12-31"
-reason = "rusqlite =0.40.2 (SQLite 3.53.2, CVE-2026-119375) ist im Vertrag gepinnt; Upgrade auf rusqlite 0.41.0 mit Migrations-/Backup-/Recovery-Abnahme offen (docs/IMPLEMENTIERUNGSPLAN.md)."
-
-[[advisory]]
 id = "RUSTSEC-2026-0543"
 crate = "chrono"
 version = "0.4.45"

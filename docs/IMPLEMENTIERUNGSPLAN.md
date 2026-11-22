@@ -80,7 +80,7 @@ Jeder Meilenstein endet mit einer prüfbaren Freigabe. „Umgesetzt“ bedeutet:
 |---|---|---|---|
 | F-01 | Rust/Slint-Build aufsetzen und Integrationsfehler schließen | Beide EXEs bauen mit MSVC; alle Rust-Kerntests erfolgreich | Umgesetzt: `build.ps1 -NoRun` grün (Rust 1.98.0, MSVC) |
 | F-02 | Windows 10/11 Tray testen | Klick, Rechtsklick, Fenster schließen/erneut öffnen, Beenden und Instanzschutz funktionieren | Umgesetzt auf Windows 10; Windows 11 Abnahme offen ([WINDOWS-ABNAHME](WINDOWS-ABNAHME.md)) |
-| F-03 | Buildbindung herstellen | Geprüftes Cargo.lock eingecheckt; Toolchain, Backend und SQLite-Engine dokumentiert | Umgesetzt: Cargo.lock, `rust-toolchain.toml` 1.98.0, SQLite 3.53.2, winit + Software-Renderer |
+| F-03 | Buildbindung herstellen | Geprüftes Cargo.lock eingecheckt; Toolchain, Backend und SQLite-Engine dokumentiert | Umgesetzt: Cargo.lock, `rust-toolchain.toml` 1.98.0, SQLite 3.54.1 (seit 22.11.2026, davor 3.53.2), winit + Software-Renderer |
 | F-04 | Native Darstellung und Ressourcen messen | Screenshots der tatsächlichen App; Idle/Öffnen/Schließen-Messung; keine erfundenen Zielerreichungen | Umgesetzt: native Aufnahmen, [MESSBERICHT](MESSBERICHT.md) mit Messwerten dieses Rechners |
 
 **Freigabe G0:** Native Basis lauffähig. Die Windows-CI ist eingerichtet; ihr erster Lauf erfolgt nach dem Push.
@@ -243,8 +243,7 @@ Abgestimmte Reihenfolge seit dem 1. November 2026: Der Zweck „Arbeit behalten,
    (Datenalter, Advisory-ID, betroffene Version, Scope, Befristung), der isolierte
    Offline-Container `security-audit` und der wöchentliche/Lockfile-gebundene
    Workflow [security-audit.yml](../.github/workflows/security-audit.yml).
-   Weiterhin offen: Upgrade der getriagten Windows-Abhängigkeit `rusqlite 0.41.0`
-   (Triage-Frist 31. Dezember 2026), verifizierbare Signatur oder Attestation zwischen
+   Weiterhin offen: verifizierbare Signatur oder Attestation zwischen
    Prüfsumme und Herausgebernachweis für heruntergeladene Builds sowie ein privater
    Meldeweg vor der Beta. [Windows-CI](../.github/workflows/windows.yml)
    [Sicherheitsmeldungen](../SECURITY.md) [RustSec](https://rustsec.org/)
@@ -265,11 +264,13 @@ Advisory-IDs für elf Crates. Die Prüfung mit
 `cargo tree --locked --target x86_64-pc-windows-msvc -e normal,build` ordnete
 fünf dieser IDs dem Windows-Build zu.
 
-- **SQLite zuerst aktualisieren.** `rusqlite 0.40.2` bindet
-  `libsqlite3-sys 0.38.2` mit SQLite 3.53.2 ein. Der Fix beginnt bei
-  `libsqlite3-sys 0.39.0` und ist im gebündelten SQLite ab `rusqlite 0.41.0`
-  verfügbar. Prüfe nach dem Upgrade Migration, Sicherung, Wiederanlauf und
-  genau die SQLite-Version im ausgelieferten Build. [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459.html)
+- **SQLite aktualisiert.** `rusqlite 0.40.2` band `libsqlite3-sys 0.38.2`
+  mit SQLite 3.53.2 ein. Seit dem 22. November 2026 gilt `rusqlite =0.41.0`
+  mit `libsqlite3-sys 0.39.1` und SQLite 3.54.1; der Fix beginnt bei
+  `libsqlite3-sys 0.39.0`, der Triage-Eintrag ist entfernt. Migration (alle
+  Schemastufen), Sicherung und Wiederanlauf nach Absturz bestehen in der
+  Testsuite; der gebaute Besitzer meldet über `status` SQLite 3.54.1. Die
+  manuelle Windows-10-Abnahme lief noch mit 3.53.2. [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459.html)
 - **Markdown-Parser aktualisiert.** Der Slint-Abhängigkeitsgraph umfasste
   `pulldown-cmark 0.13.4`; seit dem 22. November 2026 steht `0.13.6` mit beiden
   Fixes in `Cargo.lock` (nur Lockfile, Slint 1.18.1 unverändert), und die beiden

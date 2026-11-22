@@ -3,7 +3,7 @@
 Stand: 22. November 2026. Statuswerte nach PROJEKTPLAN §8.5: `geplant`, `experimentell`, `getestet`, `eingeschränkt`, `nicht unterstützt`.
 „Experimentell“ heißt: Parser und Fixtures existieren und laufen in der Testsuite; eine Abnahme gegen reale Toolversionen auf Windows 10 **und** 11 steht aus. „Unterstützt“ gilt nur innerhalb der genannten Formate.
 
-Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 1.98.0, Slint 1.18.1 (winit, Software-Renderer), SQLite 3.53.2 (gebündelt über rusqlite 0.40.2). Windows 11 ist **nicht** abgenommen.
+Getestete Plattform dieses Stands: Windows 10 Pro 22H2 (Build 19045), x64, Rust 1.98.0, Slint 1.18.1 (winit, Software-Renderer), SQLite 3.53.2 (gebündelt über rusqlite 0.40.2). Seit dem 22. November 2026 bündelt der Build SQLite 3.54.1 über rusqlite 0.41.0; dafür liegen nur die automatischen Tests vor. Windows 11 ist **nicht** abgenommen.
 
 Linux/Docker unterstützt die portablen Entwicklungsprüfungen und baut die Windows-Programme mit der GNU-Toolchain (experimentell; maßgeblich bleibt der native MSVC-Build), keine Inventar-Laufzeit.
 Tray, Named Pipes, Job Objects und Windows-Lese-/Löschgrenzen bleiben dort nicht

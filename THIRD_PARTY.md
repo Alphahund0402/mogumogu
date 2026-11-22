@@ -3,7 +3,7 @@
 - Quellcode, eigene UI-Elemente, Icons, Logo und Dokumentation: GPL-3.0-only (`LICENSE`).
 - Slint wird über den GPL-3.0-only-Lizenzpfad eingebunden.
 - SQLite ist gemeinfrei und wird über rusqlite (`bundled`) eingebunden; tatsächlich gebaute
-  Engine: 3.53.2.
+  Engine: 3.54.1 (rusqlite 0.41.0, libsqlite3-sys 0.39.1).
 - Weitere Rust-Abhängigkeiten (u. a. serde, serde_json, toml, quick-xml, regex, semver,
   windows-sys und der Buildhelfer embed-resource) behalten ihre eigenen, GPL-kompatiblen Lizenzen
   (überwiegend MIT/Apache-2.0). SHA-1 und SHA-256 sind eigene, kurze Umsetzungen nach FIPS 180-4

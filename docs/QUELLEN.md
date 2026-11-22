@@ -6,7 +6,7 @@ Offizielle Dokumentation, die der Umsetzung zugrunde liegt (Stand Oktober 2026).
 - Slint 1.18.1 Rust-API: https://docs.rs/slint/1.18.1/slint/
 - Slint SystemTrayIcon: https://docs.slint.dev/latest/docs/slint/reference/window/systemtrayicon/
 - Slint-Buildintegration (`EmbedResourcesKind`): https://docs.rs/slint-build/1.18.1/slint_build/
-- rusqlite 0.40 (inkl. Backup-API): https://docs.rs/rusqlite/0.40.2/rusqlite/
+- rusqlite 0.41 (inkl. Backup-API): https://docs.rs/rusqlite/0.41.0/rusqlite/
 - SQLite WAL und `PRAGMA synchronous`: https://sqlite.org/wal.html · https://sqlite.org/pragma.html#pragma_synchronous
 - SQLite Online-Backup-API: https://sqlite.org/backup.html
 - Rust `File::try_lock`: https://doc.rust-lang.org/std/fs/struct.File.html#method.try_lock

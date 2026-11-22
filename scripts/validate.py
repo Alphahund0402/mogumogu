@@ -47,7 +47,7 @@ class Contracts(unittest.TestCase):
         manifest = tomllib.loads((ROOT / 'Cargo.toml').read_text(encoding='utf-8'))
         self.assertEqual(manifest['package']['license'], 'GPL-3.0-only')
         self.assertEqual(manifest['dependencies']['slint']['version'], '=1.18.1')
-        self.assertEqual(manifest['dependencies']['rusqlite']['version'], '=0.40.2')
+        self.assertEqual(manifest['dependencies']['rusqlite']['version'], '=0.41.0')
         self.assertIn('bundled', manifest['dependencies']['rusqlite']['features'])
         toolchain = tomllib.loads((ROOT / 'rust-toolchain.toml').read_text(encoding='utf-8'))
         self.assertRegex(toolchain['toolchain']['channel'], r'^\d+\.\d+\.\d+$', 'toolchain pinned (F-03)')
