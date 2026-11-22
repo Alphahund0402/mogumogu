@@ -50,10 +50,7 @@ fn a_client_that_leaves_before_the_first_accept_does_not_wedge_the_pipe() {
     let listener = platform::PipeListener::bind(&name).unwrap();
     drop(platform::pipe_connect(&name, Duration::from_secs(2)).unwrap().expect("instance listens after bind"));
     assert!(listener.accept().is_err(), "the vanished client is reported, not served");
-    let client = {
-        let name = name.clone();
-        std::thread::spawn(move || platform::pipe_connect(&name, Duration::from_secs(5)))
-    };
+    let client = std::thread::spawn(move || platform::pipe_connect(&name, Duration::from_secs(5)));
     let connection = listener.accept().expect("the next client is served");
     // The client verifies the server while still connected; disconnecting
     // first would fail that check (ERROR_PIPE_NOT_CONNECTED), not the fix.

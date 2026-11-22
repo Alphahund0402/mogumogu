@@ -60,7 +60,7 @@ fn lockfile_occurrences_do_not_lose_parallel_versions_or_sources() {
 fn cache_entries_and_command_references_remain_distinct_from_project_dependencies() {
     let clock = Arc::new(FixedClock::new(10 * DAY));
     let temp = tempfile::tempdir().unwrap();
-    let mut core = Core::open_with(Config::new(Some(temp.path().join("data")), false).unwrap(), clock.clone()).unwrap();
+    let mut core = Core::open_with(Config::new(Some(temp.path().join("data")), false).unwrap(), clock).unwrap();
     let scope = project(core.repository(), "scripts");
     let mut manifest = InventoryItem::new(ItemCategory::Manifest, "npm", "package.json", "package.json");
     manifest.evidence.commands = vec!["global-tool".into()];
@@ -109,10 +109,10 @@ fn partial_coverage_and_keep_never_become_proof_of_unused() {
         exact: true,
     });
     let child = package("child", "1.0.0", SourceClass::PublicRegistry, "registry.npmjs.org");
-    publish(core.repository(), a, vec![parent, child.clone()]);
+    publish(core.repository(), a, vec![parent, child]);
     let mut global_item = package("cli-tool", "1.0.0", SourceClass::Unknown, "");
     global_item.install_state = Some(InstallState::Installed);
-    publish(core.repository(), global, vec![global_item.clone()]);
+    publish(core.repository(), global, vec![global_item]);
     let report = core.package_report(0, 60).unwrap();
     assert_eq!((report.coverage.complete_projects, report.coverage.incomplete_projects), (1, 1));
     let item = report.packages.iter().find(|p| p.id.name == "child").unwrap();

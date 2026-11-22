@@ -249,13 +249,33 @@ durchsucht.
 Diese Erweiterung der Lesegrenze braucht nach `AGENTS.md` einen zweiten Review;
 er steht aus.
 
+**Was Werkzeuge erzeugt haben, ist kein Projekt.** Ein Ordner mit `CMakeCache.txt`
+ohne `CMakeLists.txt` daneben ist ein CMake-Build-Ordner, `Testing/Temporary` mit
+`LastTest.log` oder `CTestCostData.txt` die Ablage von CTest, ein Ordner mit
+`platform-tools` und `build-tools`, `platforms` oder `ndk` ein Android-SDK,
+`packages.unity.com` ein Paket-Cache. Sie werden gemeldet, aber nicht betreten. Das
+belegt die Spur des Werkzeugs, nicht der Name: Ein Projekt in einem Ordner namens
+`Builds` bleibt ein Projekt, ein Build im Quellordner ebenso. `src/bin` ist Quellcode,
+außer es enthält `Debug` oder `Release`.
+
+**Kopien.** Derselbe Ordnername mit denselben Markern mindestens dreimal ohne
+Versionsverwaltung gilt auf der Laufwerkssuche als Kopie: Die Funde bleiben gelistet,
+mit Hinweis, und rücken nach hinten. Eine `.git`-Datei statt eines Ordners (verknüpfte
+Arbeitskopie, Submodul) erkennt die Suche am Eintrag, ohne sie zu lesen, und stuft den
+Fund auf höchstens mittlere Sicherheit. Inhalte liest die Namenssuche weiterhin nicht;
+gleiche Remotes vergleicht erst der [Aufräumbericht](#offene-punkte-je-projekt) unter
+Projekten mit Lesefreigabe. Ob `Directory.Build.props` oder `Directory.Packages.props`
+eine Projektwurzel machen, entscheidet ihr Ort: außerhalb eines Projekts zählen sie
+wie ein Manifest.
+
 ## Aufräumbericht
 
 **Speicher → Aufräumen** (CLI `tidy [--project ID]`) misst auf Anfrage jedes
 Projekt mit Lesefreigabe in einem begrenzten Durchgang ab der
 identitätsgeprüften Wurzel: handle-relativ, ohne Links und Cloud-Platzhalter,
 höchstens 2 Mio. Einträge und 120 Sekunden. Geöffnet werden nur `.git/config`
-und `.git/index` eines Repositorys im Projekt (siehe unten). Jeder Ordner wird
+und `.git/index` eines Repositorys im Projekt, an der Projektwurzel außerdem
+`HEAD`, `packed-refs`, Refs und Reflogs ([offene Punkte](#offene-punkte-je-projekt)). Jeder Ordner wird
 mit seinen Nachbardateien gelesen ([Regeln](../src/inventory/tidy.rs)):
 
 | Klasse | Ordner oder Datei | Beleg |
@@ -394,6 +414,34 @@ registriert jedes Projekt und erteilt seine identitätsgebundene Lesefreigabe;
 danach folgt eine Erfassung. Ein Ordner, der sich nicht freigeben lässt (etwa
 inzwischen entfernt), wird mit Grund ausgelassen und nicht registriert.
 Teilprojekte, unsichere und redigierte Funde bleiben Einzelentscheidungen.
+
+## Offene Punkte je Projekt
+
+Jeder Aufräumbericht beantwortet je Projekt zwei Fragen: Ist die Arbeit auch
+woanders gesichert, und hat das Projekt, was ein fertiges Projekt meist hat? Die
+Projektseite zeigt das unter **Offene Punkte**, die CLI mit
+`mogumogu-cli project checks --project ID`. Ein Punkt ist `offen`, `erledigt`
+oder `unbekannt`; was sich nicht lesen ließ, zählt nie als erledigt. „Erledigt“
+heißt nur, dass die gelesenen Dateien nichts Offenes zeigen. Es ist kein
+Löschurteil, und kein Punkt macht einen Ordner wiederherstellbar.
+
+| Punkt | Woher | Grenze |
+|---|---|---|
+| Remote, Commits auf dem Remote | `config` (nur Namen und ob die Adresse ins Netz führt; die Adresse wird nicht behalten), `HEAD`, `packed-refs`, Refs, Reflog des Remote-Branches | Stand des letzten Abrufs oder Pushs. Weicht ein Branch ab, gilt er als unveröffentlicht, außer sein Commit steht im Reflog des Remote-Branches und danach gab es nur Fast-Forwards. Ein Remote auf einem lokalen Pfad bleibt `unbekannt`: Er kann auf derselben Festplatte liegen. Ein gemergter Branch ohne Gegenstück bleibt offen, denn die Commit-Geschichte wird nicht gelesen |
+| Zurückgelegte Änderungen | `refs/stash` und sein Reflog | – |
+| Änderungen | Größe und Änderungszeit (auf die Sekunde) gegen den Index, wie der erste Schritt von `git status`, auch für Dateien mit `assume-unchanged` oder `skip-worktree` | Inhalte werden nicht gelesen: Eine nur neu gespeicherte Datei zählt mit, nach dem Kopieren eines Repositorys ohne Zeitstempel womöglich alle |
+| Vorgemerkte Änderungen | Tree-Cache des Index und `git add -N` | `offen`, wenn der Index sie belegt, sonst `unbekannt` und nie `erledigt`: Nach einem vom Hook abgelehnten Commit oder `git reset --soft` sieht der Index unauffällig aus, und ausschließen ließe es sich nur mit den Commit-Objekten |
+| Nur auf diesem Rechner | Dateien, die der Index nicht führt, außerhalb von `.git` und wiederherstellbar belegten Ordnern | Mit oder ohne `.gitignore`: Eine ignorierte `.env` gibt es ebenfalls nur hier |
+| Weitere Repositories, weitere Arbeitskopien | `.git` in Unterordnern, Einträge unter `.git/worktrees` | Nicht einzeln geprüft, bleiben `unbekannt` |
+| Weitere Kopien | Gleicher Remote (als Einwegschlüssel, im Arbeitsspeicher) oder gleicher aktueller Commit unter den Projekten, die in dieser Sitzung gemessen wurden | Bleibt `unbekannt`: Welche Kopie aktuell ist, sagt das nicht |
+| README, Lizenz, CI, Lockfile, Tests | Namen im Projektordner | Nur vorhanden, nicht inhaltlich geprüft |
+
+Git wird nie gestartet. Objekte, Commit-Texte, Autoren und Remote-Adressen
+werden nicht gelesen oder verworfen, Branch- und Dateinamen laufen durch die
+Redaktion, und nichts davon erreicht die Datenbank oder den Verlauf. Reftable,
+verknüpfte Arbeitskopien (`.git`-Datei), ein laufendes Git (`index.lock`) und
+eine unvollständige Erfassung bleiben `unbekannt`. Der zweite Review dieses
+Lesewegs steht aus.
 
 ## Laufwerke
 

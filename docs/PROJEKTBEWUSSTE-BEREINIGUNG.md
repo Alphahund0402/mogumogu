@@ -193,7 +193,11 @@ plant, bricht ab und gleicht ab. Der menschliche Review G5 ersetzt das nicht.
 
 1. G5: Der unabhängige menschliche Review des Papierkorb-Wegs, jetzt mit
    Git-Prüfung, Haltungen (auch überwachten Datenbanken) und der Docker-Abfrage
-   vor jedem Verschieben.
+   vor jedem Verschieben. Dazu gehören der Zeitraum zwischen Inhaltsprüfung
+   und Shell-Aufruf, das Verhalten bei nicht verfügbarem Papierkorb und die
+   Wiederherstellung auf Windows 10 und 11. Nach einem unterbrochenen Plan
+   zeigt der Abgleich am bisherigen Ort fehlende Ordner mit unklarem Ziel
+   gesondert an. [Befunde und nächste Prüfungen](IMPLEMENTIERUNGSPLAN.md#befunde-und-nächste-prüfungen--21-november-2026)
 2. Hardlinks unter 64 KiB zählen beim belegten Platz weiter je Name, und ein
    Hardlink, der zwei Projekte verbindet, zählt in beiden.
 3. Ein echter symbolischer Link auf eine Freigabe ist auf diesem Rechner nicht

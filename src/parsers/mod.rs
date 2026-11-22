@@ -5,6 +5,7 @@
 //! checked before structured parsing.
 pub mod frontmatter;
 pub mod git_index;
+pub mod git_refs;
 pub mod json;
 pub mod lines;
 pub mod sha1;

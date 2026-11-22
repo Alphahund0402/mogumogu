@@ -228,7 +228,11 @@ impl Desktop {
     fn hide(&mut self) {
         DASHBOARD_OPEN.store(false, Ordering::Relaxed);
         self.progress_timer.stop();
+        self.search_timer.stop();
+        self.notice_timer.stop();
         self.disk_page = None;
+        self.search_hits.clear();
+        self.search_hits.shrink_to_fit();
         // Queued behind an active scan: returning to the tray also releases
         // the index without keeping a second inventory resident.
         self.owner.submit(Request::ClearStorageAnalysis);
@@ -565,8 +569,8 @@ impl Desktop {
                 if let Ok(plan) = serde_json::from_value::<PlanSummary>(value) {
                     self.status = format!("Plan {}: {}", plan.id, plan.state.label());
                     self.dialog(dialogs::plan(&plan));
-                    // Moved folders change the report: measure the project again.
-                    if plan.done > 0
+                    // Moved or missing folders change the report: measure again.
+                    if (plan.done > 0 || plan.missing_after_interruption() > 0)
                         && let Some(project_id) = plan.project_id
                     {
                         self.submit(Request::Tidy { project_id: Some(project_id) });

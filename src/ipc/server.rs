@@ -53,13 +53,10 @@ where
     H: FnMut(Request) -> crate::Result<Value>,
 {
     while !stop.load(Ordering::SeqCst) {
-        let mut connection = match listener.accept() {
-            Ok(connection) => connection,
-            Err(_) => {
-                // Foreign session or transient error: never crash the owner.
-                std::thread::sleep(Duration::from_millis(50));
-                continue;
-            }
+        let Ok(mut connection) = listener.accept() else {
+            // Foreign session or transient error: never crash the owner.
+            std::thread::sleep(Duration::from_millis(50));
+            continue;
         };
         if stop.load(Ordering::SeqCst) {
             break;

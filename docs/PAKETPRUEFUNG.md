@@ -69,13 +69,14 @@ aus Ökosystem, Name, Version und Quelle. Er kann in PowerShell ohne JSON-Quotin
 an `packages keep --key SCHLUESSEL` bzw. `packages unkeep --key SCHLUESSEL`
 übergeben werden. Die lesbare Identität steht daneben im Feld `id`.
 
-## Lockfile-Hinweise statt Quellenabfragen
+## Lockfile-Hinweise und Schwachstellenabgleich
 
 mogumogu fragt keine Registries ab und stellt keine Netzwerkverbindungen her.
 Eine Version gilt als abgekündigt, wenn ein lokales Lockfile das vermerkt (z. B.
 npm `deprecated`). Neuere Versionen, Yanks und Projektstatus einer Registry kennt
-mogumogu deshalb nicht. Der Paketmanager oder seine Audit-Funktion bleibt dafür
-zuständig.
+mogumogu deshalb nicht. Der optionale Schwachstellen-Watcher gleicht installierte
+und aufgelöste Versionen lokal mit OSV-Archiven ab und zeigt CVE-Kennungen je
+Projekt. [Schwachstellen-Watcher](SCHWACHSTELLEN.md)
 
 ## Umfang der Referenzanalyse
 

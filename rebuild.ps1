@@ -8,7 +8,7 @@ beendet. Installiert nichts und ändert keine Einstellungen.
 
 Ohne installiertes Rust baut es im Docker-Container (nur Docker Desktop nötig):
 die GNU-Toolchain kompiliert dort die Windows-Programme, die danach wie gewohnt
-nativ unter Windows laufen. Ohne Rust und ohne Docker, etwa auf schwächeren
+nativ unter Windows laufen. Ohne Rust und ohne laufendes Docker, etwa auf schwächeren
 Rechnern, lädt es den fertigen Build statt zu bauen (scripts\download.ps1):
 den CI-Build dieses Commits, sonst das neueste Release.
 
@@ -51,6 +51,16 @@ function Get-CliFlags([string]$Arguments) {
     $Flags
 }
 
+# Whether a Docker engine answers: an installed but stopped Docker cannot build.
+# Windows PowerShell turns redirected stderr of a native tool into a stopping
+# error, so only the exit code counts here.
+function Test-DockerRunning {
+    if (-not $HasDocker) { return $false }
+    $ErrorActionPreference = 'Continue'
+    & docker info --format '{{.OSType}}' 2>$null | Out-Null
+    $LASTEXITCODE -eq 0
+}
+
 $Configuration = if ($Fast) { 'Fast' } else { 'Release' }
 $CargoProfile = $Configuration.ToLowerInvariant()
 $Started = Get-Date
@@ -58,14 +68,15 @@ $Restart = @()
 $Failed = $false
 $HasCargo = [bool](Get-Command cargo -ErrorAction SilentlyContinue)
 $HasDocker = [bool](Get-Command docker -ErrorAction SilentlyContinue)
-# Without any toolchain there is nothing to build with: load the finished build.
-$UseDownload = $Download -or (-not $Docker -and -not $HasCargo -and -not $HasDocker)
+# Without a usable toolchain there is nothing to build with: load the finished
+# build. An explicit -Docker still gets its error below.
+$UseDownload = $Download -or (-not $Docker -and -not $HasCargo -and -not (Test-DockerRunning))
 $UseDocker = -not $UseDownload -and ($Docker -or -not $HasCargo)
 $Loaded = $null
 $Staging = Join-Path ([IO.Path]::GetTempPath()) ('mogumogu-staging-' + [Guid]::NewGuid().ToString('N'))
 try {
     if ($UseDownload) {
-        if (-not $Download) { Write-Host 'Weder Rust noch Docker gefunden: mogumogu wird geladen statt gebaut.' -ForegroundColor Yellow }
+        if (-not $Download) { Write-Host 'Weder Rust noch ein laufendes Docker gefunden: mogumogu wird geladen statt gebaut.' -ForegroundColor Yellow }
         if ($Fast -or $Test) { Write-Host '-Fast und -Test gelten nur für einen Build; geladen wird der geprüfte Build.' -ForegroundColor Yellow }
         if ((Get-Command git -ErrorAction SilentlyContinue) -and @(& git -C $Root status --porcelain --untracked-files=no).Count -gt 0) {
             Write-Host 'Lokale Änderungen sind im geladenen Build nicht enthalten; dafür bauen oder erst committen und pushen.' -ForegroundColor Yellow
@@ -75,8 +86,7 @@ try {
     }
     elseif ($UseDocker) {
         if (-not $HasDocker) { throw 'Docker nicht gefunden. Docker Desktop installieren oder mit -Download den fertigen Build laden.' }
-        & docker info --format '{{.OSType}}' *> $null
-        if ($LASTEXITCODE -ne 0) { throw 'Docker läuft nicht. Docker Desktop starten, oder mit -Download den fertigen Build laden.' }
+        if (-not (Test-DockerRunning)) { throw 'Docker läuft nicht. Docker Desktop starten, oder mit -Download den fertigen Build laden.' }
         Write-Host 'mogumogu · Build im Docker-Container (GNU-Toolchain)' -ForegroundColor Cyan
     }
     foreach ($Owner in Get-DistOwners) {
@@ -121,7 +131,8 @@ finally {
     if (-not $NoRestart -and (Test-Path -LiteralPath $Exe)) {
         foreach ($Owner in $Restart) {
             $Arguments = $Owner.Arguments -replace '(^|\s)--show(\s|$)', '$1--tray$2'
-            if (-not $Arguments) { $Arguments = '--tray' }
+            # Without a flag the program would open its window; a restart stays in the tray.
+            if ($Arguments -notmatch '(^|\s)--(tray|headless)(\s|$)') { $Arguments = "--tray $Arguments".Trim() }
             Start-Process -FilePath $Exe -ArgumentList $Arguments -WorkingDirectory $OutDir | Out-Null
             Write-Host "mogumogu wieder im Tray gestartet ($Arguments)." -ForegroundColor Green
         }

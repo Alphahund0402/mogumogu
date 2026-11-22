@@ -130,7 +130,7 @@ pub fn summary(repo: &mut Repository, plan_id: i64) -> Result<PlanSummary> {
         project_id,
         project: project.unwrap_or_else(|| "Projekt".into()),
         root: scope.map(|s| s.path).unwrap_or_default(),
-        done: count(&[Done, ReconciledMissing]),
+        done: count(&[Done]),
         failed: count(&[Failed, Blocked, Pending]),
         targets: plan
             .targets
@@ -157,7 +157,13 @@ pub fn summary(repo: &mut Repository, plan_id: i64) -> Result<PlanSummary> {
                    lassen sie sich mit dem Werkzeug aus dem Beleg (etwa npm ci, cargo build oder uv sync). Der \
                    Speicher wird erst frei, wenn du den Papierkorb leerst."
             .into(),
-        note: plan.note,
+        note: plan.note.map(|note| {
+            if note.starts_with("Abgleich: ") && count(&[ReconciledMissing]) > 0 {
+                "Der Abgleich prüfte den bisherigen Ort der Ordner.".into()
+            } else {
+                note
+            }
+        }),
         free_before: plan.free_before,
         free_after: plan.free_after,
     })

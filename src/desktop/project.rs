@@ -192,6 +192,14 @@ pub fn render(ui: &Dashboard, snapshot: &Snapshot, project_id: i64, skipped: &BT
             if let Some(t) = r.last_change {
                 facts.push(fact("Zuletzt geändert", display_relative(t, now)));
             }
+            if let Some(refs) = r.git.as_ref().and_then(|git| git.refs.as_ref()) {
+                if let Some(branch) = &refs.branch {
+                    facts.push(fact("Branch", branch.clone()));
+                }
+                if let Some(t) = refs.last_commit {
+                    facts.push(fact("Letzter Commit hier", display_relative(t, now)));
+                }
+            }
             if r.agent > 0 {
                 facts.push(fact("Reste von KI-Agenten", format!("{} · nie wiederherstellbar", bytes(r.agent))));
             }
@@ -208,6 +216,20 @@ pub fn render(ui: &Dashboard, snapshot: &Snapshot, project_id: i64, skipped: &BT
         }
     }
     store.set_project_facts(model(facts));
+
+    let checks = report.map_or(&[][..], |r| r.checks.as_slice());
+    store.set_project_checks_summary(checks_summary(checks).into());
+    store.set_project_checks(model(
+        checks
+            .iter()
+            .map(|c| CheckRow {
+                state: c.state.as_str().into(),
+                group: c.group.label().into(),
+                title: c.title.clone().into(),
+                detail: c.detail.clone().into(),
+            })
+            .collect(),
+    ));
 
     render_cleanup(&store, project, report, approved.is_some() && !demo, skipped);
     render_holds(&store, project, report);
@@ -442,6 +464,8 @@ mod tests {
             kept: Vec::new(),
             runs: Vec::new(),
             growth: None,
+            git: None,
+            checks: Vec::new(),
             items: vec![
                 item("node_modules", TidyClass::Regenerable),
                 item("tests/fixtures", TidyClass::Review),

@@ -19,6 +19,8 @@ Legende: ☑ geprüft · ☐ offen. Spalte „W10“ = Windows 10 Pro 22H2 (Buil
 | Prüfpunkt | W10 | W11 |
 |---|---|---|
 | Start ohne Fenster im Tray (`--tray`), Symbol sichtbar | ☐ manuell | ☐ |
+| Doppelklick auf `mogumogu.exe` und `start.cmd` öffnet das Dashboard | ☐ manuell | ☐ |
+| Start auf einem Windows ohne Visual-C++-Laufzeit (MSVC-Build) | ☐ manuell | ☐ |
 | Linksklick öffnet, Rechtsklick-Menü reagiert | ☐ manuell | ☐ |
 | Fensterkreuz schließt nur das Fenster; erneutes Öffnen funktioniert (100 Zyklen) | ☑ | ☐ |
 | Zweiter Start holt das bestehende Fenster, kein zweiter Writer | ☑ | ☐ |

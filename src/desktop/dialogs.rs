@@ -522,8 +522,8 @@ pub fn plan(plan: &PlanSummary) -> Dialog {
         dialog = dialog.row(&target.rel_path.replace('/', "\\"), value);
     }
     dialog = dialog.row("Bleibt erhalten", plan.kept.join("\n")).row("Wiederherstellung", &plan.recovery);
-    if plan.done + plan.failed > 0 {
-        dialog = dialog.row("Ergebnis", format!("{} verschoben, {} nicht verschoben", plan.done, plan.failed));
+    if let Some(outcome) = plan.outcome_text() {
+        dialog = dialog.row("Ergebnis", outcome);
     }
     if let Some(space) = plan.space_text() {
         dialog = dialog.row("Laufwerk", space);
@@ -535,7 +535,7 @@ pub fn plan(plan: &PlanSummary) -> Dialog {
         PlanState::Draft if plan.executable() => dialog
             .action(format!("approve-plan:{}:{}", plan.id, plan.short_fingerprint()), format!("Plan {} bestätigen", plan.short_fingerprint()), true)
             .action(format!("cancel-plan:{}", plan.id), "Verwerfen", false)
-            .body("Mit der Bestätigung bindest du genau diese Ordner (Fingerabdruck). Vor dem Verschieben wird jeder Ordner erneut geprüft; jede Änderung stoppt ihn."),
+            .body("Die Bestätigung gilt für die Ordner dieses Fingerabdrucks. Vor dem Verschieben prüft mogumogu Identität, Schutz und Wiederherstellungsbeleg erneut."),
         PlanState::Draft => dialog
             .action(format!("cancel-plan:{}", plan.id), "Verwerfen", false)
             .body("Der Plan enthält Blocker und kann nicht bestätigt werden."),

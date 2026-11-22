@@ -5,6 +5,7 @@ Windows includes the native UI; --core (automatic on Linux) checks the portable
 core only. Neither mode replaces the manual Windows acceptance tests.
 """
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -13,9 +14,9 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(command):
+def run(command, *, env=None):
     print(f"\n> {' '.join(command)}", flush=True)
-    subprocess.run(command, cwd=ROOT, check=True)
+    subprocess.run(command, cwd=ROOT, env=env, check=True)
 
 
 def main():
@@ -34,6 +35,13 @@ def main():
 
     print(f"Checking {'portable core' if core else 'Windows core and desktop'} with Rust {actual}.", flush=True)
     run([sys.executable, 'scripts/validate.py'])
+    run([sys.executable, '-B', '-m', 'unittest', 'discover', '-s', 'scripts', '-p', 'test_*.py'])
+    lib_env = dict(os.environ)
+    lib_env['PYTHONPATH'] = str(ROOT / 'packages' / 'mogumogu-advisories' / 'src')
+    run(
+        [sys.executable, '-B', '-m', 'unittest', 'discover', '-s', 'packages/mogumogu-advisories/tests', '-p', 'test_*.py'],
+        env=lib_env,
+    )
     run(['cargo', 'fmt', '--all', '--', '--check'])
     run(['cargo', 'clippy', *lock, '--all-targets', *(features if core else []), '--', '-D', 'warnings'])
     run(['cargo', 'test', *lock, *features])

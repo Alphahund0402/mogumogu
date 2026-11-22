@@ -1,6 +1,8 @@
 //! Human-readable output. `--json` prints the versioned machine format.
 use crate::commands::View;
-use mogumogu::domain::{PlanSummary, ReviewHint, Snapshot, format_bytes};
+use mogumogu::domain::{
+    CheckGroup, PlanSummary, ProjectTidy, ReviewHint, Snapshot, TidyReport, checks_summary, format_bytes,
+};
 use serde_json::{Value, json};
 
 pub const JSON_VERSION: u32 = 1;
@@ -29,6 +31,10 @@ pub fn human(view: View, value: &Value) -> String {
         View::DiskCsv => {
             serde_json::from_value::<mogumogu::domain::DiskPage>(value.clone()).ok().map(|page| page.csv())
         }
+        View::Checks(id) => serde_json::from_value::<TidyReport>(value.clone())
+            .ok()
+            .and_then(|report| report.projects.into_iter().find(|p| p.project_id == id))
+            .map(|project| checks(&project)),
     };
     rendered.unwrap_or_else(|| serde_json::to_string_pretty(value).unwrap_or_default())
 }
@@ -91,6 +97,18 @@ fn list(snapshot: &Snapshot) -> String {
     lines.join("\n")
 }
 
+fn checks(project: &ProjectTidy) -> String {
+    let mut lines = vec![format!("Offene Punkte · {} · {}", project.name, checks_summary(&project.checks))];
+    for group in CheckGroup::ALL {
+        lines.push(group.label().to_string());
+        for check in project.checks.iter().filter(|c| c.group == *group) {
+            lines.push(format!("  [{:<9}] {} – {}", check.state.label(), check.title, check.detail));
+        }
+    }
+    lines.push("Kein Löschurteil: „erledigt“ heißt nur, dass die gelesenen Dateien nichts Offenes zeigen.".into());
+    lines.join("\n")
+}
+
 fn review(hints: &[ReviewHint]) -> String {
     if hints.is_empty() {
         return "Keine Prüfhinweise. Unbekannte Nutzung wird nicht als entbehrlich eingestuft.".into();
@@ -129,8 +147,8 @@ fn plan(plan: &PlanSummary) -> String {
     lines.push("  Bleibt erhalten:".into());
     lines.extend(plan.kept.iter().map(|k| format!("      {k}")));
     lines.push(format!("  Wiederherstellung: {}", plan.recovery));
-    if plan.done + plan.failed > 0 {
-        lines.push(format!("  Ergebnis: {} verschoben, {} nicht verschoben", plan.done, plan.failed));
+    if let Some(outcome) = plan.outcome_text() {
+        lines.push(format!("  {outcome}"));
     }
     if let Some(space) = plan.space_text() {
         lines.push(format!("  Laufwerk: {space}"));

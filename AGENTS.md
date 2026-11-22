@@ -9,7 +9,7 @@ nativen Screen-Renderer, nichts davon gehört zur Laufzeit.
 ## Wahrheitsgemäßer Funktionsstand
 Umgesetzt: Tray/Dashboard, Besitzerprozess mit Named-Pipe-IPC, identitätsgebundene Lesefreigaben,
 statische Erfassung (35 Paketmanager plus Laufzeitvorgaben, Container-Images, CI-Actions, pre-commit-Hooks und Git-Submodule; zwölf KI-Profile), Generationen, Prüfregeln, ein
-lesender Aufräumbericht (liest je Repository `.git/config` und `.git/index`, erkennt Reste von
+lesender Aufräumbericht mit offenen Punkten je Projekt (liest je Repository `.git/config` und `.git/index`, an der Projektwurzel auch `HEAD`, `packed-refs`, Refs und Reflogs, erkennt Reste von
 KI-Agenten), eine Speicheranalyse nur aus Dateimetadaten (eigene Freigabe, Ergebnis nur
 im Arbeitsspeicher), behaltene Ordner (Schema v8), ein gespeicherter Verlauf der Aufräumberichte,
 KI-Läufe, die kooperierende Harnesses auf Wunsch per CLI registrieren (Schema v9; nur Herkunft und
@@ -32,6 +32,12 @@ unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PR
   Ort eines gehaltenen Ordners (nur Metadaten, nichts darin; Links auf Freigaben oder nicht feste
   Laufwerke werden abgelehnt); `inventory::databases::known_places` listet für Vorschläge nur die
   Namen in bekannten Installationsordnern von Datenbankservern.
+- Git-Stand (`src/inventory/git.rs`, `src/parsers/git_refs.rs`, `src/domain/checks.rs`): liest unter dem
+  gehaltenen `.git`-Handle nur `config`, `index`, `HEAD`, `packed-refs`, Refs, Reflogs und die Liste von
+  `worktrees` (`index.lock` und `reftable` nur auf Existenz), daraus nur Branchnamen, Objektnamen und Zeiten,
+  nie Objekte, Adressen oder Autoren (Remote-Adressen nur als Einwegschlüssel im Arbeitsspeicher, um Kopien zu erkennen); kein Programmstart, nichts davon in der Datenbank. Fügt nur Gründe zum
+  Hinschauen hinzu und ändert keine Klasse. Was sich nicht belegen lässt, bleibt „unbekannt“, nie „erledigt“.
+  Menschlicher zweiter Review offen.
 - `src/service/filters.rs`: einzige Stelle, die in ein Projekt schreibt – nur `permissions.deny` in
   der persönlichen `.claude/settings.local.json`, nach Vorschau und Bestätigung per Fingerabdruck
   (je Projekt oder für alle zusammen), nie in Git- oder geteilte Dateien. Geschrieben wird nur über
@@ -76,7 +82,7 @@ Reste von KI-Agenten sind nie wiederherstellbar; ebenso nichts, was ein registri
 freigegebener Lauf meldet, eine überwachte Datenbank und nichts, was ein Container eines
 freigegebenen Docker-Kontexts einbindet. Ist so eine Engine nicht
 erreichbar, blockiert das. Neue Regeln dürfen das nur enger machen
-oder brauchen den zweiten Review. Unbekannt bleibt unbekannt. Demo- und lokale Datenbanken niemals mischen. Neue Schemaversion nicht still
+oder brauchen den zweiten Review. Unbekannt bleibt unbekannt. „Erledigt“ in den offenen Punkten ist kein Löschurteil. Demo- und lokale Datenbanken niemals mischen. Neue Schemaversion nicht still
 zurückstufen. Keine Secrets, rohen Config-Snapshots oder Testbenutzerpfade in Logs, DB oder Git.
 
 ## Prüfungen

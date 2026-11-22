@@ -598,8 +598,7 @@ mod tests {
         let items = Deno.parse_file(&file("deno.lock", V5)).unwrap();
         assert_eq!(
             items[0].detail, "Lockfile v5 · 2 JSR, 6 npm, 3 Remote-Module · Workspace mit 1 Mitgliedern",
-            "{:#?}",
-            items
+            "{items:#?}"
         );
         let edges = &items[0].evidence.dependencies;
         assert_eq!(edges.len(), 5);

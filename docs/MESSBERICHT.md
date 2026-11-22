@@ -400,3 +400,26 @@ dann ein vollständiger.
 
 Offen: eine Messung auf tatsächlich schwacher Hardware, mit Festplatte statt SSD,
 unter Windows 11 und bei 100 % Skalierung.
+
+## Projekterkennung auf echtem Bestand (8. November 2026)
+
+Windows 11 Pro (Build 26300), Laufwerkssuche über I: in eigenen Wegwerf-Datenordnern,
+die lokale Datenbank blieb unberührt. Vorher ist der MSVC-Build vom 1. November, nachher
+ein GNU-Build aus dem Container; die Zeiten sind deshalb nur ein Anhaltspunkt.
+
+| Laufwerkssuche I: | Vorher | Nachher |
+|---|---|---|
+| Funde insgesamt | 4.990 | 3.630 |
+| Projektkandidaten | 2.586 | 1.898 |
+| davon äußere | 867 | 180 |
+| äußere mit geringer Sicherheit | 819 | 152 |
+| Projektkandidaten auf oberster Ebene | 14 | 14 |
+| Build-Ausgaben | 846 | 231 |
+| `src/bin` als Build-Ausgabe | 6 | 0 |
+| Dauer bei warmem Dateisystem-Cache | 2,6 s | 1,7 s |
+
+Von den 687 entfernten äußeren Kandidaten lagen 672 in CMake-Build-Ordnern, 15 im
+Android-SDK und in Unity-Paket-Caches. 135 Funde tragen nun den Hinweis auf Kopien, drei
+den auf eine verknüpfte Arbeitskopie oder ein Submodul. Lightshow, eine .NET-Wurzel, stieg
+von geringer auf hohe Sicherheit. Weiterhin weit oben stehen Fremdprojekte mit eigenem
+`.git`, denn am Namen lässt sich nicht erkennen, wessen Code ein Repository ist.

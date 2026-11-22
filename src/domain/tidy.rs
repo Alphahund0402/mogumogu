@@ -72,6 +72,13 @@ pub struct ProjectTidy {
     /// How the project changed over the saved reports.
     #[serde(default)]
     pub growth: Option<Growth>,
+    /// What the repository at the project's root shows; `None` without one.
+    /// In memory only: nothing of it reaches the history or the database.
+    #[serde(default)]
+    pub git: Option<super::GitFacts>,
+    /// What is still open in the project.
+    #[serde(default)]
+    pub checks: Vec<super::ProjectCheck>,
     /// Largest entries first, bounded.
     pub items: Vec<TidyItem>,
     /// Newest file outside outputs, caches and version control.
@@ -304,6 +311,8 @@ mod tests {
             kept: Vec::new(),
             runs: Vec::new(),
             growth: None,
+            git: None,
+            checks: Vec::new(),
             items: Vec::new(),
             last_change: None,
             complete: true,

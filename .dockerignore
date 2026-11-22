@@ -12,6 +12,7 @@
 !build.ps1
 !build.cmd
 !start.ps1
+!start.cmd
 !AGENTS.md
 !CLAUDE.md
 !README.md
@@ -33,6 +34,10 @@
 !tests/**
 !scripts/
 !scripts/**
+!packages/
+!packages/**
+!security/
+!security/**
 !docs/
 !docs/**
 # Linked from README and THIRD_PARTY; the static validator checks these links.

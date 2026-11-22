@@ -9,9 +9,6 @@ use crate::platform::FileIdentity;
 use crate::{Error, Result, limits, privacy, validation};
 use rusqlite::{OptionalExtension, Row, Transaction, params};
 
-const COLUMNS: &str = "id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
-    acquisition, parent_id, purpose, review_at, created_at";
-
 fn map_resource(row: &Row<'_>) -> rusqlite::Result<Resource> {
     Ok(Resource {
         id: row.get(0)?,
@@ -218,22 +215,26 @@ impl Repository {
     }
 
     pub fn resources(&mut self) -> Result<Vec<Resource>> {
-        let sql = format!("SELECT {COLUMNS} FROM resources ORDER BY id LIMIT {}", limits::MAX_RESOURCES);
-        self.query(&sql, [], map_resource)
+        const SQL: &str = "SELECT id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
+            acquisition, parent_id, purpose, review_at, created_at FROM resources ORDER BY id LIMIT ?1";
+        self.query(SQL, [limits::MAX_RESOURCES], map_resource)
     }
 
     pub fn resource(&mut self, id: i64) -> Result<Resource> {
-        let sql = format!("SELECT {COLUMNS} FROM resources WHERE id = ?1");
+        const SQL: &str = "SELECT id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
+            acquisition, parent_id, purpose, review_at, created_at FROM resources WHERE id = ?1";
         self.read(|tx| {
-            tx.query_row(&sql, [id], map_resource)
+            let mut stmt = tx.prepare_cached(SQL)?;
+            stmt.query_row([id], map_resource)
                 .optional()?
                 .ok_or_else(|| Error::not_found("Ressourcen-ID nicht gefunden."))
         })
     }
 
     pub fn children(&mut self, parent_id: i64) -> Result<Vec<Resource>> {
-        let sql = format!("SELECT {COLUMNS} FROM resources WHERE parent_id = ?1 ORDER BY id");
-        self.query(&sql, [parent_id], map_resource)
+        const SQL: &str = "SELECT id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
+            acquisition, parent_id, purpose, review_at, created_at FROM resources WHERE parent_id = ?1 ORDER BY id";
+        self.query(SQL, [parent_id], map_resource)
     }
 
     /// Stored identity of a folder mogumogu created.

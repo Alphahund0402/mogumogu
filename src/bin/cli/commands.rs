@@ -27,6 +27,7 @@ Aufruf:  mogumogu-cli [--demo] [--data-dir ABSOLUTER_PFAD] [--json] [--no-start]
 Projekte und Lesefreigaben (Registrierung ≠ Lesefreigabe)
   project register --name NAME --path C:\dev\projekt
   project approve --project ID           Ordner identitätsgebunden zum Lesen freigeben
+  project checks --project ID            offene Punkte: Git-Stand (nie git gestartet) und Vollständigkeit; kein Löschurteil
   system approve --kind npm-global|uv-tools|python|cargo-tools|nuget-cache [--path PFAD]
   system approve --kind npm-cache|pip-cache|uv-cache|cargo-registry|gradle-caches|maven-repository|pnpm-store|yarn-cache [--path PFAD]
                                          Paket-Cache nur messen (Aufräumbericht nennt den Aufräumbefehl)
@@ -92,6 +93,9 @@ Einstellungen und Daten
   settings
   packages [--offset N] [--limit N] [--search TEXT] [--filter review|deprecated|unreferenced|kept] [--manager ID]
   packages keep|unkeep --key PAKETSCHLUESSEL   lokale Behalten-Entscheidung
+  advisories inventory [--offset N --basis TOKEN]  Installationsbelege für den Offline-Abgleich
+  advisories projects [--project ID] [--offset N --basis TOKEN]
+                                         Paketversionen und Erfassungsstand freigegebener Projekte
   backup --to ABSOLUTER_PFAD
   owner status | owner stop | dashboard [hide]
 
@@ -110,6 +114,8 @@ pub enum View {
     Plan,
     Json,
     DiskCsv,
+    /// The open points of this project from a fresh tidy-up report.
+    Checks(i64),
 }
 
 #[derive(Debug)]
@@ -237,6 +243,10 @@ pub fn parse(args: &[String]) -> Result<Action> {
         }
         ["project", "approve", ..] => {
             call(Request::ApproveProject { project_id: opts(rest(2), &["--project"])?.id("--project")? }, View::Json)
+        }
+        ["project", "checks", ..] => {
+            let project_id = opts(rest(2), &["--project"])?.id("--project")?;
+            call(Request::Tidy { project_id: Some(project_id) }, View::Checks(project_id))
         }
         ["project", "candidates"] => call(Request::ProjectCandidates, View::Json),
         ["project", "accept-all", ..] => {
@@ -446,6 +456,23 @@ pub fn parse(args: &[String]) -> Result<Action> {
                 .transpose()?
                 .unwrap_or(PACKAGE_PAGE);
             call(Request::Packages { offset, limit, query }, View::Json)
+        }
+        ["advisories", mode @ ("inventory" | "projects"), ..] => {
+            let options: &[&str] =
+                if *mode == "projects" { &["--project", "--offset", "--basis"] } else { &["--offset", "--basis"] };
+            let o = opts(rest(2), options)?;
+            let offset = o
+                .optional("--offset")
+                .map(|v| v.parse::<usize>().map_err(|_| Error::invalid("--offset muss nichtnegativ sein.")))
+                .transpose()?
+                .unwrap_or_default();
+            let basis = o.optional("--basis");
+            let request = if *mode == "projects" {
+                Request::AdvisoryProjects { project_id: o.optional_id("--project")?, offset, basis }
+            } else {
+                Request::AdvisoryInventory { offset, basis }
+            };
+            call(request, View::Json)
         }
         ["backup", ..] => call(Request::Backup { path: opts(rest(1), &["--to"])?.text("--to")? }, View::Json),
         _ => Err(Error::invalid("Unbekannter Befehl. `mogumogu-cli help` zeigt alle Befehle.")),

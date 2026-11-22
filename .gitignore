@@ -22,5 +22,9 @@ mogumogu-export*.json
 .claude/*.local.*
 
 __pycache__/
+*.egg-info/
+*.whl
+/packages/*/build/
+/packages/*/dist/
 .DS_Store
 # Shared rules and skills (.agents/, .claude/skills/, AGENTS.md, CLAUDE.md) stay tracked.

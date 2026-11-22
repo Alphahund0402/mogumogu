@@ -1,0 +1,42 @@
+# Wiederverwendbare Compose-Definition für beliebige Projekte.
+# Nutzung aus einem beliebigen Projektordner:
+#   docker compose -f <pfad>/compose.yaml run --rm refresh
+#   docker compose -f <pfad>/compose.yaml run --rm audit
+#
+# Optional: TARGET=/pfad/zum/projekt (Standard: aktuelles Arbeitsverzeichnis)
+
+services:
+  refresh:
+    build:
+      context: .
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+    volumes:
+      - osv-cache:/cache
+      - "${TARGET:-.}:/work:ro"
+    command: ["refresh", "--project", "/work"]
+
+  audit:
+    build:
+      context: .
+    user: "10001:10001"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2.0
+    mem_limit: 1g
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+    volumes:
+      - osv-cache:/cache:ro
+      - "${TARGET:-.}:/work:ro"
+    command: ["audit", "/work"]
+
+volumes:
+  osv-cache:

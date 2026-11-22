@@ -247,8 +247,7 @@ pub fn reconcile(repo: &mut Repository, plan_id: i64) -> Result<PlanState> {
             },
             _ => None,
         };
-        // Only a started folder that left its place counts as moved; one that
-        // was never started and is gone now went some other way.
+        // Absence after a started action leaves the destination unverified.
         let (state, note) = match (target.state, present) {
             (JournalState::Started, Some(false)) => {
                 (JournalState::ReconciledMissing, "nach Unterbrechung nicht mehr am Ort; nicht erneut ausgeführt")
@@ -267,15 +266,12 @@ pub fn reconcile(repo: &mut Repository, plan_id: i64) -> Result<PlanState> {
     let previously_done = plan.targets.iter().filter(|t| t.state == JournalState::Done).count();
     let next = if previously_done + gone == 0 {
         PlanState::Failed
-    } else if kept == 0 {
+    } else if kept == 0 && gone == 0 {
         PlanState::Completed
     } else {
         PlanState::Partial
     };
-    let note = format!(
-        "Abgleich: {} verschoben, {kept} noch vorhanden oder unklar – kein erneuter Versuch.",
-        previously_done + gone
-    );
-    repo.transition_plan(plan_id, PlanState::RecoveryRequired, next, Some(&note))?;
+    let note = "Der Abgleich prüfte den bisherigen Ort der Ordner.";
+    repo.transition_plan(plan_id, PlanState::RecoveryRequired, next, Some(note))?;
     Ok(next)
 }

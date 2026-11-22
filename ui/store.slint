@@ -37,6 +37,8 @@ export struct PageChip { label: string, kind: string }
 export struct CleanupRow { rel-path: string, title: string, detail: string, size: string, recoverable: bool, selected: bool, action-id: string, action-label: string }
 // Something that holds a folder of the project, and where it is lifted.
 export struct HoldRow { title: string, detail: string, action-id: string, action-label: string }
+// One open point of a project; `state` is done, open or unknown.
+export struct CheckRow { state: string, group: string, title: string, detail: string }
 
 export global Store {
     // Set imperatively by the window; layouts read it without a binding loop.
@@ -170,6 +172,8 @@ export global Store {
     // Recoverable, review, version control, the rest: shares of the total.
     in property <[float]> project-shares: [0, 0, 0, 0];
     in property <[string]> project-legend: ["", "", "", ""];
+    in property <[CheckRow]> project-checks;
+    in property <string> project-checks-summary;
     in property <[CleanupRow]> project-cleanup;
     in property <string> project-selection;
     in property <bool> project-can-plan: false;

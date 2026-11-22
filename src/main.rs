@@ -25,7 +25,9 @@ struct Options {
 }
 
 fn parse_options() -> Result<Options, String> {
-    let mut options = Options { data_dir: None, demo: false, show: false, headless: false };
+    // A double-click passes no arguments and must show something. Scripts and
+    // the CLI that want the tray alone pass --tray.
+    let mut options = Options { data_dir: None, demo: false, show: true, headless: false };
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         match arg.to_str() {

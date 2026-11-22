@@ -1,0 +1,129 @@
+name: Reusable OSV/CVE Advisory Audit
+
+on:
+  workflow_call:
+    inputs:
+      target_path:
+        description: "Directory or lockfile to audit relative to repository root"
+        required: false
+        type: string
+        default: "."
+      triage_file:
+        description: "Optional path to dated TOML triage manifest"
+        required: false
+        type: string
+        default: ""
+      ecosystems:
+        description: "Optional comma-separated OSV ecosystems (empty = auto-detect from lockfiles)"
+        required: false
+        type: string
+        default: ""
+      max_age_days:
+        description: "Maximum allowed age of OSV feeds in days before failing closed"
+        required: false
+        type: number
+        default: 7
+      upload_sarif:
+        description: "Upload SARIF 2.1.0 report to GitHub Code Scanning (requires security-events: write)"
+        required: false
+        type: boolean
+        default: false
+      upload_artifact:
+        description: "Upload JSON, HTML, and SARIF audit reports as workflow artifact"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Build reusable mogumogu-advisories container (offline package + verified OSV-Scanner)
+        run: docker build -t mogumogu-advisories-runner ./packages/mogumogu-advisories
+
+      - name: Refresh required public OSV archives into ephemeral cache
+        env:
+          TARGET_PATH: ${{ inputs.target_path }}
+          ECOSYSTEMS: ${{ inputs.ecosystems }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/osv-cache" "$RUNNER_TEMP/advisory-reports"
+          chmod 0777 "$RUNNER_TEMP/osv-cache" "$RUNNER_TEMP/advisory-reports"
+          ARGS=(refresh)
+          if [ -n "$ECOSYSTEMS" ]; then
+            IFS=',' read -ra LIST <<< "$ECOSYSTEMS"
+            for eco in "${LIST[@]}"; do
+              trimmed="$(echo "$eco" | xargs)"
+              [ -n "$trimmed" ] && ARGS+=(--ecosystem "$trimmed")
+            done
+          else
+            ARGS+=(--project "/work/$TARGET_PATH")
+          fi
+          docker run --rm --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --user 10001:10001 --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
+            -v "$RUNNER_TEMP/osv-cache:/cache" \
+            -v "$GITHUB_WORKSPACE:/work:ro" \
+            mogumogu-advisories-runner "${ARGS[@]}"
+
+      - name: Run vulnerability audit completely offline and emit JSON, HTML, and SARIF 2.1.0
+        id: run_audit
+        env:
+          TARGET_PATH: ${{ inputs.target_path }}
+          TRIAGE_FILE: ${{ inputs.triage_file }}
+          ECOSYSTEMS: ${{ inputs.ecosystems }}
+          MAX_AGE_DAYS: ${{ inputs.max_age_days }}
+        run: |
+          set -eu
+          ARGS=(
+            audit "/work/$TARGET_PATH"
+            --max-age-days "$MAX_AGE_DAYS"
+            --out /reports
+          )
+          if [ -n "$TRIAGE_FILE" ]; then
+            ARGS+=(--triage "/work/$TRIAGE_FILE")
+          fi
+          if [ -n "$ECOSYSTEMS" ]; then
+            IFS=',' read -ra LIST <<< "$ECOSYSTEMS"
+            for eco in "${LIST[@]}"; do
+              trimmed="$(echo "$eco" | xargs)"
+              [ -n "$trimmed" ] && ARGS+=(--ecosystem "$trimmed")
+            done
+          fi
+          set +e
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --user 10001:10001 --cpus 2.0 --memory 1g --pids-limit 64 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
+            -v "$RUNNER_TEMP/osv-cache:/cache:ro" \
+            -v "$GITHUB_WORKSPACE:/work:ro" \
+            -v "$RUNNER_TEMP/advisory-reports:/reports" \
+            mogumogu-advisories-runner "${ARGS[@]}"
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload audit reports artifact
+        if: always() && inputs.upload_artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mogumogu-advisory-reports
+          path: ${{ runner.temp }}/advisory-reports/
+
+      - name: Upload SARIF 2.1.0 to GitHub Code Scanning
+        if: always() && inputs.upload_sarif && hashFiles(format('{0}/advisory-reports/audit.sarif', runner.temp)) != ''
+        # Pinned to codeql-bundle-v2.27.5
+        uses: github/codeql-action/upload-sarif@55aa1d29038906879490fb63e58ae8bac369c88f
+        with:
+          sarif_file: ${{ runner.temp }}/advisory-reports/audit.sarif
+
+      - name: Enforce audit exit code
+        run: exit "${{ steps.run_audit.outputs.exit_code }}"

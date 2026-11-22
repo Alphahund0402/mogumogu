@@ -13,6 +13,57 @@ services:
       - cargo-cache:/cache/cargo
       - target-cache:/workspace/target
 
+  # Fully isolated offline test & benchmark sandbox: no network, no volumes,
+  # read-only rootfs, non-root, ephemeral RAM-backed /tmp, fixed CPU/RAM budget.
+  test-sandbox:
+    build:
+      context: .
+      target: test-env
+    user: "10001:10001"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 4.0
+    mem_limit: 2g
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m,mode=1777
+
+  # Same offline sandbox under tight CPU/RAM constraints to test weaker-hardware
+  # behaviour reproducibly (1 vCPU, 512 MiB RAM).
+  test-weak-hw:
+    build:
+      context: .
+      target: test-env
+    user: "10001:10001"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+
+  # Isolated offline Cargo.lock CVE/RustSec audit against OSV crates.io feed
+  # and security/advisory-triage.toml (zero network and zero host mounts at runtime).
+  security-audit:
+    build:
+      context: .
+      target: security-audit
+    user: "10001:10001"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2.0
+    mem_limit: 1g
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+
 volumes:
   cargo-cache:
   target-cache:

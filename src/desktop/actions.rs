@@ -448,7 +448,7 @@ pub(super) fn wire(ui: &Dashboard) {
         with(move |d| {
             d.disk_query.text = text;
             d.disk_query.offset = 0;
-            d.query_storage();
+            d.search_timer.start(TimerMode::SingleShot, DEBOUNCE, || with(Desktop::query_storage));
         });
     });
     actions.on_analysis_open(|id| {

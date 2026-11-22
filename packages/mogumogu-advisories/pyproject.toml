@@ -1,0 +1,27 @@
+[build-system]
+requires = []
+build-backend = "_build_backend"
+backend-path = ["."]
+
+[project]
+name = "mogumogu-advisories"
+version = "0.1.0"
+description = "Offline-first OSV/CVE vulnerability auditing library and CLI for project lockfiles and CI/CD pipelines"
+readme = "README.md"
+license = { text = "GPL-3.0-only" }
+requires-python = ">=3.11"
+dependencies = []
+keywords = ["cve", "osv", "security", "vulnerability", "audit", "sarif", "lockfile", "offline"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
+
+[project.scripts]
+mogumogu-advisories = "mogumogu_advisories.cli:main"

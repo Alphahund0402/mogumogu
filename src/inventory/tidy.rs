@@ -2,16 +2,24 @@
 //! come from directory listings below the identity-checked root; links and
 //! cloud placeholders are never followed, and an incomplete walk leaves the
 //! total unknown. The only files opened are a work tree's `.git/config` and
-//! `.git/index`: a folder with versioned files belongs to the repository and
-//! is no longer recoverable. Test code is the project's own: test folders
-//! and test files never become items, only test data and outputs. Leftovers
-//! of AI agents are recognised by name and always need a look.
-use super::discovery::{DATA_IN_TESTS, GOLDEN, TEST_DATA_FOLDERS, TEST_ROOTS};
+//! `.git/index`, and at the project's root the branch files of `.git` (see
+//! `inventory::git`): a folder with versioned files belongs to the repository
+//! and is no longer recoverable. What Git shows beyond that only feeds the
+//! project's open points and never changes a class. Test code is the
+//! project's own: test folders and test files never become items, only test
+//! data and outputs. Leftovers of AI agents are recognised by name and always
+//! need a look.
+use super::discovery::{
+    CI, DATA_IN_TESTS, GOLDEN, LOCKFILES, MANIFEST_EXTENSIONS, MANIFESTS, TEST_DATA_FOLDERS, TEST_ROOTS, test_file,
+};
 use super::git::{self, GitState};
-use crate::domain::{Hold, HoldKind, TidyClass, TidyItem, holding, same_location};
+use crate::domain::{
+    CHECK_NAMES, GitFacts, Hold, HoldKind, ProjectMarkers, TidyClass, TidyItem, holding, same_location,
+};
 use crate::fsread::{self, Budget, ScanControl, ScopeRoot};
 use crate::limits::ScanLimits;
 use crate::platform::{DirEntryInfo, DirHandle, FileIdentity};
+use crate::privacy;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::rc::Rc;
@@ -99,6 +107,17 @@ pub struct TidyWalk {
     seen: std::collections::HashSet<[u8; 16]>,
     pub last_change: Option<i64>,
     pub reason: Option<String>,
+    /// What the repository at the root shows; `None` without any.
+    pub git: Option<GitFacts>,
+    pub markers: ProjectMarkers,
+    /// Files and bytes Git does not list, per item during the walk.
+    outside: Vec<(u64, u64)>,
+    /// The same outside any item.
+    outside_kept: (u64, u64),
+    /// The largest of those files, a few more than are shown.
+    outside_largest: Vec<(u64, String)>,
+    /// Repositories inside the project's own folders.
+    nested: u32,
 }
 
 use crate::domain::{AGENT_LABEL as AGENT, TEST_DATA_LABEL as TEST_DATA};
@@ -174,6 +193,28 @@ struct Frame {
     bucket: Option<Bucket>,
     /// Traces this item's own listing must show to count as recoverable.
     signature: Option<&'static [&'static str]>,
+    /// Inside a further repository, whose files the root's index cannot list.
+    nested: bool,
+    /// False once a folder has no tracked entries in the root Git index.
+    may_have_tracked: bool,
+}
+
+/// What the project's root shows by name.
+fn markers(entries: &[DirEntryInfo]) -> ProjectMarkers {
+    let names = Names::of(entries);
+    let starts = |prefixes: &[&str]| {
+        names.0.iter().any(|(name, dir)| !dir && prefixes.iter().any(|prefix| name.starts_with(prefix)))
+    };
+    let any = |list: &[&str]| names.0.iter().any(|(name, _)| list.contains(&name.as_str()));
+    ProjectMarkers {
+        readme: starts(&["readme"]),
+        license: starts(&["license", "licence", "copying", "unlicense"]),
+        tests: false,
+        ci: any(CI),
+        manifest: any(MANIFESTS) || names.file_ending(MANIFEST_EXTENSIONS),
+        lockfile: any(LOCKFILES),
+        other_vcs: any(&[".hg", ".svn"]),
+    }
 }
 
 /// The first trace of `signature` among the names of a folder. One `*`
@@ -220,8 +261,17 @@ pub fn tidy(
         seen: Default::default(),
         last_change: None,
         reason: None,
+        git: None,
+        markers: ProjectMarkers::default(),
+        outside: Vec::new(),
+        outside_kept: (0, 0),
+        outside_largest: Vec::new(),
+        nested: 0,
     };
     let mut repos = Vec::new();
+    let git_cache = git::IndexCache::default();
+    let mut check: Option<git::TreeCheck> = None;
+    let mut check_problem: Option<String> = None;
     let root = match ScopeRoot::open(path, identity) {
         Ok(root) => Rc::new(root.into_handle()),
         Err(e) => {
@@ -234,8 +284,16 @@ pub fn tidy(
     let mut budget = Budget::with_control(limits, control);
     let mut total = 0_u64;
     let mut complete = true;
-    let mut stack =
-        vec![Frame { parent: root, name: None, rel: String::new(), depth: 0, bucket: None, signature: None }];
+    let mut stack = vec![Frame {
+        parent: root,
+        name: None,
+        rel: String::new(),
+        depth: 0,
+        bucket: None,
+        signature: None,
+        nested: false,
+        may_have_tracked: false,
+    }];
     while let Some(frame) = stack.pop() {
         if budget.exhausted() {
             break;
@@ -267,7 +325,13 @@ pub fn tidy(
             item.class = TidyClass::Regenerable;
             item.evidence = signed_evidence(&item.evidence, found);
         }
-        // A work tree outside any item; its index is read after the walk.
+        if frame.depth == 0 {
+            walk.markers = markers(&entries);
+        }
+        // A work tree outside any item; its index is read after the walk,
+        // except the root's, against which the walk compares every file.
+        let mut nested = frame.nested;
+        let mut may_have_tracked = frame.may_have_tracked;
         if frame.bucket.is_none()
             && let Some(git) = entries.iter().find(|e| e.name_str().is_some_and(|n| n.eq_ignore_ascii_case(".git")))
         {
@@ -278,12 +342,33 @@ pub fn tidy(
             } else {
                 Err(git::OUTSIDE.to_string())
             };
+            if frame.depth == 0 {
+                if let Ok(Some(Ok(folder))) = tree.as_ref().map(|tree| git::open(tree)) {
+                    match git::TreeCheck::open_with(&folder, &git_cache) {
+                        Ok(opened) => {
+                            may_have_tracked = opened.has_tracked_under("");
+                            check = Some(opened);
+                        }
+                        Err(reason) => check_problem = Some(reason),
+                    }
+                }
+            } else if !nested {
+                walk.nested += 1;
+                nested = true;
+            }
             repos.push(Repo { rel: frame.rel.clone(), tree });
         }
-        let here = Names::of(&entries);
+        // Only outside buckets can subfolders start a new item or need sibling verdicts.
+        let here = frame.bucket.is_none().then(|| Names::of(&entries));
         for entry in &entries {
             if !budget.entry() {
                 break;
+            }
+            if (entry.is_reparse() || entry.is_placeholder())
+                && may_have_tracked
+                && let (Some(check), Some(name)) = (&mut check, entry.name_str())
+            {
+                check.present(&fsread::join(&frame.rel, name));
             }
             if entry.is_reparse() {
                 continue;
@@ -297,12 +382,39 @@ pub fn tidy(
                 complete = false;
                 continue;
             };
-            let rel = fsread::join(&frame.rel, name);
             if !entry.is_dir() {
                 total = total.saturating_add(entry.size);
                 match frame.bucket {
-                    Some(bucket) => walk.add(bucket, entry),
-                    None => walk.file(&rel, name, entry),
+                    Some(bucket) => {
+                        if let Some(check) = &mut check {
+                            if nested || matches!(bucket, Bucket::Vcs) {
+                                if may_have_tracked {
+                                    check.present(&fsread::join(&frame.rel, name));
+                                }
+                            } else if !may_have_tracked
+                                || !check.file(&fsread::join(&frame.rel, name), entry.size, entry.modified)
+                            {
+                                walk.note_outside_bucket(bucket, entry.size);
+                            }
+                        }
+                        walk.add(bucket, entry);
+                    }
+                    None => {
+                        let rel = fsread::join(&frame.rel, name);
+                        if let Some(check) = &mut check {
+                            if nested {
+                                if may_have_tracked {
+                                    check.present(&rel);
+                                }
+                            } else if !may_have_tracked || !check.file(&rel, entry.size, entry.modified) {
+                                walk.note_outside(None, &rel, entry.size);
+                            }
+                        }
+                        if !walk.markers.tests {
+                            walk.markers.tests = test_file(name, &name.to_ascii_lowercase()).is_some();
+                        }
+                        walk.file(&rel, name, entry);
+                    }
                 }
                 continue;
             }
@@ -310,8 +422,33 @@ pub fn tidy(
                 complete = false;
                 continue;
             }
+            if let Some(bucket) = frame.bucket {
+                let (rel, child_tracked) = if may_have_tracked {
+                    let rel = fsread::join(&frame.rel, name);
+                    let child_tracked = check.as_ref().is_some_and(|c| c.has_tracked_under(&rel));
+                    (rel, child_tracked)
+                } else {
+                    (String::new(), false)
+                };
+                stack.push(Frame {
+                    parent: Rc::clone(&dir),
+                    name: Some(entry.name.clone()),
+                    rel,
+                    depth: frame.depth + 1,
+                    bucket: Some(bucket),
+                    signature: None,
+                    nested,
+                    may_have_tracked: child_tracked,
+                });
+                continue;
+            }
+            let rel = fsread::join(&frame.rel, name);
+            let child_tracked = may_have_tracked && check.as_ref().is_some_and(|c| c.has_tracked_under(&rel));
             let mut signature = None;
             let lower = name.to_ascii_lowercase();
+            if TEST_ROOTS.contains(&lower.as_str()) {
+                walk.markers.tests = true;
+            }
             let found = if test_data_folder(&frame.rel, &lower) {
                 Some(Verdict::Item(
                     TidyClass::Review,
@@ -321,9 +458,9 @@ pub fn tidy(
             } else if let Some(evidence) = agent_folder(&frame.rel, &lower) {
                 Some(Verdict::Item(TidyClass::Review, AGENT, format!("{evidence} · {BY_NAME}")))
             } else {
-                verdict(&lower, &here)
+                here.as_ref().and_then(|here| verdict(&lower, here))
             };
-            let bucket = frame.bucket.or_else(|| match found {
+            let bucket = match found {
                 Some(Verdict::Vcs) => Some(Bucket::Vcs),
                 Some(Verdict::Item(class, label, evidence)) => Some(walk.open(rel.clone(), class, label, evidence)),
                 Some(Verdict::Signed(label, evidence, traces)) => {
@@ -331,7 +468,7 @@ pub fn tidy(
                     Some(walk.open(rel.clone(), TidyClass::Review, label, evidence))
                 }
                 None => None,
-            });
+            };
             stack.push(Frame {
                 parent: Rc::clone(&dir),
                 name: Some(entry.name.clone()),
@@ -339,6 +476,8 @@ pub fn tidy(
                 depth: frame.depth + 1,
                 bucket,
                 signature,
+                nested,
+                may_have_tracked: child_tracked,
             });
         }
     }
@@ -347,7 +486,9 @@ pub fn tidy(
         complete = false;
     }
     walk.total = complete.then_some(total);
-    walk.settle(place.as_deref(), path, &repos, holds);
+    walk.settle(place.as_deref(), path, &repos, holds, &git_cache);
+    // Before sorting: `outside` runs parallel to the items.
+    walk.git = walk.git_facts(place.as_deref(), &repos, check.filter(|_| complete), check_problem);
     walk.items.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.rel_path.cmp(&b.rel_path)));
     walk.items.truncate(ITEMS_KEPT);
     walk
@@ -400,7 +541,92 @@ impl TidyWalk {
             AGENT => Kind::Agent,
             _ => Kind::Other,
         });
+        self.outside.push((0, 0));
         Bucket::Item(self.items.len() - 1)
+    }
+
+    fn note_outside_bucket(&mut self, bucket: Bucket, size: u64) {
+        if let Bucket::Item(index) = bucket {
+            let tally = &mut self.outside[index];
+            tally.0 += 1;
+            tally.1 = tally.1.saturating_add(size);
+        }
+    }
+
+    /// A file the root's index does not list. Recoverable items are sorted
+    /// out afterwards, when the classes are final.
+    fn note_outside(&mut self, bucket: Option<Bucket>, rel: &str, size: u64) {
+        let add = |tally: &mut (u64, u64)| {
+            tally.0 += 1;
+            tally.1 = tally.1.saturating_add(size);
+        };
+        match bucket {
+            Some(Bucket::Item(index)) => add(&mut self.outside[index]),
+            Some(Bucket::Vcs) => {}
+            None => {
+                add(&mut self.outside_kept);
+                self.outside_largest.push((size, rel.to_string()));
+                if self.outside_largest.len() > CHECK_NAMES * 16 {
+                    self.outside_largest.sort_unstable_by(|a, b| b.cmp(a));
+                    self.outside_largest.truncate(CHECK_NAMES);
+                }
+            }
+        }
+    }
+
+    /// What the repository at the root shows. `check` is `None` when the
+    /// index could not be read or the walk was incomplete: then nothing is
+    /// claimed about changes or files outside Git.
+    fn git_facts(
+        &mut self,
+        place: Option<&str>,
+        repos: &[Repo],
+        check: Option<git::TreeCheck>,
+        problem: Option<String>,
+    ) -> Option<GitFacts> {
+        let mut facts = GitFacts { nested: self.nested, ..GitFacts::default() };
+        let Some(repo) = repos.iter().find(|repo| repo.rel.is_empty()) else {
+            let around = match place {
+                Some(root) => git::above(Path::new(root)),
+                None => Some("Ort des Projekts nicht bestimmbar".into()),
+            };
+            facts.problems.extend(around);
+            if facts.problems.is_empty() && self.nested > 0 {
+                facts.problems.push("Kein Repository an der Wurzel dieses Projekts".into());
+            }
+            return (!facts.problems.is_empty()).then_some(facts);
+        };
+        match &repo.tree {
+            Err(reason) => facts.problems.push(reason.clone()),
+            Ok(tree) => match git::open(tree) {
+                Some(Ok(folder)) => match git::refs(&folder) {
+                    Ok(refs) => facts.refs = Some(refs),
+                    Err(reason) => facts.problems.push(reason),
+                },
+                Some(Err(reason)) => facts.problems.push(reason),
+                None => facts.problems.push(".git nicht mehr vorhanden".into()),
+            },
+        }
+        facts.problems.extend(problem);
+        if let Some(check) = check {
+            let mut tree = check.finish();
+            let (mut files, mut bytes) = self.outside_kept;
+            for (item, (item_files, item_bytes)) in self.items.iter().zip(&self.outside) {
+                if item.class == TidyClass::Review {
+                    files += item_files;
+                    bytes = bytes.saturating_add(*item_bytes);
+                }
+            }
+            self.outside_largest.sort_unstable_by(|a, b| b.cmp(a));
+            self.outside_largest.truncate(CHECK_NAMES);
+            tree.outside_files = files;
+            tree.outside_bytes = bytes;
+            tree.outside_samples = self.outside_largest.iter().map(|(_, rel)| privacy::path(rel)).collect();
+            facts.tree = Some(tree);
+        } else if facts.problems.is_empty() {
+            facts.problems.push("Ordner nicht vollständig gelesen".into());
+        }
+        Some(facts)
     }
 
     fn add(&mut self, bucket: Bucket, entry: &DirEntryInfo) {
@@ -444,7 +670,14 @@ impl TidyWalk {
     /// folder under any spelling. A leftover of an agent that a registered
     /// run claims names that run instead of a guess from its name. Each work
     /// tree's index is read once.
-    fn settle(&mut self, place: Option<&str>, registered: &Path, repos: &[Repo], holds: &[Hold]) {
+    fn settle(
+        &mut self,
+        place: Option<&str>,
+        registered: &Path,
+        repos: &[Repo],
+        holds: &[Hold],
+        git_cache: &git::IndexCache,
+    ) {
         let registered = registered.to_string_lossy();
         let join = |root: &str, rel: &str| format!("{}\\{}", root.trim_end_matches('\\'), rel.replace('/', "\\"));
         let spellings = |rel: &str| {
@@ -496,7 +729,7 @@ impl TidyWalk {
             let inside: Vec<String> = group.iter().map(|(_, rel)| rel.clone()).collect();
             let answers = match &repo.tree {
                 Ok(tree) => match git::open(tree) {
-                    Some(Ok(dir)) => git::tracked(&dir, &inside),
+                    Some(Ok(dir)) => git::tracked_with(&dir, &inside, git_cache),
                     Some(Err(reason)) => vec![GitState::Unknown(reason); inside.len()],
                     None => vec![GitState::Unknown(".git nicht mehr vorhanden".into()); inside.len()],
                 },
@@ -1081,6 +1314,50 @@ mod tests {
         for name in TEST_DATA_FOLDERS {
             assert!(matches!(verdict(name, &none), Some(Verdict::Item(TidyClass::Review, TEST_DATA, _))), "{name}");
         }
+    }
+
+    #[test]
+    fn open_points_come_from_the_walk_and_never_change_a_class() {
+        use crate::parsers::git_index::tests::index;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, ".git/HEAD", b"ref: refs/heads/main\n");
+        write(root, ".git/refs/heads/main", "a".repeat(40).as_bytes());
+        write(root, ".git/index", &index(2, 20, &["src/a.rs", "src/gone.rs"], &[(b"TREE", b"\x002 1\n")]));
+        for rel in ["Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "notes.txt", "src/a.rs"] {
+            put(root, rel, 7);
+        }
+        put(root, "target/CACHEDIR.TAG", 1000);
+        put(root, "tests/fixtures/big.bin", 50);
+        write(root, "vendor/lib/.git/HEAD", b"ref: refs/heads/main\n");
+        put(root, "vendor/lib/x.c", 9000);
+
+        let walk = tidy(root, None, None, &[]);
+        assert_eq!(item(&walk, "target").class, TidyClass::Regenerable, "Git facts change no class");
+        assert_eq!(item(&walk, "tests/fixtures").class, TidyClass::Review);
+        let facts = walk.git.as_ref().expect("a repository at the root");
+        assert_eq!(facts.nested, 1);
+        let refs = facts.refs.as_ref().expect("readable refs");
+        assert_eq!((refs.branch.as_deref(), refs.branches, refs.remotes), (Some("main"), 1, 0));
+        let tree = facts.tree.as_ref().expect("a complete walk");
+        assert_eq!((tree.changed, tree.deleted, tree.staged), (1, 1, false));
+        // Cargo.toml, Cargo.lock, README.md, LICENSE, notes.txt and the test
+        // data; not the recoverable target and not the inner repository.
+        assert_eq!((tree.outside_files, tree.outside_bytes), (6, 5 * 7 + 50));
+        assert!(walk.markers.readme && walk.markers.license && walk.markers.tests);
+        assert!(walk.markers.manifest && walk.markers.lockfile && !walk.markers.ci);
+    }
+
+    #[test]
+    fn without_a_repository_or_a_complete_walk_nothing_is_claimed() {
+        let temp = tempfile::tempdir().unwrap();
+        put(temp.path(), "a.txt", 1);
+        assert_eq!(tidy(temp.path(), None, None, &[]).git, None);
+
+        write(temp.path(), ".git", b"gitdir: C:/elsewhere/.git/worktrees/x\n");
+        let linked = tidy(temp.path(), None, None, &[]).git.expect("a linked work tree is a repository");
+        assert!(linked.refs.is_none() && linked.tree.is_none());
+        assert!(linked.problems[0].contains("außerhalb"), "{:?}", linked.problems);
     }
 
     #[test]

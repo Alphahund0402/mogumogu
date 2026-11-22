@@ -24,7 +24,8 @@ mod summary;
 pub use cleanup::{NewTarget, StoredPlan, StoredTarget};
 pub use databases::{NewDatabase, StoredDatabase};
 pub use demo::FIXTURE as DEMO_FIXTURE;
-pub use generations::{GenerationResult, PublishReport, PublishedItem};
+pub(crate) use generations::AdvisoryPackageEvidence;
+pub use generations::{GenerationResult, PublishReport, PublishedItem, SnapshotItems};
 pub use migrations::SCHEMA_VERSION;
 pub use runs::NewArtifact;
 
@@ -164,7 +165,7 @@ impl Repository {
         map: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
     ) -> Result<Vec<T>> {
         self.read(|tx| {
-            let mut statement = tx.prepare(sql)?;
+            let mut statement = tx.prepare_cached(sql)?;
             let rows = statement.query_map(params, map)?;
             Ok(rows.collect::<rusqlite::Result<_>>()?)
         })

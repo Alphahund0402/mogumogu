@@ -186,7 +186,7 @@ impl ProjectScan<'_> {
     }
 
     fn file(&mut self, dir: &DirHandle, rel: &str, name: &str, rel_child: &str, names: &[String]) {
-        let wanting: Vec<&dyn Adapter> = self.adapters.iter().copied().filter(|a| a.descriptor().wants(name)).collect();
+        let wanting = adapters::project_wanting(name);
         let ai = if self.catalog.may_match(name) { self.catalog.matches(rel_child) } else { Vec::new() };
         let workflow =
             rel_child.starts_with(".github/workflows/") && (name.ends_with(".yml") || name.ends_with(".yaml"));

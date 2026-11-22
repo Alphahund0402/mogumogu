@@ -4,7 +4,7 @@ use super::references::{ReferenceIndex, push};
 use crate::domain::*;
 use crate::limits::{PACKAGE_ANALYSIS_ITEMS as ANALYSIS_LIMIT, PACKAGE_EVIDENCE_ROWS as EVIDENCE_ROWS, PACKAGE_PAGE};
 use crate::storage::PublishedItem;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 
 pub(super) struct PackageInput<'a> {
     pub items: &'a [PublishedItem],
@@ -17,11 +17,12 @@ pub(super) fn analyze(input: PackageInput<'_>, query: &PackageQuery, offset: usi
     let mut coverage = coverage(input.scopes, input.projects);
     coverage.truncated = input.items.len() > ANALYSIS_LIMIT as usize;
     let items = &input.items[..input.items.len().min(ANALYSIS_LIMIT as usize)];
-    let references = ReferenceIndex::build(items);
-    let retained = input.retained.iter().collect::<BTreeSet<_>>();
-    let mut groups = BTreeMap::<PackageId, PackageFinding>::new();
-    let scope_by_id = input.scopes.iter().map(|s| (s.id, s)).collect::<BTreeMap<_, _>>();
-    let project_by_id = input.projects.iter().map(|p| (p.id, p.name.as_str())).collect::<BTreeMap<_, _>>();
+    let retained: HashSet<&str> = input.retained.iter().map(String::as_str).collect();
+    let has_retained = !retained.is_empty();
+    let mut groups = HashMap::<PackageId, PackageFinding>::new();
+    let scope_by_id: HashMap<i64, &Scope> = input.scopes.iter().map(|s| (s.id, s)).collect();
+    let project_by_id: HashMap<i64, &str> = input.projects.iter().map(|p| (p.id, p.name.as_str())).collect();
+    let coverage_label = coverage.label();
     for p in items {
         let item = &p.item;
         let is_package =
@@ -30,19 +31,28 @@ pub(super) fn analyze(input: PackageInput<'_>, query: &PackageQuery, offset: usi
             continue;
         }
         let id = item.package_id();
-        let key = id.key();
         let current = scope_by_id.get(&p.scope_id).is_some_and(|s| s.current());
-        let finding = groups.entry(id.clone()).or_insert_with(|| PackageFinding {
-            id,
-            key: key.clone(),
-            occurrences: Vec::new(),
-            references: Vec::new(),
-            possible_references: Vec::new(),
-            local_deprecation: None,
-            retained: retained.contains(&key),
-            coverage: coverage.label(),
-            next_action: String::new(),
-            review: false,
+        let finding = groups.entry(id).or_insert_with_key(|id| {
+            // Defer SHA-256 key generation to the returned page unless needed to match `retained`.
+            let (key, is_retained) = if has_retained {
+                let key = id.key();
+                let is_retained = retained.contains(key.as_str());
+                (key, is_retained)
+            } else {
+                (String::new(), false)
+            };
+            PackageFinding {
+                id: id.clone(),
+                key,
+                occurrences: Vec::new(),
+                references: Vec::new(),
+                possible_references: Vec::new(),
+                local_deprecation: None,
+                retained: is_retained,
+                coverage: coverage_label.clone(),
+                next_action: String::new(),
+                review: false,
+            }
         });
         if finding.occurrences.len() < EVIDENCE_ROWS {
             finding.occurrences.push(PackageOccurrence {
@@ -108,8 +118,14 @@ pub(super) fn analyze(input: PackageInput<'_>, query: &PackageQuery, offset: usi
     let total = packages.len();
     let limit = limit.clamp(1, PACKAGE_PAGE);
     let mut packages = packages.into_iter().skip(offset).take(limit).collect::<Vec<_>>();
-    // Possible references only explain the shown page; they never change
-    // order, filters or the review flag, so the rest skips this matching.
+    // Compute opaque keys and possible references only for the shown page:
+    // neither changes ordering, filters or review counts.
+    if !has_retained {
+        for finding in &mut packages {
+            finding.key = finding.id.key();
+        }
+    }
+    let references = ReferenceIndex::build_for(items, &packages);
     for finding in &mut packages {
         finding.possible_references = references.possible(&finding.id, &project_by_id);
     }

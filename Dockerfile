@@ -43,18 +43,64 @@ RUN --mount=type=cache,id=mogumogu-cargo,target=/cache/cargo,uid=10001,gid=10001
 FROM scratch AS windows-exe
 COPY --from=windows /out/ /
 
-# Source is copied into the image; checks never need a host filesystem mount.
-# Only the checks need Python (scripts/check.py) and rustfmt/Clippy.
-FROM toolchain AS checks
+# Base for check/sandbox/audit stages: installs Python, rustfmt and Clippy
+# before copying source so tool layers (including osv-scanner) stay cached.
+FROM toolchain AS checks-base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/* \
     && rustup component add rustfmt clippy --toolchain 1.98.0
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# Pinned official OSV-Scanner v2.7.1 binary verified against release SHA256SUMS.
+# Shared by the offline test sandbox and Cargo.lock security-audit stage; the
+# default `validated` stage does not download it.
+FROM checks-base AS osv-scanner-bin
+ARG TARGETARCH
+COPY packages/mogumogu-advisories/src /opt/advisories/src
+RUN mkdir -p /opt/osv && chown 10001:10001 /opt/osv
+USER 10001:10001
+RUN PYTHONPATH=/opt/advisories/src python3 -m mogumogu_advisories fetch-scanner \
+    --os linux --arch "${TARGETARCH:-amd64}" --output /opt/osv/osv-scanner
+
+# Source is copied into the image; checks never need a host filesystem mount.
+FROM checks-base AS checks
 COPY . .
 USER 10001:10001
 ENTRYPOINT ["python3", "scripts/check.py"]
 CMD ["--core"]
+
+# Self-contained offline test and benchmark sandbox: compiles core tests and
+# the release benchmark into /opt/mogumogu-test during build and bundles the
+# verified OSV-Scanner binary so the runtime container runs with
+# `network_mode: none`, read-only rootfs and zero volumes.
+FROM checks AS test-env
+USER root
+RUN mkdir -p /opt/mogumogu-test/bin && chown -R 10001:10001 /opt/mogumogu-test
+COPY --from=osv-scanner-bin --chown=10001:10001 /opt/osv/osv-scanner /opt/mogumogu-test/bin/osv-scanner
+USER 10001:10001
+RUN --mount=type=cache,id=mogumogu-cargo,target=/cache/cargo,uid=10001,gid=10001,sharing=locked \
+    --mount=type=cache,id=mogumogu-target,target=/workspace/target,uid=10001,gid=10001,sharing=locked \
+    python3 scripts/docker_sandbox.py --build /opt/mogumogu-test
+ENTRYPOINT ["python3", "scripts/docker_sandbox.py", "--run", "/opt/mogumogu-test"]
+CMD ["--all"]
+
+# Isolated offline Cargo.lock CVE/RustSec audit: fetches the public crates.io
+# OSV archive during build (bustable via OSV_FEED_DATE) and evaluates Cargo.lock
+# against security/advisory-triage.toml completely offline at runtime.
+FROM checks AS security-audit
+ARG OSV_FEED_DATE=local
+ENV PYTHONPATH=/workspace/packages/mogumogu-advisories/src \
+    MOGUMOGU_OSV_CACHE=/opt/mogumogu-audit/cache \
+    MOGUMOGU_OSV_SCANNER=/opt/mogumogu-audit/bin/osv-scanner
+USER root
+RUN mkdir -p /opt/mogumogu-audit/bin /opt/mogumogu-audit/cache \
+    && chown -R 10001:10001 /opt/mogumogu-audit
+COPY --from=osv-scanner-bin --chown=10001:10001 /opt/osv/osv-scanner /opt/mogumogu-audit/bin/osv-scanner
+USER 10001:10001
+RUN echo "OSV feed refresh epoch: ${OSV_FEED_DATE}" \
+    && python3 -m mogumogu_advisories refresh --ecosystem crates.io
+ENTRYPOINT ["python3", "-m", "mogumogu_advisories", "audit", "Cargo.lock"]
 
 # CI verifies during the build. Local Compose runs use the checks target and
 # named volumes, so subsequent checks retain downloads and compilation output.

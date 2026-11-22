@@ -128,17 +128,19 @@ impl Catalog {
 
     /// All detections whose pattern matches the end of `rel_path`.
     pub fn matches<'a>(&'a self, rel_path: &str) -> Vec<(&'a Profile, &'a Detection)> {
-        let segments: Vec<&str> = rel_path.split('/').collect();
         let mut out = Vec::new();
         for profile in &self.profiles {
             for detection in &profile.detect {
-                let pattern: Vec<&str> = detection.pattern.split('/').collect();
-                if pattern.len() <= segments.len()
-                    && pattern
-                        .iter()
-                        .zip(&segments[segments.len() - pattern.len()..])
-                        .all(|(p, s)| segment_matches(p, s))
-                {
+                let mut pat = detection.pattern.rsplit('/');
+                let mut seg = rel_path.rsplit('/');
+                let matched = loop {
+                    match (pat.next(), seg.next()) {
+                        (Some(p), Some(s)) if segment_matches(p, s) => {}
+                        (Some(_), _) => break false,
+                        (None, _) => break true,
+                    }
+                };
+                if matched {
                     out.push((profile, detection));
                 }
             }
@@ -201,9 +203,12 @@ fn validate_pattern(pattern: &str) -> Result<(), String> {
 fn segment_matches(pattern: &str, segment: &str) -> bool {
     match pattern.split_once('*') {
         Some((prefix, suffix)) => {
-            segment.len() >= prefix.len() + suffix.len()
-                && segment.to_ascii_lowercase().starts_with(&prefix.to_ascii_lowercase())
-                && segment.to_ascii_lowercase().ends_with(&suffix.to_ascii_lowercase())
+            let bytes = segment.as_bytes();
+            let p = prefix.as_bytes();
+            let s = suffix.as_bytes();
+            bytes.len() >= p.len() + s.len()
+                && bytes[..p.len()].eq_ignore_ascii_case(p)
+                && bytes[bytes.len() - s.len()..].eq_ignore_ascii_case(s)
         }
         None => pattern.eq_ignore_ascii_case(segment),
     }

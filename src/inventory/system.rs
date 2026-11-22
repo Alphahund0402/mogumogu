@@ -1075,11 +1075,11 @@ mod tests {
         touch(&appdata.join("uv").join("tools").join("ruff").join("uv-receipt.toml"));
         touch(&home.join(".claude").join("settings.json"));
         std::fs::create_dir_all(home.join(".codex")).unwrap();
-        let path = std::env::join_paths([node.clone(), shims.clone(), PathBuf::from("relative\\bin")]).unwrap();
+        let path = std::env::join_paths([node, shims, PathBuf::from("relative\\bin")]).unwrap();
         let env = MapEnv(HashMap::from([
             ("PATH", path),
-            ("USERPROFILE", home.clone().into_os_string()),
-            ("APPDATA", appdata.clone().into_os_string()),
+            ("USERPROFILE", home.into_os_string()),
+            ("APPDATA", appdata.into_os_string()),
         ]));
         let report = discover(&env, &LocalProbe);
         let by = |id: &str| report.findings.iter().find(|f| f.id == id).unwrap_or_else(|| panic!("{id}: {report:#?}"));
@@ -1110,7 +1110,7 @@ mod tests {
         std::fs::create_dir_all(tmp.join("claude")).unwrap();
         std::fs::create_dir_all(appdata.join("JetBrains")).unwrap();
         let env = MapEnv(HashMap::from([
-            ("USERPROFILE", home.clone().into_os_string()),
+            ("USERPROFILE", home.into_os_string()),
             ("APPDATA", appdata.into_os_string()),
             ("TEMP", tmp.into_os_string()),
         ]));
@@ -1129,10 +1129,8 @@ mod tests {
         let local = home.join("AppData").join("Local");
         std::fs::create_dir_all(local.join("npm-cache")).unwrap();
         std::fs::create_dir_all(home.join(".m2").join("repository")).unwrap();
-        let env = MapEnv(HashMap::from([
-            ("USERPROFILE", home.clone().into_os_string()),
-            ("LOCALAPPDATA", local.into_os_string()),
-        ]));
+        let env =
+            MapEnv(HashMap::from([("USERPROFILE", home.into_os_string()), ("LOCALAPPDATA", local.into_os_string())]));
         let report = discover(&env, &LocalProbe);
         let store =
             |id: &str| report.findings.iter().find(|f| f.id == id).unwrap_or_else(|| panic!("{id}: {report:#?}"));
@@ -1180,8 +1178,8 @@ mod tests {
         let mut depots = depot.clone().into_os_string();
         depots.push(";");
         let env = MapEnv(HashMap::from([
-            ("PATH", std::env::join_paths([volta.clone(), tools.clone()]).unwrap()),
-            ("USERPROFILE", home.clone().into_os_string()),
+            ("PATH", std::env::join_paths([volta, tools]).unwrap()),
+            ("USERPROFILE", home.into_os_string()),
             ("APPDATA", appdata.into_os_string()),
             ("LOCALAPPDATA", local.into_os_string()),
             ("GOPATH", std::env::join_paths([gopath.clone(), temp.path().join("second")]).unwrap()),

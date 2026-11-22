@@ -72,10 +72,9 @@ impl Core {
                 reason: reason.clone(),
             }));
             let walk = inventory::tidy::tidy(Path::new(&scope.path), identity, control.clone(), &holds);
-            if let Some(total) = walk.total {
-                self.repo.record_project_size(project.id, i64::try_from(total).ok())?;
-            }
+            let measured_bytes = walk.total.and_then(|total| i64::try_from(total).ok());
             let notes: Vec<String> = walk.reason.into_iter().chain(held.unknown.iter().cloned()).collect();
+            let markers = walk.markers;
             let runs = self
                 .repo
                 .runs(Some(project.id), RUNS_IN_REPORT, 0)?
@@ -102,13 +101,20 @@ impl Core {
                 kept,
                 runs,
                 growth: None,
+                git: walk.git,
+                checks: Vec::new(),
                 items: walk.items,
                 last_change: walk.last_change,
                 note: notes.join(" · "),
                 checked_at: now,
             };
+            measured.checks = project_checks(
+                measured.git.as_ref(),
+                &markers,
+                measured.heavy_test_data().then_some(measured.test_data),
+            );
             // Saved for the history; growth comes from the saved reports.
-            self.repo.record_tidy(project.id, &TidyPoint::of(&measured))?;
+            self.repo.record_tidy_and_size(project.id, measured_bytes, &TidyPoint::of(&measured))?;
             measured.growth = growth(&self.repo.tidy_history(project.id)?, now);
             report.projects.retain(|p| p.project_id != project.id);
             report.projects.push(measured);
@@ -144,6 +150,7 @@ impl Core {
             self.measure_path_databases()?;
         }
         self.scan_control.finish();
+        mark_copies(&mut report.projects);
         report.projects.sort_by(|a, b| b.regenerable.cmp(&a.regenerable).then_with(|| a.name.cmp(&b.name)));
         report.unapproved = projects.iter().filter(|p| approved(p).is_none()).count();
         report.checked_at = Some(now);

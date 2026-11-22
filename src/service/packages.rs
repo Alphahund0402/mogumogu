@@ -65,7 +65,7 @@ impl Core {
         }
         let revision = self.repo.revision();
         let limit = limit.clamp(1, PACKAGE_PAGE);
-        let items = self.repo.published_items_all(None, ANALYSIS_LIMIT + 1)?;
+        let items = self.repo.published_package_items(ANALYSIS_LIMIT + 1)?;
         let retained = self.repo.retained_packages()?;
         let report =
             analyze(PackageInput { items: &items, scopes, projects, retained: &retained }, query, offset, limit);
@@ -75,8 +75,12 @@ impl Core {
     }
 
     pub fn retain_package(&mut self, key: &str, retained: bool) -> Result<()> {
-        let items = self.repo.published_items_all(None, ANALYSIS_LIMIT + 1)?;
-        if !items.iter().any(|p| p.item.package_id().key() == key) {
+        let in_cache = self
+            .package_cache
+            .as_ref()
+            .filter(|cache| cache.revision == self.repo.revision())
+            .is_some_and(|cache| cache.report.packages.iter().any(|p| p.key == key));
+        if !in_cache && !self.repo.has_published_package_key(key, ANALYSIS_LIMIT + 1)? {
             return Err(Error::not_found("Paket nicht im freigegebenen Inventar gefunden."));
         }
         self.repo.retain_package(key, retained)

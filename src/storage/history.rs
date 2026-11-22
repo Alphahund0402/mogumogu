@@ -15,11 +15,28 @@ fn clamp(bytes: u64) -> i64 {
 
 impl Repository {
     pub fn record_tidy(&mut self, project_id: i64, point: &TidyPoint) -> Result<()> {
+        self.record_tidy_and_size(project_id, None, point)
+    }
+
+    /// Saves a tidy-up history point and, when measured completely, updates the
+    /// project's stored size in one `synchronous=FULL` transaction.
+    pub fn record_tidy_and_size(
+        &mut self,
+        project_id: i64,
+        project_bytes: Option<i64>,
+        point: &TidyPoint,
+    ) -> Result<()> {
         self.require_local()?;
         let items: Vec<(String, TidyClass, u64)> =
             point.items.iter().map(|(rel, class, bytes)| (privacy::label(rel), *class, *bytes)).collect();
         let items = serde_json::to_string(&items)?;
         self.write(|tx| {
+            if let Some(bytes) = project_bytes {
+                tx.execute(
+                    "UPDATE projects SET bytes = ?1 WHERE id = ?2 AND origin = 'registered'",
+                    params![bytes, project_id],
+                )?;
+            }
             tx.execute(
                 "INSERT INTO tidy_history(project_id, checked_at, complete, total, regenerable, review, vcs, test_data,
                                           agent, items)

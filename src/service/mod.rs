@@ -10,6 +10,7 @@
 //! `packages`, `resources`, `tidy`, `filters`, `runs`, `docker` and `maintenance`. Package analysis is
 //! private and takes only metadata; repository access stays in its facade.
 mod access;
+mod advisories;
 mod ai_content;
 mod databases;
 mod discovery;

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 /// Prototype capacity of the metadata registry.
 pub const MAX_PROJECTS: i64 = 2_000;
+pub const MAX_VISIBLE_SCOPES: usize = 2_000;
 pub const MAX_RESOURCES: i64 = 5_000;
 /// Activity history kept in SQLite.
 pub const ACTIVITY_KEEP: i64 = 200;
@@ -15,6 +16,9 @@ pub const UI_PAGE: i64 = 200;
 pub const PACKAGE_ANALYSIS_ITEMS: i64 = 200_000;
 pub const PACKAGE_PAGE: usize = 60;
 pub const PACKAGE_EVIDENCE_ROWS: usize = 6;
+/// Read-only export for the offline advisory watcher.
+pub const ADVISORY_PAGE: usize = 500;
+pub const ADVISORY_ITEMS: usize = 20_000;
 /// Inventory events kept per scope.
 pub const EVENTS_KEEP: i64 = 2_000;
 /// Complete generations kept per scope (the published one plus history).

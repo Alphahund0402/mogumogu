@@ -145,6 +145,69 @@ flask==3.0.0
 }
 
 #[test]
+fn advisory_inventory_follows_approved_cli_tool_installations() {
+    let f = fixture("advisories");
+    let _owner = start_owner(&f.data);
+    let store = f.root.join("global-packages");
+    write(
+        &store,
+        "fixture-cli/package.json",
+        r#"{"name":"fixture-cli","version":"1.2.3","_resolved":"https://registry.npmjs.org/fixture-cli/-/fixture-cli-1.2.3.tgz","bin":"index.js"}"#,
+    );
+    let inventory = || ok(cli(&f.data, &["advisories", "inventory"]));
+    assert!(inventory()["packages"].as_array().unwrap().is_empty());
+    let scope = ok(cli(&f.data, &["system", "approve", "--kind", "npm-global", "--path", &path_text(&store)]));
+    let scope_id = id(&scope, "scope_id").to_string();
+    assert_eq!(inventory()["incomplete_scopes"], 1);
+    assert_eq!(ok(cli(&f.data, &["scan", "--scope", &scope_id]))[0]["state"], "complete");
+    let current = inventory();
+    assert_eq!(current["current_scopes"], 1);
+    assert_eq!(current["packages"][0]["name"], "fixture-cli");
+    assert_eq!(current["packages"][0]["version"], "1.2.3");
+    assert_eq!(current["packages"][0]["public_source"], true);
+    assert!(!current.to_string().contains("global-packages"));
+    ok(cli(&f.data, &["scope", "revoke", "--scope", &scope_id]));
+    assert!(inventory()["packages"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn project_advisories_include_resolved_versions_and_report_unapproved_projects() {
+    let f = fixture("project-advisories");
+    let _owner = start_owner(&f.data);
+    let checked = f.root.join("approved");
+    write(&checked, "package.json", r#"{"dependencies":{"declared-only":"^3.0.0"}}"#);
+    write(
+        &checked,
+        "package-lock.json",
+        r#"{"lockfileVersion":3,"packages":{"node_modules/fixture":{
+            "version":"1.0.0","resolved":"https://registry.npmjs.org/fixture/-/fixture-1.0.0.tgz"
+        }}}"#,
+    );
+    let project_id = approved_project(&f.data, &checked);
+    let other = f.root.join("no-approval");
+    write(&other, "package-lock.json", "intentionally unparsed");
+    let other_project = ok(cli(&f.data, &["project", "register", "--name", "Other", "--path", &path_text(&other)]));
+    let inventory = || ok(cli(&f.data, &["advisories", "projects"]));
+    let before = inventory();
+    assert_eq!(before["projects"][0]["scan_state"], "not_scanned");
+    assert_eq!(before["projects"][1]["scan_state"], "not_approved");
+    assert_eq!(before["projects"][1]["id"], other_project["project_id"]);
+    let scope = id(&before["projects"][0], "scope_id").to_string();
+    assert_eq!(ok(cli(&f.data, &["scan", "--scope", &scope]))[0]["state"], "complete");
+    let report = inventory();
+    assert_eq!(report["projects"][0]["scan_state"], "complete");
+    let items = report["packages"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["name"], "fixture");
+    assert_eq!(items[0]["state"], "resolved");
+    assert_eq!(items[0]["version"], "1.0.0");
+    assert!(!report.to_string().contains("package-lock.json"));
+    assert!(ok(cli(&f.data, &["advisories", "inventory"]))["packages"].as_array().unwrap().is_empty());
+    let single = ok(cli(&f.data, &["advisories", "projects", "--project", &project_id]));
+    assert_eq!(single["projects"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn folders_to_review_and_projects_outside_a_test_root_stay_out_of_reach() {
     let f = fixture("gate");
     let (dashboard, _) = start_dashboard(&f.data);

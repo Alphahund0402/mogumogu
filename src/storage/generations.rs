@@ -4,7 +4,10 @@
 //! partial or failed pass can never report a false removal.
 use super::Repository;
 use super::activity::log_in;
-use crate::domain::{EcosystemCount, GenerationState, InventoryEvent, InventoryEventKind, InventoryItem, ItemCategory};
+use crate::domain::{
+    EcosystemCount, GenerationState, InstallState, InventoryEvent, InventoryEventKind, InventoryItem, ItemCategory,
+    SourceClass,
+};
 use crate::{Error, Result, limits, privacy};
 use rusqlite::{OptionalExtension, Row, Transaction, params};
 use std::collections::HashMap;
@@ -47,6 +50,17 @@ pub struct PublishReport {
     pub changed: usize,
 }
 
+#[derive(Debug)]
+pub(crate) struct AdvisoryPackageEvidence {
+    pub scope_id: i64,
+    pub ecosystem: String,
+    pub name: String,
+    pub version: Option<String>,
+    pub source: SourceClass,
+    pub source_host: Option<String>,
+    pub state: InstallState,
+}
+
 const ITEM_COLUMNS: &str =
     "category, ecosystem, name, version, install_state, source, source_host, rel_path, detail, bytes, evidence";
 
@@ -85,6 +99,16 @@ pub struct PublishedItem {
     pub item: InventoryItem,
 }
 
+/// Bounded AI and artifact rows collected in one scan of published items for
+/// the dashboard snapshot (replaces five separate category scans).
+#[derive(Clone, Debug, Default)]
+pub struct SnapshotItems {
+    pub ai: Vec<PublishedItem>,
+    pub artifacts: Vec<PublishedItem>,
+}
+
+type KeyedItems = HashMap<String, (String, Option<String>)>;
+
 impl Repository {
     /// Persists the start of a pass *before* reading, so a crash leaves a
     /// visible `running` generation that is marked failed on restart.
@@ -116,7 +140,19 @@ impl Repository {
             if !current.can_become(state) {
                 return Err(Error::conflict("Erfassungsgeneration ist bereits abgeschlossen."));
             }
-            let inserted = insert_items(tx, generation_id, &result.items)?;
+            let previous: Option<(i64, String)> = if state == GenerationState::Complete {
+                tx.query_row(
+                    "SELECT id, catalog_version FROM generations WHERE scope_id = ?1 AND state = 'complete' AND id <> ?2
+                     ORDER BY id DESC LIMIT 1",
+                    params![scope_id, generation_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?
+            } else {
+                None
+            };
+            let need_diff = matches!(&previous, Some((_, prev_cat)) if prev_cat == &catalog);
+            let (inserted, new_keyed) = insert_items(tx, generation_id, &result.items, need_diff)?;
             let summary: Vec<String> =
                 result.errors.iter().take(5).chain(result.notes.iter().take(5)).cloned().collect();
             let errors = privacy::label(&summary.join(" | "));
@@ -139,7 +175,7 @@ impl Repository {
             )?;
             let mut report = PublishReport { generation_id, state: Some(state), ..Default::default() };
             if state == GenerationState::Complete {
-                publish(tx, scope_id, generation_id, &catalog, now, &mut report)?;
+                publish(tx, scope_id, generation_id, previous, new_keyed, inserted, &catalog, now, &mut report)?;
             } else {
                 let title =
                     if state == GenerationState::Partial { "Erfassung teilweise" } else { "Erfassung fehlgeschlagen" };
@@ -259,16 +295,153 @@ impl Repository {
 
     /// Published items of all approved scopes, optionally by category.
     pub fn published_items_all(&mut self, category: Option<ItemCategory>, limit: i64) -> Result<Vec<PublishedItem>> {
+        const SQL: &str = "SELECT s.id, s.project_id,
+                i.category, i.ecosystem, i.name, i.version, i.install_state, i.source, i.source_host, i.rel_path,
+                i.detail, i.bytes, i.evidence
+             FROM scopes s
+             CROSS JOIN generations g ON g.scope_id = s.id
+             CROSS JOIN inventory_items i ON i.generation_id = g.id
+             WHERE g.state = 'complete' AND s.status = 'approved' AND (?1 IS NULL OR i.category = ?1)
+             ORDER BY s.id, i.item_key LIMIT ?2";
+        self.query(SQL, params![category, limit], |r| {
+            Ok(PublishedItem { scope_id: r.get(0)?, project_id: r.get(1)?, item: map_item(r, 2)? })
+        })
+    }
+
+    /// Bounded AI and artifact rows for the dashboard snapshot in one pass.
+    pub fn published_snapshot_items(&mut self) -> Result<SnapshotItems> {
+        const SQL: &str = "SELECT s.id, s.project_id,
+                i.category, i.ecosystem, i.name, i.version, i.install_state, i.source, i.source_host, i.rel_path,
+                i.detail, i.bytes, i.evidence
+             FROM scopes s
+             CROSS JOIN generations g ON g.scope_id = s.id
+             CROSS JOIN inventory_items i ON i.generation_id = g.id
+             WHERE g.state = 'complete' AND s.status = 'approved'
+               AND i.category IN ('ai', 'ai_reference', 'environment', 'output', 'cache')
+             ORDER BY s.id, i.item_key";
+        let page = limits::UI_PAGE as usize;
+        let ref_cap = page * 10;
+        self.read(|tx| {
+            let mut stmt = tx.prepare_cached(SQL)?;
+            let mut rows = stmt.query([])?;
+            let (mut ai_art, mut ai_ref, mut env, mut out, mut cache) =
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            while let Some(row) = rows.next()? {
+                let category: ItemCategory = row.get(2)?;
+                let (bucket, cap) = match category {
+                    ItemCategory::AiArtifact => (&mut ai_art, page),
+                    ItemCategory::AiReference => (&mut ai_ref, ref_cap),
+                    ItemCategory::Environment => (&mut env, page),
+                    ItemCategory::Output => (&mut out, page),
+                    ItemCategory::Cache => (&mut cache, page),
+                    _ => continue,
+                };
+                if bucket.len() < cap {
+                    bucket.push(PublishedItem {
+                        scope_id: row.get(0)?,
+                        project_id: row.get(1)?,
+                        item: map_item(row, 2)?,
+                    });
+                }
+                if ai_art.len() >= page
+                    && ai_ref.len() >= ref_cap
+                    && env.len() >= page
+                    && out.len() >= page
+                    && cache.len() >= page
+                {
+                    break;
+                }
+            }
+            ai_art.extend(ai_ref);
+            env.extend(out);
+            env.extend(cache);
+            env.truncate(page);
+            Ok(SnapshotItems { ai: ai_art, artifacts: env })
+        })
+    }
+
+    /// Published items relevant to package analysis (skips filename-only
+    /// discoveries, which never carry package, command or AI reference data).
+    pub fn published_package_items(&mut self, limit: i64) -> Result<Vec<PublishedItem>> {
+        const SQL: &str = "SELECT s.id, s.project_id,
+                i.category, i.ecosystem, i.name, i.version, i.install_state, i.source, i.source_host, i.rel_path,
+                i.detail, i.bytes, i.evidence
+             FROM scopes s
+             CROSS JOIN generations g ON g.scope_id = s.id
+             CROSS JOIN inventory_items i ON i.generation_id = g.id
+             WHERE g.state = 'complete' AND s.status = 'approved' AND i.ecosystem <> 'discovery'
+             ORDER BY s.id, i.item_key LIMIT ?1";
+        self.query(SQL, [limit], |r| {
+            Ok(PublishedItem { scope_id: r.get(0)?, project_id: r.get(1)?, item: map_item(r, 2)? })
+        })
+    }
+
+    /// Checks whether a package key exists in the published inventory without
+    /// loading or parsing `evidence` JSON blobs.
+    pub fn has_published_package_key(&mut self, key: &str, limit: i64) -> Result<bool> {
+        use crate::domain::{PackageId, package_ecosystem, package_name};
+        const SQL: &str = "SELECT i.ecosystem, i.name, i.version, i.source, i.source_host
+             FROM scopes s
+             CROSS JOIN generations g ON g.scope_id = s.id
+             CROSS JOIN inventory_items i ON i.generation_id = g.id
+             WHERE g.state = 'complete' AND s.status = 'approved' AND i.ecosystem <> 'discovery'
+             ORDER BY s.id, i.item_key LIMIT ?1";
+        self.read(|tx| {
+            let mut stmt = tx.prepare_cached(SQL)?;
+            let mut rows = stmt.query([limit])?;
+            while let Some(row) = rows.next()? {
+                let ecosystem: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let version: Option<String> = row.get(2)?;
+                let source: SourceClass = row.get(3)?;
+                let source_host: Option<String> = row.get(4)?;
+                let host = match source_host.as_deref() {
+                    Some("files.pythonhosted.org") => "pypi.org",
+                    Some(host) => host,
+                    None => "",
+                };
+                let id = PackageId {
+                    ecosystem: package_ecosystem(&ecosystem).into(),
+                    name: package_name(&ecosystem, &name),
+                    version: version.unwrap_or_default(),
+                    source,
+                    source_host: host.to_string(),
+                };
+                if id.key() == key {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        })
+    }
+
+    /// Narrow projection for the offline advisory watcher. The service supplies
+    /// the current generation IDs of approved inventory scopes.
+    pub(crate) fn advisory_packages(
+        &mut self,
+        generation_ids: &[i64],
+        include_resolved: bool,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<AdvisoryPackageEvidence>> {
         self.query(
-            &format!(
-                "SELECT s.id, s.project_id, {} FROM inventory_items i
-                 JOIN generations g ON g.id = i.generation_id JOIN scopes s ON s.id = g.scope_id
-                 WHERE g.state = 'complete' AND s.status = 'approved' AND (?1 IS NULL OR i.category = ?1)
-                 ORDER BY s.id, i.item_key LIMIT ?2",
-                ITEM_COLUMNS.split(", ").map(|c| format!("i.{c}")).collect::<Vec<_>>().join(", ")
-            ),
-            params![category, limit],
-            |r| Ok(PublishedItem { scope_id: r.get(0)?, project_id: r.get(1)?, item: map_item(r, 2)? }),
+            "SELECT g.scope_id, i.ecosystem, i.name, i.version, i.source, i.source_host, i.install_state
+             FROM inventory_items i JOIN generations g ON g.id = i.generation_id
+             WHERE g.id IN (SELECT value FROM json_each(?1))
+               AND i.category = 'package' AND (i.install_state = 'installed' OR (?2 AND i.install_state = 'resolved'))
+             ORDER BY i.generation_id, i.item_key LIMIT ?3 OFFSET ?4",
+            params![serde_json::to_string(generation_ids)?, include_resolved, limit as i64, offset as i64],
+            |r| {
+                Ok(AdvisoryPackageEvidence {
+                    scope_id: r.get(0)?,
+                    ecosystem: r.get(1)?,
+                    name: r.get(2)?,
+                    version: r.get(3)?,
+                    source: r.get(4)?,
+                    source_host: r.get(5)?,
+                    state: r.get(6)?,
+                })
+            },
         )
     }
 
@@ -330,35 +503,52 @@ impl Repository {
     }
 }
 
-fn insert_items(tx: &Transaction<'_>, generation_id: i64, items: &[InventoryItem]) -> Result<usize> {
-    let mut statement = tx.prepare(
+fn insert_items(
+    tx: &Transaction<'_>,
+    generation_id: i64,
+    items: &[InventoryItem],
+    collect_keyed: bool,
+) -> Result<(usize, KeyedItems)> {
+    let mut statement = tx.prepare_cached(
         "INSERT OR IGNORE INTO inventory_items(generation_id, item_key, category, ecosystem, name, version,
             install_state, source, source_host, rel_path, detail, bytes, evidence)
          VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
     )?;
     let mut inserted = 0;
+    let mut keyed = if collect_keyed { HashMap::with_capacity(items.len()) } else { HashMap::new() };
     for item in items.iter().map(InventoryItem::sanitized) {
-        inserted += statement.execute(params![
+        let key = item.key();
+        let evidence = serde_json::to_string(&item.evidence)?;
+        let rows = statement.execute(params![
             generation_id,
-            item.key(),
+            &key,
             item.category,
-            item.ecosystem,
-            item.name,
-            item.version,
+            &item.ecosystem,
+            &item.name,
+            &item.version,
             item.install_state,
             item.source,
-            item.source_host,
-            item.rel_path,
-            item.detail,
+            &item.source_host,
+            &item.rel_path,
+            &item.detail,
             item.bytes,
-            serde_json::to_string(&item.evidence)?
+            &evidence
         ])?;
+        inserted += rows;
+        if collect_keyed && rows > 0 {
+            let value = if item.ecosystem == "discovery" {
+                Some(format!("metadata:{}:{evidence}", item.bytes.unwrap_or(-1)))
+            } else {
+                item.version
+            };
+            keyed.insert(key, (item.name, value));
+        }
     }
-    Ok(inserted)
+    Ok((inserted, keyed))
 }
 
-fn keyed(tx: &Transaction<'_>, generation_id: i64) -> Result<HashMap<String, (String, Option<String>)>> {
-    let mut statement = tx.prepare(
+fn keyed(tx: &Transaction<'_>, generation_id: i64) -> Result<KeyedItems> {
+    let mut statement = tx.prepare_cached(
         "SELECT item_key, name,
                 CASE WHEN ecosystem = 'discovery' THEN 'metadata:' || IFNULL(bytes, -1) || ':' || evidence
                      ELSE version END
@@ -374,22 +564,18 @@ fn sample(names: &[&String]) -> String {
     if more > 0 { format!("{} (+{more})", shown.join(", ")) } else { shown.join(", ") }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn publish(
     tx: &Transaction<'_>,
     scope_id: i64,
     generation_id: i64,
+    previous: Option<(i64, String)>,
+    new: KeyedItems,
+    inserted: usize,
     catalog: &str,
     now: i64,
     report: &mut PublishReport,
 ) -> Result<()> {
-    let previous: Option<(i64, String)> = tx
-        .query_row(
-            "SELECT id, catalog_version FROM generations WHERE scope_id = ?1 AND state = 'complete' AND id <> ?2
-             ORDER BY id DESC LIMIT 1",
-            params![scope_id, generation_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()?;
     let event = |kind: InventoryEventKind, summary: String, from: Option<i64>| -> Result<()> {
         tx.execute(
             "INSERT INTO inventory_events(scope_id, kind, summary, from_generation, to_generation, created_at)
@@ -401,7 +587,6 @@ fn publish(
     match previous {
         Some((previous_id, previous_catalog)) if previous_catalog == catalog => {
             let old = keyed(tx, previous_id)?;
-            let new = keyed(tx, generation_id)?;
             let added: Vec<&String> = new.iter().filter(|(k, _)| !old.contains_key(*k)).map(|(_, v)| &v.0).collect();
             let removed: Vec<&String> = old.iter().filter(|(k, _)| !new.contains_key(*k)).map(|(_, v)| &v.0).collect();
             let changed: Vec<&String> =
@@ -431,10 +616,7 @@ fn publish(
         previous => {
             report.baseline = true;
             let reason = if previous.is_some() { "Profilversion geändert" } else { "Erste vollständige Erfassung" };
-            let count: i64 =
-                tx.query_row("SELECT COUNT(*) FROM inventory_items WHERE generation_id = ?1", [generation_id], |r| {
-                    r.get(0)
-                })?;
+            let count = inserted as i64;
             event(InventoryEventKind::Baseline, format!("{reason}: neue Vergleichsbasis mit {count} Einträgen"), None)?;
             log_in(
                 tx,

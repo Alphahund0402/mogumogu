@@ -120,12 +120,17 @@ impl InventoryItem {
             dependency.kind = crate::privacy::label(&dependency.kind);
         }
         Self {
+            category: self.category,
+            ecosystem: self.ecosystem.clone(),
             name: crate::privacy::label(&self.name),
             version: self.version.as_deref().map(crate::privacy::label),
-            detail: crate::privacy::label(&self.detail),
+            install_state: self.install_state,
+            source: self.source,
+            source_host: self.source_host.clone(),
             rel_path: crate::privacy::path(&self.rel_path),
+            detail: crate::privacy::label(&self.detail),
+            bytes: self.bytes,
             evidence,
-            ..self.clone()
         }
     }
 

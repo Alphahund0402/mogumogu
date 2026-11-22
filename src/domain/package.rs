@@ -4,7 +4,7 @@ use crate::sha256::{Sha256, hex};
 use serde::{Deserialize, Serialize};
 
 /// One registry identity, independent of the project that consumes it.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageId {
     pub ecosystem: String,
     pub name: String,

@@ -76,14 +76,11 @@ impl DiskIndex {
                     }
                 },
             };
-            let (entries, truncated) = match fsread::list_sample(&dir, &budget) {
-                Ok(listing) => listing,
-                Err(_) => {
-                    index.summary.unreadable += 1;
-                    index.nodes[node].set_incomplete();
-                    index.partial("Ordner nicht lesbar");
-                    continue;
-                }
+            let Ok((entries, truncated)) = fsread::list_sample(&dir, &budget) else {
+                index.summary.unreadable += 1;
+                index.nodes[node].set_incomplete();
+                index.partial("Ordner nicht lesbar");
+                continue;
             };
             for entry in entries {
                 if !budget.entry() {
@@ -287,16 +284,17 @@ impl DiskIndex {
         if query.folder >= self.nodes.len() || !self.nodes[query.folder].directory() {
             return Err(Error::invalid("Ordner gehört nicht zu diesem Analysestand."));
         }
-        let pattern = query.text.to_lowercase();
+        let filter = NameFilter::compile(&query.text);
         let folder_complete = self.nodes[query.folder].complete();
         // Bounds a pathological pattern on the single owner thread.
         let (mut steps, mut scanned) = (0_u64, 0_u64);
+        let mut scratch = MatchScratch::default();
         let mut matches = |name: &str| {
-            if pattern.is_empty() {
+            if matches!(filter, NameFilter::Any) {
                 return Ok(true);
             }
             scanned += name.len() as u64;
-            let found = matches_name(&name.to_lowercase(), &pattern, &mut steps);
+            let found = filter.matches(name, &mut steps, &mut scratch);
             if !within_budget(steps, scanned) {
                 return Err(Error::invalid("Suchmuster zu aufwendig; bitte genauer suchen oder weniger * verwenden."));
             }
@@ -304,6 +302,7 @@ impl DiskIndex {
         };
         let mut ids: Vec<u32> = Vec::new();
         let mut types = HashMap::<String, DiskRow>::new();
+        let mut ext_buf = String::new();
         for (id, node) in self.nodes.iter().skip(1) {
             let in_view = match query.view {
                 DiskView::Tree => node.parent as usize == query.folder,
@@ -314,28 +313,48 @@ impl DiskIndex {
                 continue;
             }
             if query.view == DiskView::Types {
-                let extension = self
+                let extension: &str = match self
                     .nodes
                     .name(id)
                     .rsplit_once('.')
                     .filter(|(stem, ext)| !stem.is_empty() && !ext.is_empty())
-                    .map_or_else(|| "(ohne Endung)".into(), |(_, ext)| format!(".{}", ext.to_lowercase()));
-                if !matches(&extension)? {
+                {
+                    None => "(ohne Endung)",
+                    Some((_, ext)) => {
+                        ext_buf.clear();
+                        ext_buf.push('.');
+                        if ext.is_ascii() {
+                            for b in ext.bytes() {
+                                ext_buf.push(b.to_ascii_lowercase() as char);
+                            }
+                        } else {
+                            for c in ext.chars().flat_map(char::to_lowercase) {
+                                ext_buf.push(c);
+                            }
+                        }
+                        ext_buf.as_str()
+                    }
+                };
+                if !matches(extension)? {
                     continue;
                 }
-                let row = types.entry(extension.clone()).or_insert_with(|| DiskRow {
-                    id: 0,
-                    name: privacy::path(&extension),
-                    path: String::new(),
-                    directory: false,
-                    bytes: 0,
-                    allocated: 0,
-                    files: 0,
-                    folders: 0,
-                    modified: 0,
-                    duplicate_candidates: 0,
-                    complete: folder_complete,
-                });
+                let row = if let Some(row) = types.get_mut(extension) {
+                    row
+                } else {
+                    types.entry(extension.to_string()).or_insert_with(|| DiskRow {
+                        id: 0,
+                        name: privacy::path(extension),
+                        path: String::new(),
+                        directory: false,
+                        bytes: 0,
+                        allocated: 0,
+                        files: 0,
+                        folders: 0,
+                        modified: 0,
+                        duplicate_candidates: 0,
+                        complete: folder_complete,
+                    })
+                };
                 row.bytes = row.bytes.saturating_add(node.bytes);
                 row.allocated = row.allocated.saturating_add(node.allocated);
                 row.files += 1;
@@ -446,6 +465,9 @@ fn within_budget(steps: u64, scanned_bytes: u64) -> bool {
 
 /// Orders names as their lowercase forms would, without allocating them.
 fn caseless(a: &str, b: &str) -> Ordering {
+    if a.is_ascii() && b.is_ascii() {
+        return a.bytes().map(|c| c.to_ascii_lowercase()).cmp(b.bytes().map(|c| c.to_ascii_lowercase()));
+    }
     a.chars().flat_map(char::to_lowercase).cmp(b.chars().flat_map(char::to_lowercase))
 }
 
@@ -486,15 +508,90 @@ fn tiles(rows: impl Iterator<Item = DiskRow>, observed: u64, folder_complete: bo
     disk_treemap(tiles)
 }
 
-/// Name substring, or a full-name glob when '*'/'?' occur. No regex engine or
-/// filesystem access; '?' matches a Unicode scalar, rather than a UTF-8 byte.
-fn matches_name(name: &str, pattern: &str, steps: &mut u64) -> bool {
-    if !pattern.contains(['*', '?']) {
-        *steps += name.len() as u64;
-        return name.contains(pattern);
+/// Reusable scratch buffers for matching millions of names without per-file allocations.
+#[derive(Default)]
+struct MatchScratch {
+    lower: String,
+    chars: Vec<char>,
+}
+
+/// Pre-compiled name filter for one `DiskIndex::page` scan.
+enum NameFilter {
+    Any,
+    Substring(String),
+    Glob { chars: Vec<char>, ascii: Option<Vec<u8>> },
+}
+
+impl NameFilter {
+    fn compile(text: &str) -> Self {
+        if text.is_empty() {
+            return Self::Any;
+        }
+        let pattern = text.to_lowercase();
+        if !pattern.contains(['*', '?']) {
+            return Self::Substring(pattern);
+        }
+        let ascii = pattern.is_ascii().then(|| pattern.as_bytes().to_vec());
+        Self::Glob { chars: pattern.chars().collect(), ascii }
     }
-    let name: Vec<_> = name.chars().collect();
-    let pattern: Vec<_> = pattern.chars().collect();
+
+    fn matches(&self, name: &str, steps: &mut u64, scratch: &mut MatchScratch) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Substring(pattern) => {
+                if name.is_ascii() && pattern.is_ascii() {
+                    let bytes = name.as_bytes();
+                    let pat = pattern.as_bytes();
+                    *steps += bytes.len() as u64;
+                    return pat.is_empty() || bytes.windows(pat.len()).any(|w| w.eq_ignore_ascii_case(pat));
+                }
+                scratch.lower.clear();
+                for c in name.chars().flat_map(char::to_lowercase) {
+                    scratch.lower.push(c);
+                }
+                *steps += scratch.lower.len() as u64;
+                scratch.lower.contains(pattern.as_str())
+            }
+            Self::Glob { chars: pattern, ascii } => {
+                if let Some(pat) = ascii
+                    && name.is_ascii()
+                {
+                    return glob_match_ascii(name.as_bytes(), pat, steps);
+                }
+                scratch.chars.clear();
+                scratch.chars.extend(name.chars().flat_map(char::to_lowercase));
+                glob_match_chars(&scratch.chars, pattern, steps)
+            }
+        }
+    }
+}
+
+fn glob_match_ascii(name: &[u8], pattern: &[u8], steps: &mut u64) -> bool {
+    let (mut n, mut p, mut star, mut retry) = (0, 0, None, 0);
+    while n < name.len() {
+        *steps += 1;
+        if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == name[n].to_ascii_lowercase()) {
+            n += 1;
+            p += 1;
+        } else if p < pattern.len() && pattern[p] == b'*' {
+            star = Some(p);
+            p += 1;
+            retry = n;
+        } else if let Some(at) = star {
+            retry += 1;
+            n = retry;
+            p = at + 1;
+        } else {
+            return false;
+        }
+    }
+    while p < pattern.len() && pattern[p] == b'*' {
+        p += 1;
+    }
+    p == pattern.len()
+}
+
+fn glob_match_chars(name: &[char], pattern: &[char], steps: &mut u64) -> bool {
     let (mut n, mut p, mut star, mut retry) = (0, 0, None, 0);
     while n < name.len() {
         *steps += 1;
@@ -519,6 +616,13 @@ fn matches_name(name: &str, pattern: &str, steps: &mut u64) -> bool {
     p == pattern.len()
 }
 
+/// Name substring, or a full-name glob when '*'/'?' occur. No regex engine or
+/// filesystem access; '?' matches a Unicode scalar, rather than a UTF-8 byte.
+#[cfg(test)]
+fn matches_name(name: &str, pattern: &str, steps: &mut u64) -> bool {
+    NameFilter::compile(pattern).matches(name, steps, &mut MatchScratch::default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -526,8 +630,11 @@ mod tests {
     fn file_search_supports_unicode_and_literal_substrings() {
         let matches = |name, pattern| matches_name(name, pattern, &mut 0);
         assert!(matches("möwe.rs", "m?we.*"));
+        assert!(matches("MÖWE.RS", "m?we.*"));
         assert!(matches("file.tar.gz", "*.gz"));
+        assert!(matches("FILE.TAR.GZ", "*.gz"));
         assert!(matches("file.tar.gz", "tar"));
+        assert!(matches("FILE.TAR.GZ", "tar"));
         assert!(!matches("file.rs", "*.gz"));
         assert!(!matches("file", "file?"));
         assert!(matches("", "*"));
@@ -559,5 +666,59 @@ mod tests {
         assert_eq!(caseless("Same.BIN", "same.bin"), Ordering::Equal);
         assert_eq!(caseless("ÄRGER", "ärger"), Ordering::Equal);
         assert_eq!(caseless("a", "B"), "a".cmp("b"));
+    }
+
+    #[test]
+    fn synthetic_disk_index_filters_types_and_duplicates_portably() {
+        let mut nodes = Nodes::default();
+        nodes.push(0, "", true, 0, 0, 0);
+        let dir_a = nodes.push(0, "alpha", true, 0, 0, 10);
+        let dir_b = nodes.push(0, "beta", true, 0, 0, 20);
+        for i in 0..1_000 {
+            let parent = if i % 2 == 0 { dir_a } else { dir_b };
+            let name = match i % 4 {
+                0 => format!("MOD_{i}.DLL"),
+                1 => format!("report-{i}.json"),
+                2 => "Dupe.BIN".to_string(),
+                _ => format!("möwe-{i}.rs"),
+            };
+            let size = if i % 4 == 2 { 4096 } else { 1000 + i as u64 };
+            nodes.push(parent, &name, false, size, 4096, 100 + i as i64);
+        }
+        let mut index = DiskIndex {
+            scope_id: 1,
+            root: r"C:\synthetic".into(),
+            run: 1,
+            summary: DiskSummary {
+                checked_at: 1,
+                total_bytes: None,
+                observed_bytes: 0,
+                allocated_bytes: 0,
+                files: 1_000,
+                folders: 2,
+                skipped: 0,
+                unreadable: 0,
+                entries: 1_002,
+                complete: true,
+                reason: String::new(),
+            },
+            nodes,
+            stopped: false,
+        };
+        index.aggregate();
+        index.mark_duplicates();
+        assert_eq!(index.summary.total_bytes, Some(index.summary.observed_bytes));
+
+        let dlls =
+            index.page(&DiskQuery { view: DiskView::Files, text: "*.dll".into(), ..Default::default() }).unwrap();
+        assert_eq!(dlls.total, 250);
+        let unicode =
+            index.page(&DiskQuery { view: DiskView::Files, text: "m?we-*".into(), ..Default::default() }).unwrap();
+        assert_eq!(unicode.total, 250);
+        let types = index.page(&DiskQuery { view: DiskView::Types, ..Default::default() }).unwrap();
+        assert_eq!(types.total, 4);
+        let dupes = index.page(&DiskQuery { view: DiskView::Duplicates, ..Default::default() }).unwrap();
+        assert_eq!(dupes.total, 250);
+        assert!(dupes.rows.iter().all(|r| r.duplicate_candidates == 250));
     }
 }

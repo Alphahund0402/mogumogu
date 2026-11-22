@@ -248,7 +248,7 @@ class Contracts(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for name in ['README.md', 'LICENSE', 'THIRD_PARTY.md', 'SECURITY.md', 'CONTRIBUTING.md', 'AGENTS.md', 'CLAUDE.md',
                      'docs/VALIDIERUNG.md', 'docs/WINDOWS-ABNAHME.md', 'docs/UNTERSTUETZUNGSMATRIX.md',
-                     'docs/ANLEITUNG.md', 'build.ps1', 'start.ps1', 'build.cmd', 'scripts/measure.ps1',
+                     'docs/ANLEITUNG.md', 'build.ps1', 'start.ps1', 'start.cmd', 'build.cmd', 'scripts/measure.ps1',
                      'scripts/release.ps1', 'docs/ARCHITEKTUR.md']:
             self.assertTrue((ROOT / name).is_file(), name)
         for doc in [*ROOT.glob('*.md'), ROOT / 'docs/ARCHITEKTUR.md']:

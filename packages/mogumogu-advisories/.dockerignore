@@ -1,0 +1,10 @@
+# Allowlist for standalone `mogumogu-advisories` container builds.
+**
+!pyproject.toml
+!_build_backend.py
+!README.md
+!LICENSE
+!src/
+!src/**
+**/__pycache__/**
+**/*.pyc

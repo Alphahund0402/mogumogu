@@ -38,7 +38,8 @@ impl Core {
     pub fn project_candidates(&mut self) -> Result<Vec<ProjectCandidate>> {
         let scopes = self.repo.scopes()?;
         let projects = self.repo.projects()?;
-        self.candidates_with_basis(&scopes, &projects)
+        let resources = self.repo.resources()?;
+        self.candidates_with_basis(&scopes, &projects, &resources)
     }
 
     /// One stored finding beyond the dashboard page cap. This only reads
@@ -62,14 +63,14 @@ impl Core {
         &mut self,
         scopes: &[Scope],
         projects: &[Project],
+        resources: &[Resource],
     ) -> Result<Vec<ProjectCandidate>> {
-        let resources = self.repo.resources()?;
         let mut candidates = Vec::new();
         for scope in scopes.iter().filter(|s| {
             matches!(s.kind, ScopeKind::ProjectSearch | ScopeKind::Project) && s.status == ScopeStatus::Approved
         }) {
             for item in self.repo.published_discoveries(scope.id, UI_PAGE as usize - candidates.len())? {
-                candidates.push(map_candidate(scope, item, projects, &resources)?);
+                candidates.push(map_candidate(scope, item, projects, resources)?);
                 if candidates.len() >= UI_PAGE as usize {
                     return Ok(candidates);
                 }

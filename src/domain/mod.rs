@@ -62,6 +62,7 @@ macro_rules! string_enum {
 }
 
 mod access;
+mod checks;
 mod cleanup;
 mod databases;
 pub use databases::*;
@@ -85,6 +86,7 @@ mod system;
 mod tidy;
 
 pub use access::*;
+pub use checks::*;
 pub use cleanup::*;
 pub use disk::*;
 pub use inventory::*;

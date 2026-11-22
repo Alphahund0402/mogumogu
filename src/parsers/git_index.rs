@@ -11,6 +11,9 @@ use std::collections::HashMap;
 const MAX_ENTRIES: u32 = 4_000_000;
 /// Git itself limits paths far below this.
 const MAX_PATH: usize = 64 << 10;
+/// All paths together, as large as the biggest index read at all. Version 4
+/// compresses shared prefixes, so a small hostile file could expand far beyond.
+const MAX_PATH_BYTES: usize = 128 << 20;
 /// Fixed part of an entry before the object name: times, ids, mode, size.
 const STAT_BYTES: usize = 40;
 
@@ -52,15 +55,69 @@ pub fn tracked_below_checked(
     wanted: &[String],
     checksum: bool,
 ) -> ParseResult<Vec<u32>> {
-    if !matches!(hash_len, 20 | 32) {
-        return Err(ParseError::new("Unbekannte Länge der Git-Objektnamen"));
-    }
     // Several wanted paths may fold alike; each gets its count.
     let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
     for (index, path) in wanted.iter().enumerate() {
         positions.entry(fold_case(path.trim_matches('/'))).or_default().push(index);
     }
     let mut counts = vec![0_u32; wanted.len()];
+    read(index, hash_len, checksum, MAX_PATH_BYTES, |entry| {
+        if !positions.is_empty() {
+            count(&fold_case(&String::from_utf8_lossy(entry.path)), &positions, &mut counts);
+        }
+    })?;
+    Ok(counts)
+}
+
+/// One entry of the index: what Git recorded when it last looked at a file.
+#[derive(Clone, Copy, Debug)]
+pub struct IndexEntry<'a> {
+    pub path: &'a [u8],
+    /// Last write of the file, unix seconds.
+    pub mtime: u32,
+    /// Size of the file, cut to 32 bits as Git stores it.
+    pub size: u32,
+    pub mode: u32,
+    /// Non-zero while a merge conflict is open.
+    pub stage: u8,
+    pub assume_valid: bool,
+    pub skip_worktree: bool,
+    pub intent_to_add: bool,
+}
+
+/// What the index says about itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct IndexSummary {
+    /// The index proves that changes wait for a commit: staging invalidates
+    /// the cached tree of the root. The reverse proves nothing: a commit a
+    /// hook rejected leaves a valid tree too, and that tree need not be
+    /// `HEAD`'s. Telling them apart takes the commit objects.
+    pub staged: bool,
+}
+
+/// Every entry of a checked index, in order.
+pub fn entries(index: &[u8], hash_len: usize, each: impl FnMut(&IndexEntry<'_>)) -> ParseResult<IndexSummary> {
+    read(index, hash_len, true, MAX_PATH_BYTES, each)
+}
+
+/// The first record of the `TREE` extension is the root: an empty path, then
+/// `<entries> <subtrees>\n`, with -1 entries once something was staged.
+fn root_tree_staged(data: &[u8]) -> bool {
+    data.strip_prefix(b"\0").is_some_and(|rest| rest.starts_with(b"-"))
+}
+
+fn read(
+    index: &[u8],
+    hash_len: usize,
+    checksum: bool,
+    max_path_bytes: usize,
+    mut each: impl FnMut(&IndexEntry<'_>),
+) -> ParseResult<IndexSummary> {
+    if !matches!(hash_len, 20 | 32) {
+        return Err(ParseError::new("Unbekannte Länge der Git-Objektnamen"));
+    }
+    let mut summary = IndexSummary::default();
+    let mut path_bytes = 0_usize;
     let mut at = Cursor { data: index, at: 0 };
     if at.take(4)? != b"DIRC" {
         return Err(ParseError::new("Keine Git-Indexdatei"));
@@ -84,11 +141,12 @@ pub fn tracked_below_checked(
         let mode = u32::from_be_bytes([stat[24], stat[25], stat[26], stat[27]]);
         let flags = at.u16()?;
         let extended = flags & 0x4000 != 0;
+        let mut more_flags = 0;
         if extended {
             if version < 3 {
                 return Err(ParseError::new("Erweiterter Eintrag in Git-Index-Version 2"));
             }
-            at.take(2)?;
+            more_flags = at.u16()?;
         }
         let path = if version == 4 {
             // Version 4 stores how much of the previous path to drop, then the rest.
@@ -113,13 +171,24 @@ pub fn tracked_below_checked(
         if path.len() > MAX_PATH {
             return Err(ParseError::new("Git-Index beschädigt (Pfad)"));
         }
+        path_bytes = path_bytes.saturating_add(path.len());
+        if path_bytes > max_path_bytes {
+            return Err(ParseError::new("Git-Index zu groß (Pfade)"));
+        }
         nameless |= path.is_empty();
         if mode & 0o170000 == 0o040000 {
             return Err(ParseError::new("Sparse-Index: nicht alle versionierten Dateien sind aufgeführt"));
         }
-        if !positions.is_empty() {
-            count(&fold_case(&String::from_utf8_lossy(&path)), &positions, &mut counts);
-        }
+        each(&IndexEntry {
+            path: &path,
+            mtime: u32::from_be_bytes([stat[8], stat[9], stat[10], stat[11]]),
+            size: u32::from_be_bytes([stat[36], stat[37], stat[38], stat[39]]),
+            mode,
+            stage: ((flags >> 12) & 3) as u8,
+            assume_valid: flags & 0x8000 != 0,
+            skip_worktree: more_flags & 0x4000 != 0,
+            intent_to_add: more_flags & 0x2000 != 0,
+        });
         previous = path;
     }
     // Extensions follow until the trailing checksum.
@@ -133,8 +202,13 @@ pub fn tracked_below_checked(
             _ if !signature[0].is_ascii_uppercase() => {
                 return Err(ParseError::new("Unbekannte Pflichterweiterung im Git-Index"));
             }
-            _ => at.take(size)?,
-        };
+            _ => {
+                let data = at.take(size)?;
+                if signature == b"TREE" {
+                    summary.staged = root_tree_staged(data);
+                }
+            }
+        }
     }
     if index.len() - at.at != hash_len {
         return Err(ParseError::new("Git-Index abgeschnitten"));
@@ -145,7 +219,7 @@ pub fn tracked_below_checked(
     if nameless {
         return Err(ParseError::new("Git-Index beschädigt (Eintrag ohne Pfad)"));
     }
-    Ok(counts)
+    Ok(summary)
 }
 
 /// The trailing hash covers everything before it. With `index.skipHash`
@@ -314,7 +388,7 @@ pub(crate) mod tests {
         overcount[11] = 200;
         assert!(tracked_below(&overcount, 20, &[]).is_err());
         assert!(tracked_below(b"DIRX", 20, &[]).is_err());
-        let mut flipped = good.clone();
+        let mut flipped = good;
         flipped[12 + STAT_BYTES + 20 + 2] ^= 0x20; // `a/b.txt` becomes `A/b.txt`
         assert!(tracked_below(&flipped, 20, &[]).unwrap_err().0.contains("Prüfsumme"));
         let mut skip_hash = flipped.clone();
@@ -327,6 +401,42 @@ pub(crate) mod tests {
         let flags = 12 + STAT_BYTES + 20;
         v4[flags + 1] = 3; // the first entry claims a shorter path
         assert!(tracked_below(&v4, 20, &[]).is_err(), "version 4 checks the length too");
+    }
+
+    #[test]
+    fn entries_carry_what_git_recorded_about_each_file() {
+        let mut bytes = index(2, 20, &["a.txt"], &[]);
+        bytes[12 + 8..12 + 12].copy_from_slice(&1_700_000_000_u32.to_be_bytes());
+        bytes[12 + 36..12 + 40].copy_from_slice(&42_u32.to_be_bytes());
+        let end = bytes.len() - 20;
+        let hash = crate::parsers::sha1::sha1(&bytes[..end]);
+        bytes[end..].copy_from_slice(&hash);
+        let mut seen = Vec::new();
+        entries(&bytes, 20, |e| seen.push((e.path.to_vec(), e.mtime, e.size, e.mode, e.stage))).unwrap();
+        assert_eq!(seen, [(b"a.txt".to_vec(), 1_700_000_000, 42, 0o100644, 0)]);
+    }
+
+    #[test]
+    fn only_an_invalid_root_tree_proves_that_something_is_staged() {
+        let staged = |extensions: &[(&[u8; 4], &[u8])]| {
+            entries(&index(2, 20, &["a.txt"], extensions), 20, |_| {}).unwrap().staged
+        };
+        assert!(staged(&[(b"TREE", b"\0-1 0\n")]));
+        assert!(!staged(&[]), "no cached tree proves nothing");
+        assert!(!staged(&[(b"TREE", b"\x001 0\nxxxxxxxxxxxxxxxxxxxx")]), "nor does a valid one: it need not be HEAD's");
+        assert!(!staged(&[(b"TREE", b"sub\x00-1 0\n")]), "only the root counts");
+    }
+
+    #[test]
+    fn a_small_index_cannot_expand_without_limit() {
+        // Version 4 stores each long path as a short difference to the last.
+        let long = "a".repeat(1000);
+        let paths: Vec<String> = (0..50).map(|n| format!("{long}{n:02}")).collect();
+        let names: Vec<&str> = paths.iter().map(String::as_str).collect();
+        let bytes = index(4, 20, &names, &[]);
+        assert!(bytes.len() < 6_000, "the file itself stays small: {}", bytes.len());
+        assert!(read(&bytes, 20, true, 100_000, |_| {}).is_ok());
+        assert!(read(&bytes, 20, true, 10_000, |_| {}).unwrap_err().0.contains("zu groß"));
     }
 
     #[test]

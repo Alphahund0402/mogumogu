@@ -20,6 +20,7 @@ pub struct ScanReport {
     pub changed: usize,
     /// Items of this pass; for a search these are its findings.
     pub items: usize,
+    pub cancelled: bool,
     pub problem: Option<String>,
 }
 
@@ -198,7 +199,7 @@ impl Core {
         };
         let PublishReport { state, baseline, added, removed, changed, .. } =
             self.repo.finish_generation(generation, &outcome.result)?;
-        Ok(ScanReport { scope_id, state, baseline, added, removed, changed, items, problem })
+        Ok(ScanReport { scope_id, state, baseline, added, removed, changed, items, cancelled, problem })
     }
 
     /// Measures a managed folder or an approved scope; unknown stays unknown.
@@ -240,37 +241,36 @@ impl Core {
     pub fn inventory_artifacts(&mut self) -> Result<Vec<ArtifactFinding>> {
         let scopes = self.repo.scopes()?;
         let projects = self.repo.projects()?;
-        self.artifacts_with_basis(&scopes, &projects)
+        let items = self.repo.published_snapshot_items()?.artifacts;
+        Ok(artifacts_from_items(items, &scopes, &projects))
     }
+}
 
-    pub(super) fn artifacts_with_basis(
-        &mut self,
-        scopes: &[Scope],
-        projects: &[Project],
-    ) -> Result<Vec<ArtifactFinding>> {
-        let mut artifacts = Vec::new();
-        for category in [ItemCategory::Environment, ItemCategory::Output, ItemCategory::Cache] {
-            for p in self.repo.published_items_all(Some(category), UI_PAGE)? {
-                artifacts.push(ArtifactFinding {
-                    scope_id: p.scope_id,
-                    name: p.item.name,
-                    rel_path: p.item.rel_path,
-                    category,
-                    project: projects
-                        .iter()
-                        .find(|project| Some(project.id) == p.project_id)
-                        .map_or("Globaler Bestand", |p| p.name.as_str())
-                        .into(),
-                    detail: p.item.detail,
-                    current: scopes.iter().find(|s| s.id == p.scope_id).is_some_and(|s| s.current()),
-                });
-                if artifacts.len() >= UI_PAGE as usize {
-                    return Ok(artifacts);
-                }
-            }
+pub(super) fn artifacts_from_items(
+    items: Vec<crate::storage::PublishedItem>,
+    scopes: &[Scope],
+    projects: &[Project],
+) -> Vec<ArtifactFinding> {
+    let mut artifacts = Vec::with_capacity(items.len().min(UI_PAGE as usize));
+    for p in items {
+        artifacts.push(ArtifactFinding {
+            scope_id: p.scope_id,
+            name: p.item.name,
+            rel_path: p.item.rel_path,
+            category: p.item.category,
+            project: projects
+                .iter()
+                .find(|project| Some(project.id) == p.project_id)
+                .map_or("Globaler Bestand", |p| p.name.as_str())
+                .into(),
+            detail: p.item.detail,
+            current: scopes.iter().find(|s| s.id == p.scope_id).is_some_and(|s| s.current()),
+        });
+        if artifacts.len() >= UI_PAGE as usize {
+            break;
         }
-        Ok(artifacts)
     }
+    artifacts
 }
 
 fn default_system_root(kind: ScopeKind) -> Result<String> {

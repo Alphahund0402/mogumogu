@@ -110,6 +110,7 @@ pub struct PlanSummary {
     /// What stays: sources, lockfiles, version control and everything to review.
     pub kept: Vec<String>,
     pub recovery: String,
+    /// Targets with a recorded successful recycler result.
     pub done: i64,
     pub failed: i64,
     pub note: Option<String>,
@@ -121,6 +122,22 @@ pub struct PlanSummary {
 }
 
 impl PlanSummary {
+    pub fn missing_after_interruption(&self) -> usize {
+        self.targets.iter().filter(|target| target.state == JournalState::ReconciledMissing).count()
+    }
+
+    pub fn outcome_text(&self) -> Option<String> {
+        let missing = self.missing_after_interruption();
+        if self.done == 0 && self.failed == 0 && missing == 0 {
+            return None;
+        }
+        let mut text = format!("{} verschoben · {} fehlgeschlagen oder offen", self.done, self.failed);
+        if missing > 0 {
+            text.push_str(&format!(" · {missing} am bisherigen Ort fehlend, Ziel unklar"));
+        }
+        Some(text)
+    }
+
     /// What the drive gained while the plan ran; other programs write too.
     pub fn free_gained(&self) -> Option<i64> {
         Some(self.free_after? - self.free_before?)

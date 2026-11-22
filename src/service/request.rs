@@ -2,6 +2,7 @@
 //! program start, protection changes and plan confirmation are separate
 //! commands; none of them grants another.
 use super::Core;
+use super::advisories::AdvisorySelection;
 use super::runs::{ArtifactRequest, ProjectRef};
 use crate::domain::{DatabaseEngine, DatabasePlace, DiskQuery, PackageQuery, RunState, ScopeKind, Settings};
 use crate::{Error, Result};
@@ -211,6 +212,22 @@ pub enum Request {
         #[serde(default)]
         query: PackageQuery,
     },
+    /// Published installation evidence for the local advisory watcher.
+    AdvisoryInventory {
+        #[serde(default)]
+        offset: usize,
+        #[serde(default)]
+        basis: Option<String>,
+    },
+    /// Resolved and installed package evidence for one or all registered projects.
+    AdvisoryProjects {
+        #[serde(default)]
+        project_id: Option<i64>,
+        #[serde(default)]
+        offset: usize,
+        #[serde(default)]
+        basis: Option<String>,
+    },
     /// Metadata-only system check; `refresh` checks again instead of the cache.
     SystemFindings {
         #[serde(default)]
@@ -284,6 +301,8 @@ impl Request {
                 | Self::ContextFilter { .. }
                 | Self::ContextFilterAll
                 | Self::Packages { .. }
+                | Self::AdvisoryInventory { .. }
+                | Self::AdvisoryProjects { .. }
                 | Self::SystemFindings { .. }
                 | Self::Search { .. }
                 | Self::ProjectCandidates
@@ -396,6 +415,12 @@ impl Core {
                 json!(settings)
             }
             Packages { offset, limit, query } => json!(self.package_page(&query, offset, limit)?),
+            AdvisoryInventory { offset, basis } => {
+                json!(self.advisory_inventory(AdvisorySelection::Installed, offset, basis.as_deref())?)
+            }
+            AdvisoryProjects { project_id, offset, basis } => {
+                json!(self.advisory_inventory(AdvisorySelection::Projects { project_id }, offset, basis.as_deref())?)
+            }
             SystemFindings { refresh } => json!(self.system_report(refresh)?),
             Search { query } => json!(self.search(&query)?),
             RetainPackage { key, retained } => {

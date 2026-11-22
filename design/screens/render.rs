@@ -531,6 +531,8 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 agent: 0,
                 kept: vec!["web/dist".into()],
                 runs: vec![RunBrief { id: 4, title: "#4 claude-code (beendet)".into(), started_at: now - 2 * DAY, artifacts: 2 }],
+                git: None,
+                checks: Vec::new(),
                 growth: Some(Growth {
                     since: now - 90 * DAY,
                     until: now - 10 * MINUTE,
@@ -564,6 +566,8 @@ fn enrich(s: &mut Snapshot, now: i64) {
                 agent: 0,
                 kept: Vec::new(),
                 runs: Vec::new(),
+                git: None,
+                checks: Vec::new(),
                 growth: None,
                 items: Vec::new(),
                 last_change: Some(now - 400 * DAY),

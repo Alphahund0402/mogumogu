@@ -2,6 +2,42 @@
 
 Stand: 5. Oktober 2026, ergänzt bis 31. Oktober 2026. Alle Prüfungen liefen auf Windows 10 Pro 22H2 (Build 19045, x64) mit Rust 1.98.0 (MSVC). Was nicht ausgeführt wurde, steht ausdrücklich unten.
 
+## Ergänzung vom 8. November: Start und offene Punkte je Projekt
+
+**Umgebung:** Windows 11 Pro (Build 26300), ohne Rust und Python. Geprüft wurde mit
+dem Linux-Container (Kernprüfungen) und mit im Container für `x86_64-pc-windows-gnu`
+gebauten Programmen, die nativ unter Windows liefen. Ein MSVC-Build fand hier nicht
+statt: Die statische C-Laufzeit ist damit **nicht** nachgewiesen; `build.ps1` bricht ab,
+wenn ein Build noch `VCRUNTIME140.dll` braucht.
+
+**Ergebnisse:** Kernprüfungen grün (Verträge, Format, Clippy, 316 Tests). Windows-Tests
+492 bestanden, 0 fehlgeschlagen; 21 davon brauchen den CLI-Pfad aus dem Build und liefen
+über ein vorübergehend eingebundenes Laufwerk. Ein echtes Git-Repository durchlief 22
+Zustände (Änderung, vorgemerkt, Commit, Push, Stash, gelöschte Datei, Branch ohne
+Gegenstück, entfernter Stand voraus, gepackte Refs, abgelöster HEAD, Merge-Konflikt,
+verknüpfte Arbeitskopie, Remote auf lokalem Pfad, vom Hook abgelehnter Commit,
+`skip-worktree`, erzwungener Push); alle Antworten stimmten mit dem erwarteten Stand
+überein. Die Programme öffnen ohne Argument das Dashboard, mit `--tray`, `--headless` und
+beim Start durch die CLI nicht; die Projektseite zeigt die offenen Punkte.
+
+**Review:** Ein getrennter Agent fand sechs blockierende Punkte, alle behoben: Vorgemerktes
+hinter einem unauffälligen Index galt als erledigt, Änderungen an `skip-worktree`-Dateien
+blieben unsichtbar, ein Remote auf lokalem Pfad galt als Sicherung, ein durch erzwungenen
+Push verworfener Commit als veröffentlicht, ein beschädigter Ref fiel still auf einen
+gepackten Wert zurück, und ein kleiner Index der Version 4 konnte unbegrenzt Speicher
+belegen. Lesegrenze, Sicherheitsprüfung des Papierkorbs, Klassen und Datenabfluss fand er
+ohne Befund. Die Korrekturen hat er nicht erneut geprüft. Nicht behoben: Änderungen gleicher
+Größe innerhalb derselben Sekunde bleiben unerkannt. Der menschliche zweite Review steht aus.
+
+**Erkennungsregeln (selber Tag):** Build-Ordner und Android-SDKs werden an der Spur des
+Werkzeugs erkannt und nicht betreten, `src/bin` zählt als Quellcode, MSBuild-Wurzeln als
+Manifest, `.git`-Dateien und wiederholte Funde ohne Versionsverwaltung rücken nach hinten;
+Projekte mit gleichem Remote oder Commit nennen einander (nur mit Lesefreigabe). Danach
+Kernprüfungen grün (319 Tests), Windows-Tests 501 bestanden, 0 fehlgeschlagen, die 22
+Git-Zustände unverändert korrekt, zwei Klone eines Repositorys nennen sich gegenseitig, die
+Schlüssel erscheinen nicht im JSON. Messwerte auf echtem Bestand: [Messbericht](MESSBERICHT.md).
+Diese Regeln sind nicht unabhängig geprüft.
+
 ## Ergänzung vom 31. Oktober: schlankerer Build, weniger Abhängigkeiten
 
 **Abhängigkeiten:** `pep440_rs` entfernt (nirgends verwendet). `sha2` samt

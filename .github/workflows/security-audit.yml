@@ -1,0 +1,84 @@
+name: Security audit (OSV / RustSec)
+on:
+  push:
+    paths:
+      - Cargo.lock
+      - Cargo.toml
+      - security/advisory-triage.toml
+      - packages/mogumogu-advisories/**
+      - scripts/audit_cargo_lock.py
+      - scripts/watch_advisories.py
+      - scripts/test_watch_advisories.py
+      - scripts/test_audit_cargo_lock.py
+      - Dockerfile
+  pull_request:
+    paths:
+      - Cargo.lock
+      - Cargo.toml
+      - security/advisory-triage.toml
+      - packages/mogumogu-advisories/**
+      - scripts/audit_cargo_lock.py
+      - scripts/watch_advisories.py
+      - scripts/test_watch_advisories.py
+      - scripts/test_audit_cargo_lock.py
+      - Dockerfile
+  schedule:
+    # Weekly check for newly published RustSec/CVE advisories on unchanged Cargo.lock.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-lock-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Build offline Cargo.lock audit image (fresh crates.io OSV feed)
+        run: |
+          docker build --target security-audit \
+            --build-arg "OSV_FEED_DATE=$(date -u +%Y-%m-%d)" \
+            --progress plain -t mogumogu-security-audit .
+
+      - name: Run Cargo.lock audit completely offline
+        run: |
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --user 10001:10001 --cpus 2.0 --memory 1g --pids-limit 64 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
+            mogumogu-security-audit
+
+  offline-scanner-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Build offline test sandbox with verified OSV-Scanner v2.7.1
+        run: docker build --target test-env --progress plain -t mogumogu-test-env .
+
+      - name: Run offline watcher and portable core tests
+        run: |
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --user 10001:10001 --cpus 4.0 --memory 2g --pids-limit 128 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777 \
+            mogumogu-test-env --tests
+
+      - name: Build and smoke-test standalone mogumogu-advisories image
+        run: |
+          docker build -t mogumogu-advisories-standalone ./packages/mogumogu-advisories
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            mogumogu-advisories-standalone --help

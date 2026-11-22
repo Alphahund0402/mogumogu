@@ -61,6 +61,11 @@ try {
     foreach ($File in @('mogumogu.exe', 'mogumogu-cli.exe')) {
         $Source = Join-Path $BinDir $File
         if (-not (Test-Path -LiteralPath $Source)) { throw "Build-Artefakt fehlt: $Source" }
+        # .cargo/config.toml links the C runtime in, so the programs start on a
+        # Windows without the Visual C++ Redistributable. Keep it that way.
+        if ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($Source)).IndexOf('VCRUNTIME140', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            throw "$File braucht die Visual-C++-Laufzeit (VCRUNTIME140.dll). RUSTFLAGS gesetzt? Sonst .cargo/config.toml prüfen."
+        }
         try { Copy-Item -LiteralPath $Source -Destination (Join-Path $OutDir $File) -Force }
         catch { throw 'Die EXE ist in Benutzung. Laufende Instanz über das Tray-Menü beenden und erneut bauen.' }
     }

@@ -15,7 +15,8 @@ eines Builds den geprüften Build aus der CI oder das neueste Release; siehe
 ## Windows-Programme im Container bauen
 
 Voraussetzung ist nur Docker Desktop mit Linux-Containern. Am einfachsten
-`rebuild.cmd` doppelklicken: Ist kein Rust installiert, baut es im Container,
+`rebuild.cmd` doppelklicken: Ist kein Rust installiert, baut es im Container
+(läuft Docker nicht, lädt es stattdessen den fertigen Build),
 beendet vorher eine laufende Instanz aus `dist` geordnet, startet sie danach
 wieder und zeigt den Pfad der EXE. Mit Rust erzwingt `.\rebuild.ps1 -Docker`
 den Container; `-Test` führt dort zuerst die Kernprüfungen (`validated`) aus.
@@ -67,6 +68,64 @@ gegebenenfalls zuerst einen Lauf ohne `--offline`. Die Volumes enthalten
 ausschließlich Build-Caches; es gibt keine Bind-Mounts, Ports, Dienste oder
 Host-Inventardaten. Der Prozess läuft mit UID/GID 10001, schreibgeschütztem
 Image und einem temporären `/tmp`.
+
+## Isolierte Test- und Benchmark-Sandbox (offline)
+
+Für reproduzierbare Tests und Kern-Benchmarks ohne Netzwerk und ohne Host-Volumes
+bietet [compose.yaml](../compose.yaml) die Stufe `test-env` (gesteuert über
+[docker_sandbox.py](../scripts/docker_sandbox.py)):
+
+```powershell
+# Alle statischen Verträge, Kern-Tests und 3× Release-Benchmark (offline, 4 CPUs, 2 GiB RAM)
+docker compose run --build --rm test-sandbox
+
+# Nur den Release-Benchmark ausführen (z. B. 5 Läufe)
+docker compose run --rm test-sandbox --bench --runs 5
+
+# Gleiche Offline-Sandbox unter engen Ressourcen (1 vCPU, 512 MiB RAM)
+docker compose run --build --rm test-weak-hw --bench
+```
+
+Beim Build kompiliert `test-env` Formatierung, Clippy, die portablen Testprogramme
+und den Release-Benchmark (`tests/performance.rs::portable_core_benchmark`) in
+`/opt/mogumogu-test` und bündelt den per SHA-256 geprüften offiziellen Linux-`osv-scanner`
+v2.7.1 (geladen über `mogumogu-advisories fetch-scanner`). Zur Laufzeit startet
+der Container vollständig isoliert: `network_mode: none` (nur Loopback `lo`),
+schreibgeschütztes Root-Dateisystem, keine Volumes, `cap_drop: [ALL]`,
+`no-new-privileges`, Benutzer `10001:10001`, flüchtiges `tmpfs` unter `/tmp` sowie
+feste CPU-/RAM-/PID-Grenzen. Dadurch laufen alle Offline-Watcher- und Audit-Tests
+mit synthetischen Advisory-ZIPs vollständig gegen den echten OSV-Scanner (ohne
+übersprungene Tests). Windows-spezifische Tests (Tray, Named Pipe, `NtCreateFile`,
+Papierkorb) bleiben davon unberührt und laufen weiterhin nativ auf Windows 10/11.
+
+## Sicherheits-Audit für `Cargo.lock` (offline)
+
+Die Stufe `security-audit` prüft mogumogus eigene `Cargo.lock` gegen das öffentliche
+OSV-/RustSec-Archiv (`crates.io/all.zip`) und die befristete Triage-Liste
+[security/advisory-triage.toml](../security/advisory-triage.toml):
+
+```powershell
+# Mit frischem crates.io-Feed bauen und komplett offline auswerten
+docker compose run --build --rm security-audit
+
+# Mit explizitem Tages-Cache-Bust bauen (wie in der wöchentlichen CI)
+docker build --target security-audit --build-arg OSV_FEED_DATE=2026-11-22 -t mogumogu-security-audit .
+docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 mogumogu-security-audit
+```
+
+Nur der Image-Build lädt den verifizierten `osv-scanner` v2.7.1 und das öffentliche
+`crates.io`-Archiv; zur Laufzeit arbeitet `security-audit` mit `network_mode: none`,
+schreibgeschütztem Root-Dateisystem und ohne Host-Volumes. Ein neues Advisory oder
+eine abgelaufene Triage-Frist bricht mit Exit-Code `1` ab, ein fehlender oder über
+sieben Tage alter Feed mit Exit-Code `2`. Der Workflow
+[security-audit.yml](../.github/workflows/security-audit.yml) führt diese Prüfung
+bei Änderungen an `Cargo.lock` und wöchentlich aus.
+
+Für andere Projekte und CI/CD-Pipelines bietet [packages/mogumogu-advisories/](../packages/mogumogu-advisories/README.md)
+ein eigenständiges Image samt [compose.yaml](../packages/mogumogu-advisories/compose.yaml)
+(`docker compose -f packages/mogumogu-advisories/compose.yaml run --rm refresh` und
+`... run --rm audit`), mit vorinstalliertem `mogumogu-advisories`, verifiziertem
+`osv-scanner` v2.7.1, automatischer Triage-Erkennung sowie SARIF 2.1.0, HTML und JSON.
 
 ## Prüfung während des Image-Builds
 

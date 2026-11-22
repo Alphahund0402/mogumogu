@@ -6,43 +6,70 @@ use super::activity::log_in;
 use crate::domain::{GenerationSummary, Scope, ScopeKind, ScopeStatus};
 use crate::platform::FileIdentity;
 use crate::{Error, Result, privacy};
-use rusqlite::{OptionalExtension, Row, Transaction, params};
+use rusqlite::{OptionalExtension, Row, params};
 
-const SCOPE_COLUMNS: &str =
-    "id, project_id, kind, path, status, approved_at, last_error, profile, realm, cache, analysis";
-const GENERATION_COLUMNS: &str =
-    "id, state, started_at, finished_at, entries_seen, files_read, item_count, limit_reason, error_count";
+const SCOPES_LIST_SQL: &str = "
+    SELECT s.id, s.project_id, s.kind, s.path, s.status, s.approved_at, s.last_error, s.profile, s.realm, s.cache, s.analysis,
+           p.id, p.state, p.started_at, p.finished_at, p.entries_seen, p.files_read, p.item_count, p.limit_reason, p.error_count,
+           l.id, l.state, l.started_at, l.finished_at, l.entries_seen, l.files_read, l.item_count, l.limit_reason, l.error_count
+    FROM scopes s
+    LEFT JOIN generations p ON p.id = (
+        SELECT id FROM generations WHERE scope_id = s.id AND state = 'complete' ORDER BY id DESC LIMIT 1
+    )
+    LEFT JOIN generations l ON l.id = (
+        SELECT id FROM generations WHERE scope_id = s.id ORDER BY id DESC LIMIT 1
+    )
+    WHERE s.status <> 'revoked' ORDER BY s.id LIMIT ?1";
 
-fn map_generation(row: &Row<'_>) -> rusqlite::Result<GenerationSummary> {
-    Ok(GenerationSummary {
-        id: row.get(0)?,
-        state: row.get(1)?,
-        started_at: row.get(2)?,
-        finished_at: row.get(3)?,
-        entries_seen: row.get(4)?,
-        files_read: row.get(5)?,
-        items: row.get(6)?,
-        limit_reason: row.get(7)?,
-        error_count: row.get(8)?,
-    })
+const ADVISORY_SCOPES_SQL: &str = "
+    SELECT s.id, s.project_id, s.kind, s.path, s.status, s.approved_at, s.last_error, s.profile, s.realm, s.cache, s.analysis,
+           p.id, p.state, p.started_at, p.finished_at, p.entries_seen, p.files_read, p.item_count, p.limit_reason, p.error_count,
+           l.id, l.state, l.started_at, l.finished_at, l.entries_seen, l.files_read, l.item_count, l.limit_reason, l.error_count
+    FROM scopes s
+    LEFT JOIN generations p ON p.id = (
+        SELECT id FROM generations WHERE scope_id = s.id AND state = 'complete' ORDER BY id DESC LIMIT 1
+    )
+    LEFT JOIN generations l ON l.id = (
+        SELECT id FROM generations WHERE scope_id = s.id ORDER BY id DESC LIMIT 1
+    )
+    WHERE s.status <> 'revoked' AND s.project_id IS NOT NULL AND (?1 IS NULL OR s.project_id = ?1)
+      AND s.kind = 'project' AND s.profile = '' AND s.realm = '' AND s.cache = '' AND s.analysis = 0
+    ORDER BY s.id LIMIT ?2";
+
+const SCOPE_BY_ID_SQL: &str = "
+    SELECT s.id, s.project_id, s.kind, s.path, s.status, s.approved_at, s.last_error, s.profile, s.realm, s.cache, s.analysis,
+           p.id, p.state, p.started_at, p.finished_at, p.entries_seen, p.files_read, p.item_count, p.limit_reason, p.error_count,
+           l.id, l.state, l.started_at, l.finished_at, l.entries_seen, l.files_read, l.item_count, l.limit_reason, l.error_count
+    FROM scopes s
+    LEFT JOIN generations p ON p.id = (
+        SELECT id FROM generations WHERE scope_id = s.id AND state = 'complete' ORDER BY id DESC LIMIT 1
+    )
+    LEFT JOIN generations l ON l.id = (
+        SELECT id FROM generations WHERE scope_id = s.id ORDER BY id DESC LIMIT 1
+    )
+    WHERE s.id = ?1";
+
+fn map_generation_at(row: &Row<'_>, offset: usize) -> rusqlite::Result<Option<GenerationSummary>> {
+    let Some(id) = row.get::<_, Option<i64>>(offset)? else {
+        return Ok(None);
+    };
+    Ok(Some(GenerationSummary {
+        id,
+        state: row.get(offset + 1)?,
+        started_at: row.get(offset + 2)?,
+        finished_at: row.get(offset + 3)?,
+        entries_seen: row.get(offset + 4)?,
+        files_read: row.get(offset + 5)?,
+        items: row.get(offset + 6)?,
+        limit_reason: row.get(offset + 7)?,
+        error_count: row.get(offset + 8)?,
+    }))
 }
 
-fn load_scope(tx: &Transaction<'_>, row: &Row<'_>) -> rusqlite::Result<Scope> {
+fn map_scope(row: &Row<'_>) -> rusqlite::Result<Scope> {
     let id: i64 = row.get(0)?;
-    let published = tx
-        .query_row(
-            &format!("SELECT {GENERATION_COLUMNS} FROM generations WHERE scope_id = ?1 AND state = 'complete' ORDER BY id DESC LIMIT 1"),
-            [id],
-            map_generation,
-        )
-        .optional()?;
-    let latest = tx
-        .query_row(
-            &format!("SELECT {GENERATION_COLUMNS} FROM generations WHERE scope_id = ?1 ORDER BY id DESC LIMIT 1"),
-            [id],
-            map_generation,
-        )
-        .optional()?;
+    let published = map_generation_at(row, 11)?;
+    let latest = map_generation_at(row, 20)?;
     Ok(Scope {
         id,
         project_id: row.get(1)?,
@@ -178,20 +205,18 @@ impl Repository {
     }
 
     pub fn scopes(&mut self) -> Result<Vec<Scope>> {
-        self.read(|tx| {
-            let mut statement = tx.prepare(&format!(
-                "SELECT {SCOPE_COLUMNS} FROM scopes WHERE status <> 'revoked' ORDER BY id LIMIT 2000"
-            ))?;
-            let rows = statement.query_map([], |row| load_scope(tx, row))?;
-            Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-        })
+        self.query(SCOPES_LIST_SQL, [crate::limits::MAX_VISIBLE_SCOPES as i64], map_scope)
+    }
+
+    /// Fetch project inventory approvals without consuming the limit on other scope kinds.
+    pub(crate) fn advisory_project_scopes(&mut self, project_id: Option<i64>) -> Result<Vec<Scope>> {
+        self.query(ADVISORY_SCOPES_SQL, params![project_id, crate::limits::MAX_VISIBLE_SCOPES as i64 + 1], map_scope)
     }
 
     pub fn scope(&mut self, id: i64) -> Result<Scope> {
         self.read(|tx| {
-            tx.query_row(&format!("SELECT {SCOPE_COLUMNS} FROM scopes WHERE id = ?1"), [id], |row| load_scope(tx, row))
-                .optional()?
-                .ok_or_else(|| Error::not_found("Suchbereich nicht gefunden."))
+            let mut stmt = tx.prepare_cached(SCOPE_BY_ID_SQL)?;
+            stmt.query_row([id], map_scope).optional()?.ok_or_else(|| Error::not_found("Suchbereich nicht gefunden."))
         })
     }
 

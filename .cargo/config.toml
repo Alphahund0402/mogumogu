@@ -1,0 +1,5 @@
+# Links the C runtime into both programs, so they start on a Windows without the
+# Visual C++ Redistributable (VCRUNTIME140.dll). build.ps1 fails if a build still
+# needs it. MSVC only: the GNU build in the container does not use this runtime.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

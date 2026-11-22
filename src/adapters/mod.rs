@@ -48,6 +48,8 @@ pub use global::inventory_global;
 
 use crate::domain::{InventoryItem, ItemCategory, SourceClass};
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Version of the adapter set; part of the comparison basis of generations.
 pub const ADAPTERS_VERSION: &str = "adapters-5";
@@ -99,19 +101,24 @@ pub struct Descriptor {
     pub limits: &'static str,
 }
 
+fn marker_matches(marker: &str, file_name: &str) -> bool {
+    match marker.split_once('*') {
+        Some((prefix, suffix)) => {
+            let bytes = file_name.as_bytes();
+            let p = prefix.as_bytes();
+            let s = suffix.as_bytes();
+            bytes.len() >= p.len() + s.len()
+                && bytes[..p.len()].eq_ignore_ascii_case(p)
+                && bytes[bytes.len() - s.len()..].eq_ignore_ascii_case(s)
+        }
+        None => marker.eq_ignore_ascii_case(file_name),
+    }
+}
+
 impl Descriptor {
     /// Markers are file names with at most one `*` wildcard, case-insensitive.
     pub fn wants(&self, file_name: &str) -> bool {
-        let name = file_name.to_ascii_lowercase();
-        self.markers.iter().any(|marker| {
-            let marker = marker.to_ascii_lowercase();
-            match marker.split_once('*') {
-                Some((prefix, suffix)) => {
-                    name.len() >= prefix.len() + suffix.len() && name.starts_with(prefix) && name.ends_with(suffix)
-                }
-                None => marker == name,
-            }
-        })
+        self.markers.iter().any(|marker| marker_matches(marker, file_name))
     }
 }
 
@@ -215,6 +222,61 @@ static ALL: &[&dyn Adapter] = &[
     &julia::Julia,
     &toolchain::Toolchain,
 ];
+
+struct ProjectMatcher {
+    exact: HashMap<String, Vec<usize>>,
+    wildcards: Vec<(Vec<u8>, Vec<u8>, usize)>,
+}
+
+static PROJECT_MATCHER: LazyLock<ProjectMatcher> = LazyLock::new(|| {
+    let mut exact: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut wildcards = Vec::new();
+    for (index, adapter) in ALL.iter().enumerate() {
+        let desc = adapter.descriptor();
+        if desc.scope != AdapterScope::Project {
+            continue;
+        }
+        for marker in desc.markers {
+            if let Some((prefix, suffix)) = marker.split_once('*') {
+                wildcards.push((prefix.as_bytes().to_vec(), suffix.as_bytes().to_vec(), index));
+            } else {
+                let list = exact.entry(marker.to_ascii_lowercase()).or_default();
+                if list.last() != Some(&index) {
+                    list.push(index);
+                }
+            }
+        }
+    }
+    ProjectMatcher { exact, wildcards }
+});
+
+/// Project adapters interested in `file_name`, in registry order.
+/// Allocation-free for the common case where no adapter matches an all-lowercase file.
+pub(crate) fn project_wanting(file_name: &str) -> Vec<&'static dyn Adapter> {
+    let matcher = &*PROJECT_MATCHER;
+    let exact = if file_name.bytes().any(|b| b.is_ascii_uppercase()) {
+        matcher.exact.get(&file_name.to_ascii_lowercase())
+    } else {
+        matcher.exact.get(file_name)
+    };
+    let bytes = file_name.as_bytes();
+    let mut indices: Vec<usize> = exact.map_or_else(Vec::new, Clone::clone);
+    let mut added_wildcard = false;
+    for (prefix, suffix, index) in &matcher.wildcards {
+        if bytes.len() >= prefix.len() + suffix.len()
+            && bytes[..prefix.len()].eq_ignore_ascii_case(prefix)
+            && bytes[bytes.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+            && !indices.contains(index)
+        {
+            indices.push(*index);
+            added_wildcard = true;
+        }
+    }
+    if added_wildcard {
+        indices.sort_unstable();
+    }
+    indices.into_iter().map(|i| ALL[i]).collect()
+}
 
 pub fn all() -> &'static [&'static dyn Adapter] {
     ALL
@@ -370,6 +432,16 @@ mod tests {
         unique.dedup();
         assert_eq!(ids.len(), unique.len(), "adapter ids are unique");
         assert!(recognize_filename("random.txt").is_empty());
+        for sample in ["package.json", "App.csproj", "Dockerfile.dev", "requirements-dev.txt", "main.rs", "RANDOM.TXT"]
+        {
+            let via_matcher: Vec<&str> = project_wanting(sample).iter().map(|a| a.descriptor().id).collect();
+            let via_scan: Vec<&str> = ALL
+                .iter()
+                .filter(|a| a.descriptor().scope == AdapterScope::Project && a.descriptor().wants(sample))
+                .map(|a| a.descriptor().id)
+                .collect();
+            assert_eq!(via_matcher, via_scan, "project_wanting matches linear scan for {sample}");
+        }
     }
 
     #[test]

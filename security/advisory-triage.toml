@@ -1,0 +1,121 @@
+# Befristete Triage-Liste für bekannte RustSec-/OSV-Advisories in Cargo.lock.
+#
+# Regeln:
+# - Jeder Eintrag gilt ausschließlich für exakt die genannte Advisory-ID, Crate-Version und Frist.
+# - Neue Advisories, ungetriagte Versionen oder abgelaufene Fristen lassen `security-audit`
+#   (Exit 1) fehlschlagen.
+# - Zuordnung `windows-build` vs. `lockfile-non-windows` wurde gegen
+#   `cargo tree --locked --target x86_64-pc-windows-msvc -e normal,build` geprüft.
+# - Details und offene Upgrade-Maßnahmen stehen in docs/IMPLEMENTIERUNGSPLAN.md.
+
+# --- Im Windows-Build (`x86_64-pc-windows-msvc`, normal + build) enthalten ---
+
+[[advisory]]
+id = "RUSTSEC-2026-0459"
+crate = "libsqlite3-sys"
+version = "0.38.2"
+scope = "windows-build"
+kind = "vulnerability"
+expires = "2026-12-31"
+reason = "rusqlite =0.40.2 (SQLite 3.53.2, CVE-2026-119375) ist im Vertrag gepinnt; Upgrade auf rusqlite 0.41.0 mit Migrations-/Backup-/Recovery-Abnahme offen (docs/IMPLEMENTIERUNGSPLAN.md)."
+
+[[advisory]]
+id = "RUSTSEC-2026-0414"
+crate = "pulldown-cmark"
+version = "0.13.4"
+scope = "windows-build"
+kind = "vulnerability"
+expires = "2026-12-31"
+reason = "Transitiv über Slint 1.18.1; setzt aktivierte Wikilinks voraus. Update auf >= 0.13.6 mit Slint-/Lockfile-Pflege geplant."
+
+[[advisory]]
+id = "RUSTSEC-2026-0433"
+crate = "pulldown-cmark"
+version = "0.13.4"
+scope = "windows-build"
+kind = "vulnerability"
+expires = "2026-12-31"
+reason = "Transitiv über Slint 1.18.1; setzt aktivierte Wikilinks voraus. Update auf >= 0.13.6 mit Slint-/Lockfile-Pflege geplant."
+
+[[advisory]]
+id = "RUSTSEC-2026-0543"
+crate = "chrono"
+version = "0.4.45"
+scope = "windows-build"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained) einer transitiven Abhängigkeit im Slint-Graph; kein direkter Einsatz in mogumogu."
+
+[[advisory]]
+id = "RUSTSEC-2026-0441"
+crate = "pin-utils"
+version = "0.1.1"
+scope = "windows-build"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained) einer transitiven Abhängigkeit im Slint-Graph; kein direkter Einsatz in mogumogu."
+
+# --- Nur in Cargo.lock für Nicht-Windows-Ziele (nicht im Windows-Build) ---
+
+[[advisory]]
+id = "RUSTSEC-2026-0486"
+crate = "rustix"
+version = "1.1.5"
+scope = "lockfile-non-windows"
+kind = "vulnerability"
+expires = "2026-12-31"
+reason = "Nicht im Windows-Build; unter Linux nur transitiv (u. a. dev-dependency tempfile). Betrifft xattr-Funktionen mit Pufferlänge 0, die nicht genutzt werden."
+
+[[advisory]]
+id = "RUSTSEC-2026-0386"
+crate = "tokio"
+version = "1.53.2"
+scope = "lockfile-non-windows"
+kind = "vulnerability"
+expires = "2026-12-31"
+reason = "Nicht im Windows-Build und nicht im portablen Kern (`--no-default-features`); nur transitiv über Linux-Desktop-Backends (zbus/Slint) im Lockfile."
+
+[[advisory]]
+id = "RUSTSEC-2025-0141"
+crate = "bincode"
+version = "2.0.1"
+scope = "lockfile-non-windows"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained); nicht im Windows-Build enthalten."
+
+[[advisory]]
+id = "RUSTSEC-2026-0192"
+crate = "ttf-parser"
+version = "0.25.1"
+scope = "lockfile-non-windows"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained); nicht im Windows-Build enthalten."
+
+[[advisory]]
+id = "RUSTSEC-2026-0370"
+crate = "zvariant"
+version = "5.15.0"
+scope = "lockfile-non-windows"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained); Linux-D-Bus-Backend im Lockfile, nicht im Windows-Build."
+
+[[advisory]]
+id = "RUSTSEC-2026-0371"
+crate = "zbus-names"
+version = "4.3.4"
+scope = "lockfile-non-windows"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained); Linux-D-Bus-Backend im Lockfile, nicht im Windows-Build."
+
+[[advisory]]
+id = "RUSTSEC-2026-0372"
+crate = "zvariant-derive"
+version = "5.15.0"
+scope = "lockfile-non-windows"
+kind = "unmaintained"
+expires = "2027-02-28"
+reason = "Wartungsstatus (unmaintained); Linux-D-Bus-Backend im Lockfile, nicht im Windows-Build."

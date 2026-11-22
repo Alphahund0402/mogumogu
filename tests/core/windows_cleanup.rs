@@ -324,6 +324,24 @@ fn crash_after_one_move_reports_partial_success() {
 }
 
 #[test]
+fn recovery_reports_a_missing_folder_with_an_unverified_destination() {
+    let mut env = env(false);
+    let draft = env.core.cleanup_plan(env.project_id, &["node_modules".into()]).unwrap();
+    let plan = env.core.cleanup_approve(draft.id, draft.short_fingerprint()).unwrap();
+    let mut bin = env.bin.clone();
+    let repo = env.core.repository();
+    assert!(cleanup::apply(repo, plan.id, &mut bin, &mut CrashOn(1, 0), &|_| None).is_err());
+    repo.recover_after_restart().unwrap();
+    fs::rename(env.project.join("node_modules"), env.project.join("fixture-moved")).unwrap();
+    assert_eq!(cleanup::reconcile(repo, plan.id).unwrap(), PlanState::Partial);
+    let after = cleanup::summary(repo, plan.id).unwrap();
+    assert_eq!(after.targets[0].state, JournalState::ReconciledMissing);
+    assert_eq!((after.done, after.missing_after_interruption()), (0, 1));
+    assert!(after.outcome_text().unwrap().contains("Ziel unklar"));
+    assert_eq!(moved(&env), 0);
+}
+
+#[test]
 fn a_failing_or_idle_recycle_bin_is_reported_and_leaves_the_folder() {
     let mut env = env(false);
     let plan = approved(&mut env);

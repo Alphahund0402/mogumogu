@@ -164,7 +164,7 @@ const THROWAWAY_WORDS: &[&str] = &[
     "asdf",
 ];
 /// Manifests that name a project by themselves.
-const MANIFESTS: &[&str] = &[
+pub(super) const MANIFESTS: &[&str] = &[
     "cargo.toml",
     "package.json",
     "pyproject.toml",
@@ -217,7 +217,7 @@ const MANIFESTS: &[&str] = &[
     "project.godot",
     "flake.nix",
 ];
-const MANIFEST_EXTENSIONS: &[&str] = &[
+pub(super) const MANIFEST_EXTENSIONS: &[&str] = &[
     ".csproj",
     ".fsproj",
     ".vbproj",
@@ -294,7 +294,7 @@ const TEST_BUILD_FILES: &[&str] = &["cmakelists.txt", "makefile", "meson.build"]
 /// Tool version files that pin a user's global versions in the home folder.
 const HOME_CONFIGS: &[&str] = &[".tool-versions", "mise.toml", ".mise.toml"];
 const VCS: &[&str] = &[".git", ".hg", ".svn"];
-const LOCKFILES: &[&str] = &[
+pub(super) const LOCKFILES: &[&str] = &[
     "cargo.lock",
     "package-lock.json",
     "npm-shrinkwrap.json",
@@ -430,7 +430,7 @@ const WORKSPACES: &[(&str, &str)] = &[
 const AI_FILES: &[&str] = &["claude.md", "agents.md", "gemini.md", ".cursorrules", ".windsurfrules", ".clinerules"];
 const AI_FOLDERS: &[&str] =
     &[".claude", ".cursor", ".codex", ".gemini", ".windsurf", ".roo", ".continue", ".clinerules"];
-const CI: &[&str] =
+pub(super) const CI: &[&str] =
     &[".github", ".gitlab-ci.yml", ".circleci", "azure-pipelines.yml", "jenkinsfile", ".woodpecker.yml"];
 const SOURCE_FOLDERS: &[&str] = &["src", "lib", "app", "source", "pkg", "cmd"];
 const EDITOR_FOLDERS: &[&str] = &[".vscode", ".idea", ".devcontainer"];
@@ -584,6 +584,10 @@ const MARKERS_SHOWN: usize = 4;
 const MARKER_NAME_MAX: usize = 40;
 const MANAGERS_SHOWN: usize = 5;
 const FRAMEWORKS_SHOWN: usize = 4;
+/// MSBuild files that apply to a whole source tree.
+const DOTNET_ROOTS: &[&str] = &["directory.build.props", "directory.packages.props"];
+/// How often the same project must turn up to count as a set of copies.
+const COPIES_MIN: usize = 3;
 
 struct Pending {
     parent: Rc<DirHandle>,
@@ -688,6 +692,9 @@ pub(super) fn scan(root: Rc<DirHandle>, budget: &mut Budget, drive: bool, own_pr
         if drive {
             pending[children..].sort_by_key(|p| p.name.as_deref().is_some_and(likely_place));
         }
+    }
+    if drive {
+        census.note_copies();
     }
     census.finish(&mut result.items);
     result.notes.push(format!(
@@ -850,6 +857,9 @@ struct Draft {
     before: Vec<String>,
     after: Vec<String>,
     test_folder: bool,
+    /// Name and markers of an outer project without version control: found
+    /// several times, those are copies rather than projects of their own.
+    copy_key: Option<String>,
 }
 
 impl Draft {
@@ -911,7 +921,10 @@ fn assess_project(rel: &str, base: &str, named: &[Named<'_>], inherited: Option<
     let any = |list: &[&str]| named.iter().any(|n| list.contains(&n.lower.as_str()));
     let vcs = any(VCS);
     let ci = any(CI);
+    // MSBuild's files for a whole source tree: outside a project they make
+    // its root, even where the solution and projects lie deeper down.
     let manifest = file(MANIFESTS)
+        || (inherited.is_none() && file(DOTNET_ROOTS))
         || named.iter().any(|n| !n.dir && MANIFEST_EXTENSIONS.iter().any(|e| n.lower.ends_with(e)))
         || named.iter().any(|n| n.dir && XCODE_BUNDLES.iter().any(|e| n.lower.ends_with(e)))
         || unity(named);
@@ -975,7 +988,13 @@ fn assess_project(rel: &str, base: &str, named: &[Named<'_>], inherited: Option<
         notes.push("liegt unter Downloads".into());
         confidence = confidence.min(2);
     }
-    Draft { markers, notes, confidence, before, after, test_folder: folder(TEST_ROOTS) }
+    // Readable from the name alone: its content would need a read approval.
+    if named.iter().any(|n| !n.dir && n.lower == ".git") {
+        notes.push("Verknüpfte Arbeitskopie oder Submodul (.git ist eine Datei)".into());
+        confidence = confidence.min(2);
+    }
+    let copy_key = (inherited.is_none() && !vcs).then(|| format!("{base}|{}", markers.join(",").to_lowercase()));
+    Draft { markers, notes, confidence, before, after, test_folder: folder(TEST_ROOTS), copy_key }
 }
 
 /// A .NET project file whose name says it holds tests: `App.Tests.csproj`,
@@ -1073,7 +1092,7 @@ fn framework(label: &str) -> u64 {
 /// that several frameworks share), or `None` for no test file. CamelCase
 /// suffixes are compared as written: `Edit.java` is no `*IT` test and
 /// `Latest.cs` no `*Test`.
-fn test_file(name: &str, lower: &str) -> Option<u64> {
+pub(super) fn test_file(name: &str, lower: &str) -> Option<u64> {
     let (stem, extension) = lower.rsplit_once('.')?;
     // ASCII lower-casing keeps byte offsets, so the original stem lines up.
     let written = &name[..stem.len()];
@@ -1180,6 +1199,28 @@ impl Census {
         }
     }
 
+    /// On a drive search: the same folder with the same markers several times
+    /// and without version control is a set of copies. They stay listed, with
+    /// that noted, behind what looks like a project of its own.
+    pub fn note_copies(&mut self) {
+        let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+        for (rel, draft) in &self.drafts {
+            if let Some(key) = &draft.copy_key {
+                groups.entry(key.clone()).or_default().push(rel.clone());
+            }
+        }
+        for rels in groups.values().filter(|rels| rels.len() >= COPIES_MIN) {
+            for rel in rels {
+                if let Some(draft) = self.drafts.get_mut(rel) {
+                    draft
+                        .notes
+                        .push(format!("{} gleiche Funde ohne Versionsverwaltung; vermutlich Kopien", rels.len()));
+                    draft.confidence = 1;
+                }
+            }
+        }
+    }
+
     /// Writes the counts into the project and test folder findings.
     pub fn finish(mut self, items: &mut [InventoryItem]) {
         for item in items.iter_mut().filter(|i| i.ecosystem == "discovery") {
@@ -1189,6 +1230,7 @@ impl Census {
                     let Some(draft) = self.drafts.remove(&item.rel_path) else { continue };
                     let tally = self.projects.get(&item.rel_path).copied().unwrap_or_default();
                     evidence.signals = draft.signals(tally);
+                    evidence.confidence = draft.confidence;
                     item.detail = privacy::label(&draft.detail(&evidence.signals));
                 }
                 DiscoveryKind::Tests => {
@@ -1243,9 +1285,22 @@ pub(super) fn inspect_directory(
         Some((DiscoveryKind::Environment, "Umgebungsmarker pyvenv.cfg".into(), true))
     } else if base == "node_modules" {
         Some((DiscoveryKind::Dependencies, "Ordnername node_modules; Installationszustand nicht geprüft".into(), true))
-    } else if matches!(base.as_str(), ".npm" | "_cacache" | ".pnpm-store" | ".uv-cache") {
+    } else if matches!(base.as_str(), ".npm" | "_cacache" | ".pnpm-store" | ".uv-cache" | "packages.unity.com") {
         Some((DiscoveryKind::Cache, "Werkzeugtypischer Cachename; gemeinsame Nutzung unbekannt".into(), true))
-    } else if let Some(hint) = directory_hint(&base).filter(|_| has_dev_context) {
+    } else if has_file("cmakecache.txt") && !has_file("cmakelists.txt") {
+        // Configured by CMake, out of source: what lies below was generated,
+        // and test runs leave whole projects in it. An in-source build has
+        // its CMakeLists.txt beside the cache and stays a project.
+        Some((DiscoveryKind::BuildOutput, "CMake-Build-Ordner (CMakeCache.txt); nicht weiter durchsucht".into(), true))
+    } else if ctest_folder(rel) && (has_file("lasttest.log") || has_file("ctestcostdata.txt")) {
+        Some((DiscoveryKind::TestOutput, "Ablage von CTest; nicht weiter durchsucht".into(), true))
+    } else if has_folder("platform-tools")
+        && (has_folder("build-tools") || has_folder("platforms") || has_folder("ndk"))
+    {
+        Some((DiscoveryKind::Dependencies, "Android-SDK; Fremdcode, nicht weiter durchsucht".into(), true))
+    } else if let Some(hint) = directory_hint(&base)
+        .filter(|_| has_dev_context && !(source_bin(rel) && !has_folder("debug") && !has_folder("release")))
+    {
         Some((hint.0, hint.1.to_string(), hint.2))
     } else if has_file("cachedir.tag") {
         // uv, Hugging Face and others mark their caches this way, whatever
@@ -1414,6 +1469,21 @@ fn is_marker(dir: bool, lower: &str) -> bool {
 fn unity(named: &[Named<'_>]) -> bool {
     let folder = |wanted: &str| named.iter().any(|n| n.dir && n.lower == wanted);
     folder("assets") && folder("projectsettings")
+}
+
+/// `Testing/Temporary`, where CTest keeps its logs and test projects.
+fn ctest_folder(rel: &str) -> bool {
+    let mut parts = rel.rsplit('/');
+    parts.next().is_some_and(|name| name.eq_ignore_ascii_case("temporary"))
+        && parts.next().is_some_and(|name| name.eq_ignore_ascii_case("testing"))
+}
+
+/// `src/bin` holds a Rust package's further programs: sources, no output. The
+/// caller rules out a .NET project in `src`, whose `bin` has its configurations.
+fn source_bin(rel: &str) -> bool {
+    let mut parts = rel.rsplit('/');
+    parts.next().is_some_and(|name| name.eq_ignore_ascii_case("bin"))
+        && parts.next().is_some_and(|name| name.eq_ignore_ascii_case("src"))
 }
 
 /// Whether the folder at `rel` lies directly inside a test folder.
@@ -1724,6 +1794,121 @@ mod tests {
         for name in ["inspiker", "spikeball", "pocket", "laboratory", "api", ""] {
             assert!(!scratch_name(name), "{name}");
         }
+    }
+
+    #[test]
+    fn build_trees_and_tool_stores_hold_no_projects() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        for rel in [
+            "builds/one/build/CMakeCache.txt",
+            "builds/one/build/Testing/Temporary/gen-1/CMakeLists.txt",
+            "loose/Testing/Temporary/LastTest.log",
+            "loose/Testing/Temporary/gen-2/CMakeLists.txt",
+            "android/sdk/platform-tools/adb.txt",
+            "android/sdk/ndk/28/python-packages/tool/pyproject.toml",
+            "tools/cache/packages.unity.com/com.unity.x/package.json",
+        ] {
+            put(root, rel);
+        }
+        let result = search(root, true);
+        assert_eq!(kind_at(&result, "builds/one/build"), DiscoveryKind::BuildOutput);
+        assert_eq!(kind_at(&result, "loose/Testing/Temporary"), DiscoveryKind::TestOutput);
+        assert_eq!(kind_at(&result, "android/sdk"), DiscoveryKind::Dependencies);
+        assert_eq!(kind_at(&result, "tools/cache/packages.unity.com"), DiscoveryKind::Cache);
+        let projects: Vec<_> = found(&result).into_iter().filter(|(_, k)| *k == DiscoveryKind::Project).collect();
+        assert!(projects.is_empty(), "{projects:?}");
+    }
+
+    #[test]
+    fn a_build_folder_by_name_alone_hides_nothing() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        // Real work in a folder merely called Builds, and an in-source build.
+        put(root, "Builds/app/Cargo.toml");
+        put(root, "Builds/app/.git/HEAD");
+        put(root, "insource/CMakeLists.txt");
+        put(root, "insource/CMakeCache.txt");
+        put(root, "other/Testing/Temporary/mine/Cargo.toml");
+        let result = search(root, true);
+        assert_eq!(kind_at(&result, "Builds/app"), DiscoveryKind::Project);
+        assert_eq!(kind_at(&result, "insource"), DiscoveryKind::Project);
+        assert_eq!(kind_at(&result, "other/Testing/Temporary/mine"), DiscoveryKind::Project, "no trace of CTest");
+    }
+
+    #[test]
+    fn src_bin_is_source_and_a_dotnet_bin_stays_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        put(root, "rust/Cargo.toml");
+        put(root, "rust/src/bin/tool.rs");
+        put(root, "net/App.csproj");
+        put(root, "net/bin/Debug/App.dll");
+        put(root, "mixed/src/App.csproj");
+        put(root, "mixed/src/bin/Release/App.dll");
+        let result = search(root, false);
+        let at = |rel: &str| found(&result).into_iter().find(|(r, _)| r == rel).map(|(_, k)| k);
+        assert_eq!(at("rust/src/bin"), None, "the sources of a Rust program");
+        assert_eq!(at("net/bin"), Some(DiscoveryKind::BuildOutput));
+        assert_eq!(at("mixed/src/bin"), Some(DiscoveryKind::BuildOutput), "with its configurations inside");
+    }
+
+    #[test]
+    fn a_dotnet_root_counts_as_a_manifest_outside_a_project() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        put(root, "app/Directory.Build.props");
+        put(root, "app/global.json");
+        put(root, "app/src/App/App.csproj");
+        put(root, "alone/global.json");
+        let result = search(root, true);
+        let confidence = |rel: &str| finding_at(&result, rel).evidence.discovery.as_ref().unwrap().confidence;
+        assert_eq!(confidence("app"), 3, "MSBuild's tree file next to the sources");
+        assert_eq!(confidence("alone"), 1, "global.json alone stays weak");
+    }
+
+    #[test]
+    fn a_linked_work_tree_is_told_by_its_git_file_without_reading_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        put(root, "main/Cargo.toml");
+        put(root, "main/.git/HEAD");
+        put(root, "wt/Cargo.toml");
+        write(root, "wt/.git", "gitdir: elsewhere");
+        let result = search(root, true);
+        let wt = finding_at(&result, "wt");
+        assert!(wt.detail.contains("Verknüpfte Arbeitskopie"), "{}", wt.detail);
+        assert_eq!(wt.evidence.discovery.as_ref().unwrap().confidence, 2);
+        assert_eq!(finding_at(&result, "main").evidence.discovery.as_ref().unwrap().confidence, 3);
+    }
+
+    #[test]
+    fn repeated_finds_without_version_control_are_ranked_as_copies() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        for rel in ["a/source", "b/source", "c/source"] {
+            put(root, &format!("{rel}/CMakeLists.txt"));
+            put(root, &format!("{rel}/one.cpp"));
+            put(root, &format!("{rel}/two.cpp"));
+            put(root, &format!("{rel}/three.cpp"));
+        }
+        for rel in ["x/app", "y/app", "z/app"] {
+            put(root, &format!("{rel}/Cargo.toml"));
+            put(root, &format!("{rel}/.git/HEAD"));
+        }
+        put(root, "p/twice/CMakeLists.txt");
+        put(root, "q/twice/CMakeLists.txt");
+        let result = search(root, true);
+        let copy = finding_at(&result, "a/source");
+        assert!(copy.detail.contains("3 gleiche Funde"), "{}", copy.detail);
+        assert_eq!(copy.evidence.discovery.as_ref().unwrap().confidence, 1);
+        let repo = finding_at(&result, "x/app");
+        assert!(!repo.detail.contains("gleiche Funde"), "version control makes each its own: {}", repo.detail);
+        assert_eq!(repo.evidence.discovery.as_ref().unwrap().confidence, 3);
+        assert!(!finding_at(&result, "p/twice").detail.contains("gleiche Funde"), "two are no pattern");
+
+        let project_scope = search(root, false);
+        assert!(!finding_at(&project_scope, "a/source").detail.contains("gleiche Funde"), "only on a drive search");
     }
 
     #[test]

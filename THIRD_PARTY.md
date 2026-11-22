@@ -34,5 +34,7 @@
 - Der Docker-Build (`--target windows-exe`) linkt mit mingw-w64; dessen Start- und
   Laufzeitobjekte sowie libgcc stehen unter freizügigen Lizenzen bzw. der
   GCC-Runtime-Library-Exception und sind mit GPL-3.0-only vereinbar.
+- Der MSVC-Build linkt die C-Laufzeit von Visual C++ statisch ein (`.cargo/config.toml`);
+  sie gehört zum Compiler und wird nicht separat mitgeliefert.
 
 Dokumentation der verwendeten APIs: `docs/QUELLEN.md`.

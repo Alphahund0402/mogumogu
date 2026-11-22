@@ -48,7 +48,7 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 | Prüfregeln und Bereinigung | `src/review.rs`, `src/cleanup/` | Hinweise mit Evidenz; Papierkorb-Plan aus dem Aufräumbericht, Planbindung per Fingerabdruck, Journal je Ordner, Abgleich nach Absturz |
 | CLI | `src/bin/cli/` | Client des Besitzerprozesses, startet ihn bei Bedarf, versioniertes JSON, Exitcodes |
 | Qualität | `tests/`, `scripts/validate.py`, `.github/workflows/windows.yml` | Automatisierte Rust-Prüfungen, Lastreferenz, statische Verträge, Clippy ohne Warnungen |
-| Build/Start/Release/Messung | `build.ps1`, `start.ps1`, `scripts/` | Release-Build, ZIP mit Prüfsummen und Abhängigkeitsinventar, Messskript |
+| Build/Start/Release/Messung | `build.ps1`, `start.ps1`, `start.cmd`, `scripts/` | Release-Build, ZIP mit Prüfsummen und Abhängigkeitsinventar, Messskript |
 | Native Renderings | `design/screens/` | Bilder mit synthetischen Daten über den echten Slint-Software-Renderer (`design/screens/render.ps1`); die frühere HTML-Vorschau ist entfernt |
 
 ## 4. Dashboardgestaltung
@@ -218,10 +218,71 @@ Abgestimmte Reihenfolge seit dem 1. November 2026: Der Zweck „Arbeit behalten,
 3. **Lebenszyklus.** Abschließen, Stilllegen und Reaktivieren als eigene Entscheidung, getrennt vom Aufräumen erzeugter Dateien; zuerst als Spezifikation, auch für die Frage, wie ein geschütztes Scratchpad Pläne darin zulässt. Archivieren oder Löschen bleibt außerhalb des Umfangs.
 4. **Installierte Software und geteilte Ressourcen.** Zuerst Werkzeuge und Laufzeiten aus den Dateien ihrer Werkzeuge (rustup, .NET-Ordner, uv, nvm-windows, fnm, Volta, Scoop, Chocolatey), abgeglichen mit den Versionsvorgaben der Projekte; danach ein Registry-Leser für Deinstallationseinträge, PEP 514, .NET-, JDK- und WSL-Schlüssel mit eigener Freigabe. Beides erweitert die Lesegrenze und braucht den zweiten Review. Entfernt wird Software nie; mogumogu nennt den Weg.
 
+### Befunde und nächste Prüfungen · 21. November 2026
+
+1. **G5 · Papierkorb-Übergabe absichern.** Zwischen Inhaltsprüfung und
+   pfadbasierter Shell-Operation bleibt ein Zeitfenster. Die letzte Prüfung
+   bindet die Verzeichnisidentität, der Inhalt und die Haltungen können sich
+   weiterhin ändern. Der Review braucht einen belastbaren Vertrag dafür, dass
+   der überprüfte Ordner samt Inhalt und Schutzstatus zur Aktion passt.
+   [Ausführung](../src/cleanup/executor.rs) [Schutzprüfung](../src/cleanup/gate.rs)
+2. **G5 · Papierkorb als einzige Folge nachweisen.** Die aktuelle Shell-API
+   kann warnen, wenn Windows endgültig löschen würde. Für einen Papierkorb-Plan
+   muss ein nicht verfügbarer Papierkorb die Aktion stoppen. Prüfe die
+   Ausführungsoptionen, Wiederherstellung und Ergebnisprotokoll in Wegwerf-VMs
+   auf Windows 10 und 11, einschließlich Richtlinien, Kapazität und
+   abgebrochener Operationen. [Windows-Abnahme](WINDOWS-ABNAHME.md)
+   [Windows-Shell-Optionen](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags)
+3. **Vor der Beta · Sicherheit der eigenen Abhängigkeiten und Releases.**
+   Umgesetzt für `Cargo.lock` und externe Pipelines: das eigenständige,
+   abhängigkeitsfreie Python-Paket [mogumogu-advisories](../packages/mogumogu-advisories/README.md)
+   (15 Lockfile-Formate, SARIF 2.1.0, HTML, JSON, wiederverwendbares Docker-Image
+   und [advisory-audit-reusable.yml](../.github/workflows/advisory-audit-reusable.yml)),
+   [audit_cargo_lock.py](../scripts/audit_cargo_lock.py),
+   die befristete Triage-Liste [advisory-triage.toml](../security/advisory-triage.toml)
+   (Datenalter, Advisory-ID, betroffene Version, Scope, Befristung), der isolierte
+   Offline-Container `security-audit` und der wöchentliche/Lockfile-gebundene
+   Workflow [security-audit.yml](../.github/workflows/security-audit.yml).
+   Weiterhin offen: Upgrade der getriagten Windows-Abhängigkeiten (`rusqlite 0.41.0`,
+   `pulldown-cmark 0.13.6`), verifizierbare Signatur oder Attestation zwischen
+   Prüfsumme und Herausgebernachweis für heruntergeladene Builds sowie ein privater
+   Meldeweg vor der Beta. [Windows-CI](../.github/workflows/windows.yml)
+   [Sicherheitsmeldungen](../SECURITY.md) [RustSec](https://rustsec.org/)
+4. **Abdeckung des Watchers erweitern.** Der Begleitprozess prüft Installations-
+   und Auflösungsbelege für Projekte mit zwölf OSV-Ökosystemen: npm, PyPI, Cargo,
+   Go, NuGet, Maven, Packagist (Composer), RubyGems (Bundler), Pub (Dart/Flutter),
+   Hex (Mix), CRAN (R/renv ohne Bioconductor) und Julia; die Offline-Sandbox
+   `test-sandbox` prüft alle zwölf gegen den verifizierten OSV-Scanner v2.7.1.
+   Der HTML-Bericht zeigt CVE-Aliase und Erfassungslücken. Offen für eigenständige
+   Windows-Werkzeuge: belastbare Version, Hersteller und Feed-Identität mit einem
+   zweiten Review der Lesegrenze. Zeige Datenalter und unbekannte Identitäten neben
+   Treffern. [Schwachstellen-Watcher](SCHWACHSTELLEN.md)
+
+#### Advisory-Abgleich für mogumogu
+
+Der Offline-Abgleich von `Cargo.lock` am 21. November 2026 lieferte zwölf
+Advisory-IDs für elf Crates. Die Prüfung mit
+`cargo tree --locked --target x86_64-pc-windows-msvc -e normal,build` ordnete
+fünf dieser IDs dem Windows-Build zu.
+
+- **SQLite zuerst aktualisieren.** `rusqlite 0.40.2` bindet
+  `libsqlite3-sys 0.38.2` mit SQLite 3.53.2 ein. Der Fix beginnt bei
+  `libsqlite3-sys 0.39.0` und ist im gebündelten SQLite ab `rusqlite 0.41.0`
+  verfügbar. Prüfe nach dem Upgrade Migration, Sicherung, Wiederanlauf und
+  genau die SQLite-Version im ausgelieferten Build. [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459.html)
+- **Markdown-Parser aktualisieren.** Der Slint-Abhängigkeitsgraph umfasst
+  `pulldown-cmark 0.13.4`. Beide Advisories setzen aktivierte Wikilinks voraus.
+  `0.13.6` enthält beide Fixes. [RUSTSEC-2026-0414](https://rustsec.org/advisories/RUSTSEC-2026-0414.html)
+  [RUSTSEC-2026-0433](https://rustsec.org/advisories/RUSTSEC-2026-0433.html)
+- **Wartungsstatus mitführen.** Die beiden übrigen Windows-Treffer betreffen
+  die fehlende Pflege der transitiven Crates `chrono` und `pin-utils`.
+  [RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543.html)
+  [RUSTSEC-2026-0441](https://rustsec.org/advisories/RUSTSEC-2026-0441.html)
+
 Parallel ab sofort und weiterhin offen:
 
 - Unabhängiger Review des Papierkorb-Wegs (`src/cleanup/`, `inventory::tidy::recoverable`, `inventory::git`, `parsers::git_index`, `platform::recycle`, `DirHandle::open_dir_pinned`) als Voraussetzung für G5; erst danach `PRODUCTION_ENABLED` freischalten. Die Lesegrenze umfasst seit dem 31. Oktober 2026 `.git/config` und `.git/index` in freigegebenen Projekten; dazu kommen die `meta.json` der Docker-Kontexte und lesende Fragen an die Named Pipe freigegebener lokaler Engines (`src/docker/`, `platform::EnginePipe`) – beides braucht den menschlichen Review, ebenso die Metadaten überwachter Datenbanken und die Namen in bekannten Installationsordnern (`src/inventory/databases.rs`).
-- Zweiter Review der erweiterten Lesegrenze: Metadatenprüfung des Systembefunds (`src/inventory/system.rs`, `platform::local_fixed_path`) und routengeführte Erfassung persönlicher KI-Ordner (`scan_user_ai`, `Catalog::user_routes`, Migration 004).
+- Zweiter Review der erweiterten Lesegrenze: Git-Stand der offenen Punkte (`inventory::git`, `parsers::git_refs`, Abgleich im Aufräumbericht; seit dem 8. November 2026 liest der Bericht an der Projektwurzel auch `HEAD`, `packed-refs`, Refs und Reflogs), Metadatenprüfung des Systembefunds (`src/inventory/system.rs`, `platform::local_fixed_path`) und routengeführte Erfassung persönlicher KI-Ordner (`scan_user_ai`, `Catalog::user_routes`, Migration 004).
 - Systemerkennung ergänzen, wo bisher nur ein Ortsnachweis besteht: uv-Python, rustup, .NET-Tools, pyenv; wirksame Datenorte und Konfigurations-Overrides; Git-Konfiguration. Die Scratchpad-/Entwicklungsfundsuche mit unbekanntem Zweck ist implementiert, vollständige Worktree-/Editor-Erkennung bleibt offen. Stand und Grenzen: [Systemerkennung](SYSTEMERKENNUNG.md), [Entwicklungsfunde](ENTWICKLUNGSFUNDE.md). Vollständige Resolver-, Feature-, Peer- und Frameworkanalyse ist noch offen.
 - Windows-11-Abnahme nach [WINDOWS-ABNAHME](WINDOWS-ABNAHME.md) und Messbericht auf zweiter Hardware.
 - Adapter gegen reale Toolversionen abnehmen und den Status in der Unterstützungsmatrix von „experimentell“ auf „getestet“ heben.

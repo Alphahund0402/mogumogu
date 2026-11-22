@@ -42,14 +42,9 @@ impl Core {
             };
         }
         let resources = self.repo.resources()?;
-        // Only AI rows; the package inventory is not loaded for this view.
-        let ai_items = if demo {
-            Vec::new()
-        } else {
-            let mut items = self.repo.published_items_all(Some(ItemCategory::AiArtifact), UI_PAGE)?;
-            items.extend(self.repo.published_items_all(Some(ItemCategory::AiReference), UI_PAGE * 10)?);
-            items
-        };
+        // One scan for AI and artifact categories; the package inventory is loaded only on cache miss.
+        let snapshot_items = if demo { Default::default() } else { self.repo.published_snapshot_items()? };
+        let ai_items = snapshot_items.ai;
         let ai = if demo { self.repo.demo_ai()? } else { ai_entries(&ai_items, &scopes) };
         let activity = self
             .repo
@@ -74,8 +69,12 @@ impl Core {
         let hints =
             review::evaluate(&ReviewInput { resources: &resources, owners: &owners, settings: &settings, now, demo });
         let packages = self.packages_with_basis(&PackageQuery::default(), 0, PACKAGE_PAGE, &scopes, &projects)?;
-        let discoveries = if demo { Vec::new() } else { self.candidates_with_basis(&scopes, &projects)? };
-        let artifacts = if demo { Vec::new() } else { self.artifacts_with_basis(&scopes, &projects)? };
+        let discoveries = if demo { Vec::new() } else { self.candidates_with_basis(&scopes, &projects, &resources)? };
+        let artifacts = if demo {
+            Vec::new()
+        } else {
+            super::inventory::artifacts_from_items(snapshot_items.artifacts, &scopes, &projects)
+        };
         let system = self.system_with_basis(&scopes);
         let last_scan_at = if demo { None } else { self.repo.last_complete_scan()? };
         let tidy = self.current_tidy(&scopes);

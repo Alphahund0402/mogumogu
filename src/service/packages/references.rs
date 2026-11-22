@@ -2,7 +2,7 @@
 use crate::domain::*;
 use crate::limits::PACKAGE_EVIDENCE_ROWS as EVIDENCE_ROWS;
 use crate::storage::PublishedItem;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 type NameKey = (String, String);
 type VersionKey = (String, String, String);
@@ -10,49 +10,56 @@ type DependencyRef<'a> = (&'a PublishedItem, &'a PackageDependency);
 
 #[derive(Default)]
 pub(super) struct ReferenceIndex<'a> {
-    declarations: BTreeMap<NameKey, Vec<&'a PublishedItem>>,
-    commands: BTreeMap<String, Vec<&'a PublishedItem>>,
-    executables: BTreeMap<PackageId, BTreeSet<String>>,
-    ai_packages: BTreeMap<NameKey, Vec<&'a PublishedItem>>,
-    locked: BTreeMap<VersionKey, Vec<&'a PublishedItem>>,
-    dependencies: BTreeMap<VersionKey, Vec<DependencyRef<'a>>>,
+    declarations: HashMap<NameKey, Vec<&'a PublishedItem>>,
+    commands: HashMap<&'a str, Vec<&'a PublishedItem>>,
+    executables: HashMap<PackageId, BTreeSet<&'a str>>,
+    ai_packages: HashMap<NameKey, Vec<&'a PublishedItem>>,
+    locked: HashMap<VersionKey, Vec<&'a PublishedItem>>,
+    dependencies: HashMap<VersionKey, Vec<DependencyRef<'a>>>,
 }
 
 impl<'a> ReferenceIndex<'a> {
-    pub fn build(items: &'a [PublishedItem]) -> Self {
+    /// Indexes only references that can match one of the `targets` shown on the
+    /// current page, avoiding allocations for the rest of the inventory.
+    pub fn build_for(items: &'a [PublishedItem], targets: &[PackageFinding]) -> Self {
         let mut index = Self::default();
+        if targets.is_empty() {
+            return index;
+        }
+        let wanted_ids: HashSet<&PackageId> = targets.iter().map(|f| &f.id).collect();
+        let wanted_names: HashSet<(&str, &str)> =
+            targets.iter().map(|f| (f.id.ecosystem.as_str(), f.id.name.as_str())).collect();
+        let wanted_versions: HashSet<(&str, &str, &str)> =
+            targets.iter().map(|f| (f.id.ecosystem.as_str(), f.id.name.as_str(), f.id.version.as_str())).collect();
+        let mut wanted_commands: HashSet<&'a str> = HashSet::new();
         for p in items {
             let item = &p.item;
-            let eco = package_ecosystem(&item.ecosystem).to_string();
-            for command in &item.evidence.commands {
-                index.commands.entry(command.clone()).or_default().push(p);
-            }
+            let eco = package_ecosystem(&item.ecosystem);
             if item.category == ItemCategory::AiReference
                 && item.detail == "Referenz, kein Installations- oder Nutzungsnachweis"
             {
-                let parts = item.name.split_whitespace().collect::<Vec<_>>();
-                if let [runner, target] = parts.as_slice() {
-                    let eco = match *runner {
+                let mut parts = item.name.split_whitespace();
+                if let (Some(runner), Some(target), None) = (parts.next(), parts.next(), parts.next()) {
+                    let eco = match runner {
                         "npx" | "pnpx" | "bunx" => Some("npm"),
                         "uvx" => Some("python"),
                         _ => None,
                     };
                     if let Some(eco) = eco {
-                        let name = target.rfind('@').filter(|index| *index > 0).map_or(*target, |i| &target[..i]);
-                        index.ai_packages.entry((eco.into(), package_name(eco, name))).or_default().push(p);
+                        let name = target.rfind('@').filter(|index| *index > 0).map_or(target, |i| &target[..i]);
+                        let norm = package_name(eco, name);
+                        if wanted_names.contains(&(eco, norm.as_str())) {
+                            index.ai_packages.entry((eco.into(), norm)).or_default().push(p);
+                        }
                     }
                 }
             }
             for dep in &item.evidence.dependencies {
-                index
-                    .dependencies
-                    .entry((
-                        eco.clone(),
-                        package_name(&eco, &dep.name),
-                        if dep.exact { dep.requirement.clone() } else { String::new() },
-                    ))
-                    .or_default()
-                    .push((p, dep));
+                let dep_name = package_name(eco, &dep.name);
+                if wanted_names.contains(&(eco, dep_name.as_str())) {
+                    let req = if dep.exact { dep.requirement.clone() } else { String::new() };
+                    index.dependencies.entry((eco.into(), dep_name, req)).or_default().push((p, dep));
+                }
             }
             if item.category != ItemCategory::Package
                 && !(item.category == ItemCategory::Cache && item.ecosystem == "nuget")
@@ -60,19 +67,49 @@ impl<'a> ReferenceIndex<'a> {
                 continue;
             }
             if item.install_state == Some(InstallState::Declared) {
-                index.declarations.entry((eco, package_name(&item.ecosystem, &item.name))).or_default().push(p);
+                let norm = package_name(&item.ecosystem, &item.name);
+                if wanted_names.contains(&(eco, norm.as_str())) {
+                    index.declarations.entry((eco.into(), norm)).or_default().push(p);
+                }
                 continue;
             }
-            let id = item.package_id();
-            index.executables.entry(id.clone()).or_default().extend(item.evidence.executables.iter().cloned());
-            if item.install_state == Some(InstallState::Resolved) {
-                index.locked.entry((id.ecosystem.clone(), id.name.clone(), id.version.clone())).or_default().push(p);
+            let has_exec = !item.evidence.executables.is_empty();
+            let is_resolved = item.install_state == Some(InstallState::Resolved);
+            if !has_exec && !is_resolved {
+                continue;
+            }
+            let norm = package_name(&item.ecosystem, &item.name);
+            if !wanted_names.contains(&(eco, norm.as_str())) {
+                continue;
+            }
+            let version = item.version.as_deref().unwrap_or("");
+            if has_exec {
+                let id = item.package_id();
+                if wanted_ids.contains(&id) {
+                    let entry = index.executables.entry(id).or_default();
+                    for cmd in &item.evidence.executables {
+                        entry.insert(cmd.as_str());
+                        wanted_commands.insert(cmd.as_str());
+                    }
+                }
+            }
+            if is_resolved && wanted_versions.contains(&(eco, norm.as_str(), version)) {
+                index.locked.entry((eco.into(), norm, version.into())).or_default().push(p);
+            }
+        }
+        if !wanted_commands.is_empty() {
+            for p in items {
+                for command in &p.item.evidence.commands {
+                    if wanted_commands.contains(command.as_str()) {
+                        index.commands.entry(command.as_str()).or_default().push(p);
+                    }
+                }
             }
         }
         index
     }
 
-    pub fn possible(&self, id: &PackageId, project_by_id: &BTreeMap<i64, &str>) -> Vec<String> {
+    pub fn possible(&self, id: &PackageId, project_by_id: &HashMap<i64, &str>) -> Vec<String> {
         let Self { declarations, commands, executables, ai_packages, locked, dependencies } = self;
         let mut values = Vec::new();
         let name_key = (id.ecosystem.clone(), id.name.clone());

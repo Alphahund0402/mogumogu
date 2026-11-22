@@ -7,6 +7,7 @@ use mogumogu::limits::PACKAGE_PAGE;
 use mogumogu::service::ScanProgress;
 use serde_json::Value;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// Desktop state the snapshot alone does not carry.
@@ -30,15 +31,6 @@ pub fn observation_kind(state: Observation) -> &'static str {
         Observation::Review => "review",
         Observation::Protected => "protected",
         Observation::Unknown => "neutral",
-    }
-}
-
-pub fn owner_text(snapshot: &Snapshot, resource_id: i64) -> String {
-    let owners: Vec<&OwnerLink> = snapshot.owners_of(resource_id).collect();
-    match owners.iter().find(|o| o.kind == OwnerKind::Explicit).or(owners.first()) {
-        Some(o) if o.kind == OwnerKind::Explicit => o.project_name.clone(),
-        Some(o) => format!("{} (vermutet)", o.project_name),
-        None => "Besitzer unbekannt".into(),
     }
 }
 
@@ -133,9 +125,9 @@ pub fn render_candidates(ui: &Dashboard, snapshot: &Snapshot) {
         })
         .collect();
     // The same folder found by name is listed once, as the finding.
-    let unique = |a: &&ArtifactFinding| {
-        !snapshot.discoveries.iter().any(|c| c.scope_id == a.scope_id && c.rel_path == a.rel_path)
-    };
+    let discovery_keys: HashSet<(i64, &str)> =
+        snapshot.discoveries.iter().map(|c| (c.scope_id, c.rel_path.as_str())).collect();
+    let unique = |a: &&ArtifactFinding| !discovery_keys.contains(&(a.scope_id, a.rel_path.as_str()));
     if matches!(filter, 0 | 3) {
         rows.extend(
             snapshot
@@ -528,12 +520,31 @@ fn attention_cards(snapshot: &Snapshot) -> Vec<AttentionCard> {
 
 pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
     let store = ui.global::<Store>();
+    let mut scope_by_project: HashMap<i64, &Scope> = HashMap::new();
+    for scope in &snapshot.scopes {
+        if let Some(pid) = scope.project_id {
+            scope_by_project.entry(pid).or_insert(scope);
+        }
+    }
     store.set_projects(model(
         snapshot
             .projects
             .iter()
             .map(|p| {
-                let (coverage, coverage_kind) = coverage_cell(snapshot, p);
+                let (coverage, coverage_kind) = if snapshot.demo {
+                    ("Beispieldaten".into(), "neutral")
+                } else {
+                    match scope_by_project.get(&p.id).copied() {
+                        None => ("Keine Lesefreigabe".into(), "neutral"),
+                        Some(scope) if scope.status != ScopeStatus::Approved => (scope.status.label().into(), "review"),
+                        Some(scope) if scope.current() => ("Vollständig".into(), "ok"),
+                        Some(scope) => match &scope.latest {
+                            None => ("Noch nicht erfasst".into(), "neutral"),
+                            Some(latest) if latest.limit_reason.is_some() => ("Teilweise · Limit".into(), "review"),
+                            Some(latest) => (format!("Teilweise · {}", latest.state.label()), "review"),
+                        },
+                    }
+                };
                 ProjectRow {
                     id: p.id as i32,
                     name: s(&p.name),
@@ -555,6 +566,17 @@ pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
 /// Registered resources: scratchpads, their folders and adopted findings.
 pub fn render_resources(ui: &Dashboard, snapshot: &Snapshot) {
     let store = ui.global::<Store>();
+    let mut owner_by_resource: HashMap<i64, &OwnerLink> = HashMap::new();
+    for link in &snapshot.owners {
+        owner_by_resource
+            .entry(link.resource_id)
+            .and_modify(|existing| {
+                if existing.kind != OwnerKind::Explicit && link.kind == OwnerKind::Explicit {
+                    *existing = link;
+                }
+            })
+            .or_insert(link);
+    }
     store.set_resources(model(
         snapshot
             .resources
@@ -565,11 +587,16 @@ pub fn render_resources(ui: &Dashboard, snapshot: &Snapshot) {
                 } else {
                     (r.state.label().to_string(), observation_kind(r.state))
                 };
+                let owner = match owner_by_resource.get(&r.id) {
+                    Some(o) if o.kind == OwnerKind::Explicit => o.project_name.clone(),
+                    Some(o) => format!("{} (vermutet)", o.project_name),
+                    None => "Besitzer unbekannt".into(),
+                };
                 ResourceRow {
                     id: r.id as i32,
                     name: s(&r.name),
                     kind: s(r.kind.label()),
-                    owner: s(owner_text(snapshot, r.id)),
+                    owner: s(owner),
                     size: s(format_bytes(r.bytes)),
                     state: s(state),
                     state_kind: s(kind),

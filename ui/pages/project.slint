@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons } from "../theme.slint";
-import { Store, Actions, CleanupRow, HoldRow, DetailRow } from "../store.slint";
+import { Store, Actions, CleanupRow, HoldRow, CheckRow, DetailRow } from "../store.slint";
 import { Card, UiButton, StatusChip, Activatable, Callout, Icon } from "../components.slint";
 
 // One part of the project page; its height follows its content.
@@ -82,6 +82,34 @@ component CleanupLine inherits Rectangle {
         }
         VerticalLayout {
             padding-left: 32px;
+            Text { text: root.data.detail; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
+        }
+    }
+}
+
+// One open point of the project. The word stays beside the symbol, so the
+// state never depends on the icon alone.
+component CheckLine inherits Rectangle {
+    in property <CheckRow> data;
+    property <string> word: root.data.state == "done" ? "erledigt" : root.data.state == "open" ? "offen" : "unbekannt";
+    min-width: 0px;
+    preferred-width: 0px;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.data.title + ", " + root.word + ": " + root.data.detail;
+    VerticalLayout {
+        padding-top: 3px; padding-bottom: 3px; spacing: 1px;
+        HorizontalLayout {
+            spacing: 8px;
+            Icon {
+                source: root.data.state == "done" ? Icons.check : root.data.state == "open" ? Icons.warning : Icons.question;
+                width: 16px; height: 16px; y: (parent.height - self.height) / 2;
+                tone: root.data.state == "open" ? Theme.ink : Theme.muted;
+            }
+            Text { text: root.data.title; font-size: 12.5px; font-weight: root.data.state == "done" ? 400 : 700; color: Theme.ink; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+            Text { text: root.word; font-size: 11px; color: Theme.muted; vertical-alignment: center; horizontal-alignment: right; }
+        }
+        VerticalLayout {
+            padding-left: 24px;
             Text { text: root.data.detail; font-size: 11px; color: Theme.muted; wrap: word-wrap; }
         }
     }
@@ -201,6 +229,15 @@ export component ProjectPage inherits VerticalLayout {
                     }
                 }
                 for fact in Store.project-facts : Fact { data: fact; }
+            }
+            if Store.project-checks.length > 0 : Section {
+                title: "Offene Punkte";
+                eyebrow: Store.project-checks-summary;
+                Text {
+                    text: "Was mogumogu in den gelesenen Dateien sieht. „Erledigt“ ist keine Freigabe zum Löschen.";
+                    font-size: 11px; color: Theme.muted; wrap: word-wrap;
+                }
+                for check in Store.project-checks : CheckLine { data: check; }
             }
             if Store.project-cleanup.length > 0 : Section {
                 title: "Aufräumen";
