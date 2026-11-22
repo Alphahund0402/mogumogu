@@ -18,7 +18,7 @@ Docker-Inventar freigegebener lokaler Kontexte, überwachte Datenbanken (Schema 
 oder Docker-Volume, nur aus Metadaten gemessen, mit Größenverlauf) und ein
 **Papierkorb-Plan** für wiederherstellbar belegte Ordner (bestätigt und ausgeführt nur im Dashboard). Spezifikation und Abgrenzung:
 `docs/PROJEKTBEWUSSTE-BEREINIGUNG.md`. Netzwerkzugriffe, Programmstarts und verwaltete Läufe gibt es
-keine; mogumogu startet und überwacht keinen Lauf, es nimmt nur Meldungen an. Ausgeführt wird ein Plan bis zum
+in den beiden Programmen keine (zum getrennten, optionalen Schwachstellen-Watcher siehe Modulgrenzen); mogumogu startet und überwacht keinen Lauf, es nimmt nur Meldungen an. Ausgeführt wird ein Plan bis zum
 unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PRODUCTION_ENABLED = false`). README,
 `docs/IMPLEMENTIERUNGSPLAN.md` und `docs/UNTERSTUETZUNGSMATRIX.md` müssen mit dem Code übereinstimmen.
 
@@ -67,6 +67,15 @@ unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PR
   Dashboard einen Papierkorb-Plan aus: `CleanupApprove` und `CleanupApply` lehnt `owner.rs` über die
   Pipe ab, auch mit richtigem Fingerabdruck; die CLI plant, bricht ab und gleicht ab.
 - `src/desktop/`, `ui/`: nur Darstellung. Kein SQL, keine Dateisystemzugriffe, keine Löschung in Callbacks.
+- Schwachstellen-Watcher (`packages/mogumogu-advisories/`, Hüllen `scripts/watch_advisories.py`,
+  `scripts/audit_cargo_lock.py`, `scripts/advisory_report.py`): ein eigener, optionaler
+  Python-Prozess nur mit Standardbibliothek, kein Teil der beiden Programme. Netzwerk nur auf
+  ausdrücklichen Befehl (`refresh` lädt OSV-Archive, `fetch-scanner`/`audit --update` den
+  festgelegten OSV-Scanner mit SHA-256-Prüfung); gestartet werden nur `osv-scanner --offline`
+  und `mogumogu-cli --no-start`. Mit mogumogu spricht er nur über die CLI; `advisories inventory`
+  und `advisories projects` (`src/service/advisories.rs`) lesen veröffentlichte Generationen
+  und erfassen oder laden nichts. Die Triage-Liste `security/advisory-triage.toml` ist befristet;
+  abgelaufene Einträge lassen den Audit fehlschlagen.
 - `scripts/validate.py` prüft diese Grenzen lexikalisch (Allowlist).
 
 ## Sicherheitsgrenzen
@@ -86,7 +95,11 @@ oder brauchen den zweiten Review. Unbekannt bleibt unbekannt. „Erledigt“ in 
 zurückstufen. Keine Secrets, rohen Config-Snapshots oder Testbenutzerpfade in Logs, DB oder Git.
 
 ## Prüfungen
+- `python scripts/check.py` — alle folgenden automatischen Prüfungen in einem Lauf (`--core` ohne Desktop).
 - `python scripts/validate.py` — Schema, Katalog, Skills-Kopien, Modul-Allowlists.
+- `python -B -m unittest discover -s scripts -p "test_*.py"` und dasselbe für
+  `packages/mogumogu-advisories/tests` (mit `PYTHONPATH=packages/mogumogu-advisories/src`) — Watcher und Audit.
+- `docker compose run --build --rm security-audit` — Offline-Audit der eigenen `Cargo.lock`.
 - `cargo fmt --all -- --check` und `cargo clippy --locked --all-targets -- -D warnings`.
 - `cargo test --locked --no-default-features` — Kern, Windows-Lesegrenze, IPC, E2E.
 - `.\build.ps1 -NoRun` — Tests plus nativer Release-Build.

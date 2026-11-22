@@ -20,24 +20,6 @@ expires = "2026-12-31"
 reason = "rusqlite =0.40.2 (SQLite 3.53.2, CVE-2026-119375) ist im Vertrag gepinnt; Upgrade auf rusqlite 0.41.0 mit Migrations-/Backup-/Recovery-Abnahme offen (docs/IMPLEMENTIERUNGSPLAN.md)."
 
 [[advisory]]
-id = "RUSTSEC-2026-0414"
-crate = "pulldown-cmark"
-version = "0.13.4"
-scope = "windows-build"
-kind = "vulnerability"
-expires = "2026-12-31"
-reason = "Transitiv über Slint 1.18.1; setzt aktivierte Wikilinks voraus. Update auf >= 0.13.6 mit Slint-/Lockfile-Pflege geplant."
-
-[[advisory]]
-id = "RUSTSEC-2026-0433"
-crate = "pulldown-cmark"
-version = "0.13.4"
-scope = "windows-build"
-kind = "vulnerability"
-expires = "2026-12-31"
-reason = "Transitiv über Slint 1.18.1; setzt aktivierte Wikilinks voraus. Update auf >= 0.13.6 mit Slint-/Lockfile-Pflege geplant."
-
-[[advisory]]
 id = "RUSTSEC-2026-0543"
 crate = "chrono"
 version = "0.4.45"

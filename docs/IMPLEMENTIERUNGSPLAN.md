@@ -2,7 +2,7 @@
 
 **Ziel:** Lokale, performante Windows-10/11-Tray-Anwendung für Entwicklungsressourcen.
 **Stack:** Rust, Slint und SQLite. **Lizenz:** GPL-3.0-only.
-**Stand:** 1. November 2026. Am 1. November 2026 ersetzte eine Projektseite den Projekt- und den Aufräumen-Dialog (Speicherbalken, Aufräumliste mit Auswahl je Ordner, Schutz, KI-Zugriff, datierter Verlauf); die abgestimmte Reihenfolge der nächsten Schritte steht in Abschnitt 10. Am 31. Oktober 2026 wurde die Bereinigung [projektbewusster](PROJEKTBEWUSSTE-BEREINIGUNG.md): Ordner mit Dateien, die der Git-Index führt, behaltene Ordner (Schema v8), Reste von KI-Agenten, Artefakte registrierter KI-Läufe und Ordner, die ein Container einbindet, sind nie wiederherstellbar; ausgeführte Pläne messen den freien Speicher vorher und nachher. Dazu kamen auf Wunsch registrierte KI-Läufe, ein schreibgeschütztes Docker-Inventar lokaler Kontexte und ein gespeicherter Verlauf der Aufräumberichte (Schema v9). Schema v10 bringt die Freigabe beendeter Läufe durch die Person und die Überwachung registrierter Datenbanken (Datei, Datenordner, Docker-Volume; nur Metadaten, gehalten, mit Größenverlauf); Hardlinks ab 64 KiB belegen im Bericht nur einmal Platz. Die Basis F-01 bis F-28 ist innerhalb der veröffentlichten Unterstützungsmatrix implementiert. Hinzu kommen Systembefund, persönliche KI-Konfiguration und [Entwicklungsfunde mit Zuordnung, Testordnern, Laufwerksdashboard und Skill-Inhaltsansicht](ENTWICKLUNGSFUNDE.md). Am 25. Oktober 2026 kamen 29 statische Adapter hinzu; seither erfasst mogumogu 35 Paketmanager und fünf weitere Abhängigkeitsarten (Laufzeit- und Werkzeugvorgaben, Container-Images, GitHub Actions, pre-commit-Hooks, Git-Submodule), alle `experimentell`. Am 30. Oktober 2026 kam die [Speicheranalyse](ENTWICKLUNGSFUNDE.md#speicheranalyse) hinzu: Ordnergrößen, größte Dateien, Dateitypen, Duplikat-Kandidaten und Flächenkarte unter eigener Metadatenfreigabe (Schema v7). Am 20. Oktober 2026 wurden verwaltete Läufe, Sessions und das Anlegen von Scratchpads entfernt; Bereinigung verschiebt seither nur wiederherstellbar belegte Ordner in den Papierkorb (F-22 bis F-24). Automatische Zweckbestimmung, vollständige Manager-/Override-Erkennung, Windows-11-Abnahme, unabhängiger Review G5 des Papierkorb-Wegs und manuelle Desktopprüfungen bleiben offen.
+**Stand:** 22. November 2026. Am 21. November 2026 kamen der optionale [Schwachstellen-Watcher](SCHWACHSTELLEN.md) als eigenständiges Python-Paket und der Offline-Audit der eigenen `Cargo.lock` hinzu; Befunde und offene Prüfungen stehen in Abschnitt 10. Am 1. November 2026 ersetzte eine Projektseite den Projekt- und den Aufräumen-Dialog (Speicherbalken, Aufräumliste mit Auswahl je Ordner, Schutz, KI-Zugriff, datierter Verlauf); die abgestimmte Reihenfolge der nächsten Schritte steht in Abschnitt 10. Am 31. Oktober 2026 wurde die Bereinigung [projektbewusster](PROJEKTBEWUSSTE-BEREINIGUNG.md): Ordner mit Dateien, die der Git-Index führt, behaltene Ordner (Schema v8), Reste von KI-Agenten, Artefakte registrierter KI-Läufe und Ordner, die ein Container einbindet, sind nie wiederherstellbar; ausgeführte Pläne messen den freien Speicher vorher und nachher. Dazu kamen auf Wunsch registrierte KI-Läufe, ein schreibgeschütztes Docker-Inventar lokaler Kontexte und ein gespeicherter Verlauf der Aufräumberichte (Schema v9). Schema v10 bringt die Freigabe beendeter Läufe durch die Person und die Überwachung registrierter Datenbanken (Datei, Datenordner, Docker-Volume; nur Metadaten, gehalten, mit Größenverlauf); Hardlinks ab 64 KiB belegen im Bericht nur einmal Platz. Die Basis F-01 bis F-28 ist innerhalb der veröffentlichten Unterstützungsmatrix implementiert. Hinzu kommen Systembefund, persönliche KI-Konfiguration und [Entwicklungsfunde mit Zuordnung, Testordnern, Laufwerksdashboard und Skill-Inhaltsansicht](ENTWICKLUNGSFUNDE.md). Am 25. Oktober 2026 kamen 29 statische Adapter hinzu; seither erfasst mogumogu 35 Paketmanager und fünf weitere Abhängigkeitsarten (Laufzeit- und Werkzeugvorgaben, Container-Images, GitHub Actions, pre-commit-Hooks, Git-Submodule), alle `experimentell`. Am 30. Oktober 2026 kam die [Speicheranalyse](ENTWICKLUNGSFUNDE.md#speicheranalyse) hinzu: Ordnergrößen, größte Dateien, Dateitypen, Duplikat-Kandidaten und Flächenkarte unter eigener Metadatenfreigabe (Schema v7). Am 20. Oktober 2026 wurden verwaltete Läufe, Sessions und das Anlegen von Scratchpads entfernt; Bereinigung verschiebt seither nur wiederherstellbar belegte Ordner in den Papierkorb (F-22 bis F-24). Automatische Zweckbestimmung, vollständige Manager-/Override-Erkennung, Windows-11-Abnahme, unabhängiger Review G5 des Papierkorb-Wegs und manuelle Desktopprüfungen bleiben offen.
 
 ## 1. Produkt und Grenze
 
@@ -42,7 +42,7 @@ Formulare und Modellabbildung; jede Slint-Seite liegt in einer eigenen Datei.
 | Tray, Fensterlebenszyklus, Dashboard | `src/main.rs`, `src/desktop/`, `ui/` | Sechs Ansichten im Mochi-Wolke-Design, Projekt hinzufügen in drei Schritten, Suche über alle Bereiche, Erfassungsfortschritt mit Abbruch, Tray mit Statuszeile; Dialoge, Tastaturnavigation, gemeinsame Auswahl-/Hover-/Druck-/Fokuszustände; Lokalmodus als Startstandard |
 | Besitzerprozess und IPC | `src/owner.rs`, `src/ipc/`, `src/platform/windows.rs` | Ein Worker, Named Pipe (nur aktueller Benutzer, nur lokal, erste Instanz), Protokollversion, 1-MiB-Limit |
 | Kern und Anwendungsfälle | `src/service/`, `src/domain/` | Typisierte Zustände und Zustandsautomaten; gemeinsame Anwendungsfälle für UI und CLI |
-| SQLite | `src/storage/`, `migrations/` | Schema v4 (Benutzer-Freigaben), Sicherung vor Migration; ausgewählte Paketkanten und versions-/quellengebundener Cache; bestehendes Journal unverändert |
+| SQLite | `src/storage/`, `migrations/` | Schema v10 (Migrationen 001–010), Sicherung vor jeder Migration; Paketkanten, versions-/quellengebundener Cache, Papierkorb-Pläne mit Journal je Ordner, behaltene Ordner, Läufe, Docker-Kontexte, Berichtsverlauf und überwachte Datenbanken (Abschnitt 6) |
 | Sichere Lesegrenze | `src/fsread.rs`, `src/platform/` | Identitätsgebundene Freigaben, `NtCreateFile` relativ zum Elternhandle, keine Reparse Points/Platzhalter |
 | Inventar | `src/inventory/`, `src/adapters/`, `src/parsers/`, `src/profiles/` | 40 statische Adapter (35 Paketmanager, fünf weitere Abhängigkeitsarten), zwölf KI-Profile, begrenzte Parser, Datenminimierung |
 | Prüfregeln und Bereinigung | `src/review.rs`, `src/cleanup/` | Hinweise mit Evidenz; Papierkorb-Plan aus dem Aufräumbericht, Planbindung per Fingerabdruck, Journal je Ordner, Abgleich nach Absturz |
@@ -68,7 +68,7 @@ Navigation, Filter, Schaltflächen und Listenzeilen teilen zentrale Zustandsfarb
 
 Die Projektgröße der Übersicht summiert nur gemessene Projekte und nennt die Zahl der ungemessenen; gemessen werden nur freigegebene Bereiche und Ordner, die eine frühere Version angelegt hat. Eine Prüfung heißt nie „sicher bereinigbar“.
 
-Die HTML-Vorschau erlaubt schnelle Abstimmung. Slint ist die Produktionsoberfläche. Beide verwenden dieselbe JSON-Fixture, aber kein gemeinsames Web-Laufzeitsystem.
+Slint ist die einzige Oberfläche. Bilder zur Abstimmung entstehen mit synthetischen Daten im nativen Renderer (`design/screens/render.ps1`), nicht in einem Nachbau.
 
 ## 5. Meilensteine und Arbeitspakete
 
@@ -243,8 +243,8 @@ Abgestimmte Reihenfolge seit dem 1. November 2026: Der Zweck „Arbeit behalten,
    (Datenalter, Advisory-ID, betroffene Version, Scope, Befristung), der isolierte
    Offline-Container `security-audit` und der wöchentliche/Lockfile-gebundene
    Workflow [security-audit.yml](../.github/workflows/security-audit.yml).
-   Weiterhin offen: Upgrade der getriagten Windows-Abhängigkeiten (`rusqlite 0.41.0`,
-   `pulldown-cmark 0.13.6`), verifizierbare Signatur oder Attestation zwischen
+   Weiterhin offen: Upgrade der getriagten Windows-Abhängigkeit `rusqlite 0.41.0`
+   (Triage-Frist 31. Dezember 2026), verifizierbare Signatur oder Attestation zwischen
    Prüfsumme und Herausgebernachweis für heruntergeladene Builds sowie ein privater
    Meldeweg vor der Beta. [Windows-CI](../.github/workflows/windows.yml)
    [Sicherheitsmeldungen](../SECURITY.md) [RustSec](https://rustsec.org/)
@@ -270,9 +270,10 @@ fünf dieser IDs dem Windows-Build zu.
   `libsqlite3-sys 0.39.0` und ist im gebündelten SQLite ab `rusqlite 0.41.0`
   verfügbar. Prüfe nach dem Upgrade Migration, Sicherung, Wiederanlauf und
   genau die SQLite-Version im ausgelieferten Build. [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459.html)
-- **Markdown-Parser aktualisieren.** Der Slint-Abhängigkeitsgraph umfasst
-  `pulldown-cmark 0.13.4`. Beide Advisories setzen aktivierte Wikilinks voraus.
-  `0.13.6` enthält beide Fixes. [RUSTSEC-2026-0414](https://rustsec.org/advisories/RUSTSEC-2026-0414.html)
+- **Markdown-Parser aktualisiert.** Der Slint-Abhängigkeitsgraph umfasste
+  `pulldown-cmark 0.13.4`; seit dem 22. November 2026 steht `0.13.6` mit beiden
+  Fixes in `Cargo.lock` (nur Lockfile, Slint 1.18.1 unverändert), und die beiden
+  Triage-Einträge sind entfernt. [RUSTSEC-2026-0414](https://rustsec.org/advisories/RUSTSEC-2026-0414.html)
   [RUSTSEC-2026-0433](https://rustsec.org/advisories/RUSTSEC-2026-0433.html)
 - **Wartungsstatus mitführen.** Die beiden übrigen Windows-Treffer betreffen
   die fehlende Pflege der transitiven Crates `chrono` und `pin-utils`.

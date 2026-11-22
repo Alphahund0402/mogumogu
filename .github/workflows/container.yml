@@ -20,4 +20,4 @@ jobs:
         run: docker build --target validated --progress plain .
 
 # Linux checks complement the Windows workflow. They cannot exercise Named
-# Pipes, handle-relative filesystem access, Job Objects or the native UI.
+# Pipes, handle-relative filesystem access, the recycle bin or the native UI.

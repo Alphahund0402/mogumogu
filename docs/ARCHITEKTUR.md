@@ -174,13 +174,46 @@ sie ab. Der Index liegt in `Core::disk_index`, nicht in SQLite und nicht im
 Snapshot; Widerruf, eine neue Analyse und das Schließen des Dashboards geben ihn
 frei. `Request::StoragePage` liest nur diesen Index.
 
+## Schwachstellen-Watcher
+
+Der Watcher ist ein eigener, optionaler Prozess und kein Teil der beiden
+Programme: das Python-Paket [mogumogu-advisories](../packages/mogumogu-advisories/README.md)
+(nur Standardbibliothek), aufgerufen über die Hüllen
+[watch_advisories.py](../scripts/watch_advisories.py),
+[audit_cargo_lock.py](../scripts/audit_cargo_lock.py) und
+[advisory_report.py](../scripts/advisory_report.py).
+
+```mermaid
+flowchart LR
+    watcher["Watcher (Python)"] -->|"mogumogu-cli --no-start --json advisories …"| owner["Besitzerprozess"]
+    owner -->|"veröffentlichte Generationen"| watcher
+    watcher -->|"inventory.json in einem Temp-Ordner"| osv["osv-scanner --offline"]
+    feeds["OSV-Archive (all.zip)"] -.->|"nur refresh"| watcher
+```
+
+- Mit mogumogu spricht der Watcher nur über die CLI, ohne den Besitzer zu
+  starten. `Request::AdvisoryInventory` und `Request::AdvisoryProjects`
+  ([service/advisories.rs](../src/service/advisories.rs)) lesen veröffentlichte
+  Inventargenerationen seitenweise mit Basis-Token. Sie erfassen keine Wurzel
+  und laden nichts. Nur `check --scan` stößt vorher `scan --scope` für
+  freigegebene Projekte an.
+- Netzwerk nutzt nur der Watcher und nur auf ausdrücklichen Befehl: `refresh`
+  lädt `all.zip` je Ökosystem von `osv-vulnerabilities.storage.googleapis.com`
+  (Weiterleitungen abgelehnt, Größen- und Zeitlimits, Archivprüfung vor dem
+  Ersetzen). `fetch-scanner` und `audit --update` laden den festgelegten
+  OSV-Scanner von den GitHub-Releases und prüfen SHA-256.
+- Programme startet nur der Watcher: den angegebenen `osv-scanner` offline mit
+  einer temporären Paketliste und `mogumogu-cli`. Projektpfade und
+  Registry-Hosts verlassen das Inventar nicht.
+
 ## Änderungen gezielt beginnen
 
 Neue Befehle beginnen bei `service/request.rs` und dem passenden Fachmodul:
 `inventory` für Freigaben/Scans/Fundstellen, `discovery` für Projektkandidaten,
 `system` für den Systembefund, `search` für die bereichsübergreifende Suche,
 `packages` für Paketprüfung, `resources` für Scratchpads/Schutz/Prüfliste,
-`tidy` für den Aufräumbericht, `filters` für den Kontextfilter und
+`tidy` für den Aufräumbericht, `filters` für den Kontextfilter,
+`advisories` für die Versionsbelege des Watchers und
 `maintenance` für Einstellungen/Sicherung/Papierkorb-Pläne.
 Öffentliche Typen bleiben über `service` erreichbar; interne Helfer bleiben privat.
 
@@ -189,7 +222,8 @@ Für eine UI-Änderung zuerst [desktop/actions.rs](../src/desktop/actions.rs),
 Für ein neues Paketformat beim Adaptervertrag beginnen. Schemaänderungen
 erhalten eine neue Migration und einen Sicherungs-/Migrationstest.
 
-Prüfeinstieg ist `python scripts/check.py`; er prüft Modulverträge, Formatierung,
+Prüfeinstieg ist `python scripts/check.py`; er prüft Modulverträge, die
+Python-Tests von `scripts/` und `packages/mogumogu-advisories/`, Formatierung,
 Clippy, den Kern und unter Windows die native
 UI-Kompilierung. Fachliche Regressionen liegen unter `tests/`; die
 Referenzlast ist [tests/performance.rs](../tests/performance.rs).
