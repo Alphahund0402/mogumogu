@@ -642,6 +642,17 @@ impl Desktop {
                 let text = self.status.clone();
                 self.notify(&text, "ok");
             }
+            Request::ScratchPlansInside { allowed, .. } => {
+                self.close_modal();
+                self.status = if allowed {
+                    "Erzeugtes im Scratchpad darf in Papierkorb-Pläne; das Scratchpad bleibt geschützt."
+                } else {
+                    "Erzeugtes im Scratchpad ist wieder geschützt."
+                }
+                .into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+            }
             Request::ReactivateProject { .. } => {
                 self.close_modal();
                 self.status = "Projekt reaktiviert.".into();

@@ -128,6 +128,7 @@ fn resource(id: i64, project: i64, name: &str, path: &str, kind: ResourceKind, p
         purpose: None,
         review_at: None,
         created_at: Some(now - 12 * DAY),
+        plans_inside: false,
     }
 }
 
@@ -842,6 +843,15 @@ fn main() {
     store.invoke_open(6, 0);
     renderer.shot("19-projekt-abgeschlossen", 1080, 680, 1.0);
     view::render_snapshot(&ui, &snapshot, "", &state());
+    // A protected scratchpad: its dialog, then what allowing plans inside means.
+    if let Some(scratch) = snapshot.resources.iter().find(|r| r.kind == ResourceKind::Scratchpad && r.protected) {
+        store.invoke_open(1, 1);
+        show_dialog(&ui, dialogs::resource(&snapshot, scratch));
+        renderer.shot("20-scratchpad", 1080, 680, 1.0);
+        show_dialog(&ui, dialogs::scratch_inside(scratch));
+        renderer.shot("20-scratchpad-zulassen", 1080, 680, 1.0);
+        store.set_modal(0);
+    }
     store.invoke_open(0, 0);
     show_dialog(&ui, dialogs::message("Hilfe", dialogs::HELP));
     renderer.shot("17-hilfe", 1080, 680, 1.0);

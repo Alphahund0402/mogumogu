@@ -22,7 +22,11 @@ impl Core {
         let owners: Vec<OwnerLink> = self.repo.owners()?.into_iter().filter(|o| o.resource_id == resource_id).collect();
         let children = self.repo.children(resource_id)?;
         let hints = self.review()?.into_iter().filter(|h| h.resource_id == resource_id).collect();
-        let protection = if resource.protected {
+        let protection = if resource.protected && resource.plans_inside {
+            "Geschützt; wiederherstellbar belegte Ordner darin dürfen auf deinen Wunsch in Papierkorb-Pläne, \
+             das Scratchpad selbst und alles unter „Prüfen“ nicht."
+                .into()
+        } else if resource.protected {
             "Geschützt. Registrierung, Alter oder fehlende Nutzung belegen keine Entbehrlichkeit.".into()
         } else {
             "Nicht geschützt. Entfernt wird trotzdem nur über einen bestätigten Plan.".into()
@@ -40,6 +44,13 @@ impl Core {
 
     pub fn protect(&mut self, resource_id: i64) -> Result<()> {
         self.repo.protect(resource_id)
+    }
+
+    /// Lets recoverable folders inside a protected scratchpad into recycle-bin
+    /// plans (`allowed`), or protects them again. Allowing is the person's
+    /// decision in the dashboard; the owner refuses it over the pipe.
+    pub fn scratch_plans_inside(&mut self, resource_id: i64, allowed: bool) -> Result<()> {
+        self.repo.set_plans_inside(resource_id, allowed)
     }
 
     pub fn extend_review(&mut self, resource_id: i64, days: i64) -> Result<Timestamp> {

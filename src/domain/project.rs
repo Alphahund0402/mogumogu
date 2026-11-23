@@ -51,6 +51,11 @@ pub struct Resource {
     pub review_at: Option<Timestamp>,
     #[serde(default)]
     pub created_at: Option<Timestamp>,
+    /// A protected scratchpad whose recoverable folders inside may go into a
+    /// recycle-bin plan; the person switches it on in the dashboard only.
+    /// The scratchpad itself and everything under "Prüfen" stay protected.
+    #[serde(default)]
+    pub plans_inside: bool,
 }
 
 fn default_acquisition() -> Acquisition {

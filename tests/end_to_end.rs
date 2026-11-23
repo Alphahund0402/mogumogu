@@ -309,3 +309,35 @@ fn only_the_dashboard_finishes_a_project_and_the_cli_reactivates_it() {
     let history = ok(cli(&f.data, &["project", "lifecycle", "--project", &project_id]));
     assert_eq!((history[0]["state"].as_str(), history[1]["state"].as_str()), (Some("active"), Some("finished")));
 }
+
+#[test]
+fn only_the_dashboard_opens_a_scratchpad_for_plans_and_the_cli_closes_it() {
+    let f = fixture("scratch-inside");
+    let (dashboard, _bin) = start_dashboard(&f.data);
+    let web = f.root.join("web");
+    write(&web, "package.json", "{}");
+    write(&web, "spike/run.py", "print(1)");
+    let project_id = approved_project(&f.data, &web);
+    let spike = path_text(&web.join("spike"));
+    let registered =
+        ok(cli(&f.data, &["scratch", "register", "--project", &project_id, "--name", "spike", "--path", &spike]));
+    let id = id(&registered, "resource_id");
+    let opened = |data: &Path| {
+        let listed = ok(cli(data, &["list"]));
+        listed["resources"].as_array().unwrap().iter().find(|r| r["id"] == id).unwrap()["plans_inside"].clone()
+    };
+    assert_eq!(opened(&f.data), false);
+
+    // Opening loosens protection: refused over the pipe, the CLI does not offer it.
+    let config = mogumogu::config::Config::new(Some(f.data.clone()), false).unwrap();
+    let client = mogumogu::ipc::Client::new(&config).unwrap();
+    let refused = client.call(Request::ScratchPlansInside { resource_id: id, allowed: true });
+    assert!(matches!(refused, Err(mogumogu::Error::Blocked(_))), "{refused:?}");
+    assert_eq!(opened(&f.data), false);
+
+    dashboard.send(Request::ScratchPlansInside { resource_id: id, allowed: true }).unwrap();
+    assert_eq!(opened(&f.data), true);
+    // Closing again only adds protection, so the CLI may.
+    ok(cli(&f.data, &["scratch", "protect-inside", "--resource", &id.to_string()]));
+    assert_eq!(opened(&f.data), false);
+}

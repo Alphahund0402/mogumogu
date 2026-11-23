@@ -1,6 +1,6 @@
 //! Where a plan may act, and the verified way to one folder. Every open
 //! below the approved root is handle-relative and never follows a link.
-use crate::domain::{Hold, Resource, holding};
+use crate::domain::{Hold, Resource, ResourceKind, holding};
 use crate::fsread::{self, Budget, ScopeRoot};
 use crate::inventory::git::{self, GitState};
 use crate::inventory::tidy;
@@ -92,13 +92,23 @@ pub(super) fn allowed(roots: &[(String, FileIdentity)], path: &str, identity: Fi
 }
 
 /// Protection wins: a protected resource in the folder, at it or above it
-/// keeps the folder where it is.
+/// keeps the folder where it is. The one exception: a scratchpad the person
+/// opened for plans (`plans_inside`, switched on in the dashboard only) lets
+/// folders strictly inside it pass this check. They still need their
+/// recovery evidence, Git state, holds and keeps like any other folder; the
+/// scratchpad itself, a folder holding it and every other protected resource
+/// still keep their folders. Every spelling is checked on its own.
 pub(super) fn unprotected(resources: &[Resource], paths: &[&str]) -> Result<(), String> {
     let normal = |path: &str| path.trim_end_matches('\\').to_lowercase();
     for resource in resources.iter().filter(|r| r.protected) {
         let kept = normal(&resource.path);
+        let opened = resource.plans_inside && resource.kind == ResourceKind::Scratchpad;
         for path in paths.iter().map(|p| normal(p)) {
-            if path == kept || path.starts_with(&format!("{kept}\\")) || kept.starts_with(&format!("{path}\\")) {
+            let inside = path.starts_with(&format!("{kept}\\"));
+            if inside && opened {
+                continue;
+            }
+            if path == kept || inside || kept.starts_with(&format!("{path}\\")) {
                 return Err(format!("Geschützte Ressource „{}“ liegt darin, daran oder darüber.", resource.name));
             }
         }
@@ -344,7 +354,60 @@ fn contents_clear(folder: DirHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::plain_name;
+    use super::{plain_name, unprotected};
+    use crate::domain::{Acquisition, Observation, Origin, Resource, ResourceKind};
+
+    fn resource(path: &str, kind: ResourceKind, protected: bool, plans_inside: bool) -> Resource {
+        Resource {
+            id: 1,
+            project_id: Some(1),
+            name: "spike".into(),
+            path: path.into(),
+            kind,
+            bytes: None,
+            state: Observation::Unknown,
+            evidence: String::new(),
+            protected,
+            origin: Origin::Registered,
+            acquisition: Acquisition::Registered,
+            parent_id: None,
+            purpose: None,
+            review_at: None,
+            created_at: None,
+            plans_inside,
+        }
+    }
+
+    #[test]
+    fn an_opened_scratchpad_lets_only_folders_strictly_inside_through() {
+        let opened = [resource(r"C:\dev\app\spike", ResourceKind::Scratchpad, true, true)];
+        let inside = r"C:\dev\app\spike\node_modules";
+        assert!(unprotected(&opened, &[inside]).is_ok());
+        assert!(unprotected(&opened, &[r"c:\DEV\app\Spike\web\dist\"]).is_ok(), "case and a trailing slash");
+        for kept in [r"C:\dev\app\spike", r"C:\dev\app\spike\", r"C:\dev\app", r"C:\dev"] {
+            assert!(unprotected(&opened, &[kept]).is_err(), "{kept}: the scratchpad or a folder holding it");
+        }
+        // Every spelling on its own: one inside, one at the scratchpad is refused.
+        assert!(unprotected(&opened, &[inside, r"C:\dev\app\spike"]).is_err());
+        // A prefix of the name is not "inside".
+        assert!(unprotected(&opened, &[r"C:\dev\app\spike2\node_modules"]).is_ok());
+    }
+
+    #[test]
+    fn everything_else_keeps_protecting_as_before() {
+        let inside = [r"C:\dev\app\spike\node_modules"];
+        let closed = [resource(r"C:\dev\app\spike", ResourceKind::Scratchpad, true, false)];
+        assert!(unprotected(&closed, &inside).is_err(), "not opened");
+        let not_scratch = [resource(r"C:\dev\app\spike", ResourceKind::Environment, true, true)];
+        assert!(unprotected(&not_scratch, &inside).is_err(), "only scratchpads can be opened");
+        let nested = [
+            resource(r"C:\dev\app\spike", ResourceKind::Scratchpad, true, true),
+            resource(r"C:\dev\app\spike\node_modules\patched", ResourceKind::Environment, true, false),
+        ];
+        assert!(unprotected(&nested, &inside).is_err(), "a protected resource inside still keeps the folder");
+        let unprotected_scratch = [resource(r"C:\dev\app\spike", ResourceKind::Scratchpad, false, false)];
+        assert!(unprotected(&unprotected_scratch, &inside).is_ok(), "only protected resources hold");
+    }
 
     #[test]
     fn names_the_shell_could_read_differently_are_refused() {

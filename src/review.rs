@@ -124,6 +124,7 @@ mod tests {
             purpose: None,
             review_at,
             created_at: Some(created),
+            plans_inside: false,
         }
     }
 

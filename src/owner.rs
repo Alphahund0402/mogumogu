@@ -267,6 +267,15 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: Arc<Mutex<impl OwnerEven
                             )));
                         }
                     }
+                    // Letting generated folders inside a scratchpad into plans loosens
+                    // its protection: the person's decision, in its resource dialog.
+                    Request::ScratchPlansInside { allowed: true, .. } if !from_ui => {
+                        if let Some(reply) = reply {
+                            let _ = reply.send(Err(crate::Error::blocked(
+                                "Erzeugtes in einem Scratchpad zulassen geht nur im Dashboard (Projekte → Ressourcen → Scratchpad).",
+                            )));
+                        }
+                    }
                     // Moving folders is the person's decision: over the pipe a plan
                     // can be made, cancelled and reconciled, but never bound to its
                     // fingerprint or run, even with the right one.

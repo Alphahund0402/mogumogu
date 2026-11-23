@@ -1,9 +1,10 @@
 # Projekt abschließen: Spezifikation
 
 Stand: 23. November 2026. Die Entscheidungen in [Abschnitt 8](#8-entscheidungen)
-sind getroffen. **Umgesetzt sind Schritt 1 und 2**: der Abschlussbericht und der Zustand
-„abgeschlossen“ mit Verlauf ([Abschnitt 9](#9-reihenfolge)); der
-Scratchpad-Schalter folgt.
+sind getroffen. **Umgesetzt sind alle drei Schritte**: der Abschlussbericht, der Zustand
+„abgeschlossen“ mit Verlauf und der Scratchpad-Schalter
+([Abschnitt 9](#9-reihenfolge)). Der Schalter lockert eine Schutzregel und
+wartet auf den zweiten Review.
 
 ![Abschlussbericht auf der Projektseite, native Darstellung mit Beispieldaten](screenshots/abschlussbericht.png)
 
@@ -99,11 +100,25 @@ globale Caches und Werkzeuge, die nur dieses Projekt nutzte, sobald es
 
 ## 5. Scratchpads
 
-Heute hält ein geschütztes Scratchpad jeden Plan für Ordner darin auf, auch
-`node_modules` neben einem Lockfile ([gate.rs](../src/cleanup/gate.rs),
+Bis Schritt 3 hielt ein geschütztes Scratchpad jeden Plan für Ordner darin auf,
+auch `node_modules` neben einem Lockfile ([gate.rs](../src/cleanup/gate.rs),
 `unprotected`). Der Plan fragt, wie ein geschütztes Scratchpad Pläne darin
 zulassen kann. Nach E4 gilt Option B, mit zweitem Review; A bleibt die
-Rückfallebene:
+Rückfallebene. **Umgesetzt (Schritt 3, zweiter Review offen):** ein Schalter je
+Scratchpad (`resources.plans_inside`, Schema v12, aus nach dem Upgrade), im
+Dashboard unter **Projekte → Ressourcen → Scratchpad → Erzeugtes darin zulassen …**
+mit einer Erklärung vor dem Zulassen. `unprotected` lässt dann nur Ordner
+**echt darin** durch; jede Schreibweise wird einzeln geprüft, das Scratchpad
+selbst und ein Ordner, der es enthält, bleiben gesperrt, ebenso jede andere
+geschützte Ressource darin. Beleg, Git-Stand, Haltungen und behaltene Ordner
+gelten wie immer, und der Executor prüft vor jedem Verschieben erneut: Wer den
+Schalter nach der Bestätigung und vor der Ausführung zurücknimmt, stoppt den
+Plan; einen schon laufenden Plan hält das nicht an, weil der Besitzerprozess
+einen Auftrag nach dem anderen ausführt. Nur ein geschütztes Scratchpad lässt
+sich öffnen, und „Schützen“ schließt es wieder. Über die Pipe lehnt `owner.rs`
+das Zulassen ab; zurücknehmen geht auch per `scratch protect-inside`. Auch als
+Scratchpad übernommene Teilprojekte (Funde der Art „Projekt“) haben den
+Schalter; Öffnen lässt dann Wiederherstellbares im ganzen Teilprojekt zu.
 
 - **A. Bleibt so.** Am sichersten und einfachsten; Erzeugtes in Scratchpads
   räumst du selbst auf.
@@ -167,4 +182,10 @@ Am 23. November 2026 so entschieden, wie empfohlen.
    `finishing_binds_the_report_changes_no_protection_and_reactivating_undoes_only_the_state`,
    `only_the_dashboard_finishes_a_project_and_the_cli_reactivates_it` und
    `v10_projects_stay_active_and_the_lifecycle_table_refuses_odd_rows`.
-3. **Scratchpads** nach E4, mit zweitem Review.
+3. **Scratchpads** nach E4, mit zweitem Review. **Umgesetzt am 23. November
+   2026, Review offen**, Tests `an_opened_scratchpad_lets_only_folders_strictly_inside_through`,
+   `everything_else_keeps_protecting_as_before`,
+   `an_opened_scratchpad_lets_only_recoverable_folders_inside_go`,
+   `only_the_dashboard_opens_a_scratchpad_for_plans_and_the_cli_closes_it`,
+   `v11_scratchpads_stay_closed_and_only_scratchpads_can_be_opened` und der
+   Vertrag `test_loosening_protection_and_deciding_stay_with_the_person`.

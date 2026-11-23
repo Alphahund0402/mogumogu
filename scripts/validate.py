@@ -327,6 +327,21 @@ class Contracts(unittest.TestCase):
         self.assertEqual(project['project']['dependencies'], [])
         self.assertEqual(project['build-system']['requires'], [])
 
+    def test_loosening_protection_and_deciding_stay_with_the_person(self):
+        # Ending or loosening protection, approving or running a plan and
+        # finishing a project are refused over the pipe (owner.rs); the CLI
+        # never sends them. Lexical, like the other contracts.
+        owner = production_rust((ROOT / 'src/owner.rs').read_text(encoding='utf-8'))
+        for request in ['Request::RunRelease', 'Request::DbUnregister', 'Request::KeepFolder { keep: false',
+                        'Request::DockerRevoke', 'Request::RunsAllow { allowed: true }',
+                        'Request::ScratchPlansInside { allowed: true', 'Request::CleanupApprove',
+                        'Request::CleanupApply', 'Request::FinishProject']:
+            self.assertIn(request, owner)
+        cli = production_rust((ROOT / 'src/bin/cli/commands.rs').read_text(encoding='utf-8'))
+        self.assertNotIn('Request::FinishProject', cli)
+        opened = re.findall(r'ScratchPlansInside \{[^}]*\}', cli)
+        self.assertTrue(opened and all('allowed: false' in found for found in opened), opened)
+
     def test_every_unsafe_block_is_documented(self):
         text = (ROOT / 'src/platform/windows.rs').read_text(encoding='utf-8')
         lines = text.splitlines()

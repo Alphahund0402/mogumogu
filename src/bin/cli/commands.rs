@@ -57,6 +57,8 @@ Projekte und Lesefreigaben (Registrierung ≠ Lesefreigabe)
 Scratchpads
   scratch register|adopt --project ID --name NAME --path PFAD [--purpose TEXT]
   scratch protect|promote --resource ID
+  scratch protect-inside --resource ID   Erzeugtes im Scratchpad wieder aus jedem Plan nehmen
+                                         (zulassen nur im Dashboard)
   scratch extend --resource ID --days N
   scratch adopt-found                    alle gefundenen Scratchpads geschützt übernehmen
 
@@ -337,6 +339,10 @@ pub fn parse(args: &[String]) -> Result<Action> {
                 _ => Request::Promote { resource_id },
             };
             call(request, View::Json)
+        }
+        ["scratch", "protect-inside", ..] => {
+            let resource_id = opts(rest(2), &["--resource"])?.id("--resource")?;
+            call(Request::ScratchPlansInside { resource_id, allowed: false }, View::Json)
         }
         ["scratch", "adopt-found"] => call(Request::AdoptScratchpads, View::Json),
         ["scratch", "extend", ..] => {

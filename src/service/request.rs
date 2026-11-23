@@ -71,6 +71,12 @@ pub enum Request {
     Protect {
         resource_id: i64,
     },
+    /// Lets recoverable folders inside a protected scratchpad into plans
+    /// (`allowed`), or protects them again. Allowing is dashboard only.
+    ScratchPlansInside {
+        resource_id: i64,
+        allowed: bool,
+    },
     Extend {
         resource_id: i64,
         days: i64,
@@ -388,6 +394,10 @@ impl Core {
             Protect { resource_id } => {
                 self.protect(resource_id)?;
                 json!({ "protected": resource_id })
+            }
+            ScratchPlansInside { resource_id, allowed } => {
+                self.scratch_plans_inside(resource_id, allowed)?;
+                json!({ "resource_id": resource_id, "plans_inside": allowed })
             }
             Extend { resource_id, days } => json!({ "review_at": self.extend_review(resource_id, days)? }),
             Promote { resource_id } => json!({ "project_id": self.promote(resource_id)? }),

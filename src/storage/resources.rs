@@ -26,8 +26,13 @@ fn map_resource(row: &Row<'_>) -> rusqlite::Result<Resource> {
         purpose: row.get(12)?,
         review_at: row.get(13)?,
         created_at: row.get(14)?,
+        plans_inside: row.get(15)?,
     })
 }
+
+/// The columns `map_resource` reads, shared so no query drifts from it.
+const RESOURCE_COLUMNS: &str = "id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
+    acquisition, parent_id, purpose, review_at, created_at, plans_inside";
 
 pub(super) fn require_project(tx: &Transaction<'_>, project_id: i64) -> Result<()> {
     let exists: bool =
@@ -215,16 +220,14 @@ impl Repository {
     }
 
     pub fn resources(&mut self) -> Result<Vec<Resource>> {
-        const SQL: &str = "SELECT id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
-            acquisition, parent_id, purpose, review_at, created_at FROM resources ORDER BY id LIMIT ?1";
-        self.query(SQL, [limits::MAX_RESOURCES], map_resource)
+        let sql = format!("SELECT {RESOURCE_COLUMNS} FROM resources ORDER BY id LIMIT ?1");
+        self.query(&sql, [limits::MAX_RESOURCES], map_resource)
     }
 
     pub fn resource(&mut self, id: i64) -> Result<Resource> {
-        const SQL: &str = "SELECT id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
-            acquisition, parent_id, purpose, review_at, created_at FROM resources WHERE id = ?1";
+        let sql = format!("SELECT {RESOURCE_COLUMNS} FROM resources WHERE id = ?1");
         self.read(|tx| {
-            let mut stmt = tx.prepare_cached(SQL)?;
+            let mut stmt = tx.prepare_cached(&sql)?;
             stmt.query_row([id], map_resource)
                 .optional()?
                 .ok_or_else(|| Error::not_found("Ressourcen-ID nicht gefunden."))
@@ -232,9 +235,8 @@ impl Repository {
     }
 
     pub fn children(&mut self, parent_id: i64) -> Result<Vec<Resource>> {
-        const SQL: &str = "SELECT id, project_id, name, path, kind, bytes, state, evidence, protected, origin,
-            acquisition, parent_id, purpose, review_at, created_at FROM resources WHERE parent_id = ?1 ORDER BY id";
-        self.query(SQL, [parent_id], map_resource)
+        let sql = format!("SELECT {RESOURCE_COLUMNS} FROM resources WHERE parent_id = ?1 ORDER BY id");
+        self.query(&sql, [parent_id], map_resource)
     }
 
     /// Stored identity of a folder mogumogu created.
@@ -245,16 +247,56 @@ impl Repository {
         text.map(|t| t.parse()).transpose()
     }
 
-    /// Protection always wins.
+    /// Protection always wins: protecting also closes a scratchpad that let
+    /// generated folders inside it into plans (this only ever tightens).
     pub fn protect(&mut self, id: i64) -> Result<()> {
         self.require_local()?;
         let now = self.now();
         self.write(|tx| {
-            let changed = tx.execute("UPDATE resources SET protected = 1 WHERE id = ?1", [id])?;
+            let changed = tx.execute("UPDATE resources SET protected = 1, plans_inside = 0 WHERE id = ?1", [id])?;
             if changed == 0 {
                 return Err(Error::not_found("Ressourcen-ID nicht gefunden."));
             }
-            log_in(tx, now, "protection", "Ressource geschützt", "Schutz gewinnt gegenüber jeder Prüfregel.")
+            log_in(
+                tx,
+                now,
+                "protection",
+                "Ressource geschützt",
+                "Schutz gewinnt gegenüber jeder Prüfregel; auch Erzeugtes darin kommt in keinen Plan.",
+            )
+        })
+    }
+
+    /// Lets recoverable folders inside a protected scratchpad into plans, or
+    /// protects them again. Scratchpads only; the scratchpad stays protected.
+    pub fn set_plans_inside(&mut self, id: i64, allowed: bool) -> Result<()> {
+        self.require_local()?;
+        let resource = self.resource(id)?;
+        if resource.kind != ResourceKind::Scratchpad {
+            return Err(Error::invalid("Nur ein Scratchpad kann Erzeugtes darin in Pläne lassen."));
+        }
+        if allowed && !resource.protected {
+            return Err(Error::blocked("Nur ein geschütztes Scratchpad kann Erzeugtes darin in Pläne lassen."));
+        }
+        if resource.plans_inside == allowed {
+            return Err(Error::blocked(if allowed {
+                "Erzeugtes in diesem Scratchpad darf schon in Pläne."
+            } else {
+                "Erzeugtes in diesem Scratchpad ist schon geschützt."
+            }));
+        }
+        let now = self.now();
+        self.write(|tx| {
+            tx.execute("UPDATE resources SET plans_inside = ?1 WHERE id = ?2", params![allowed, id])?;
+            let (title, detail) = if allowed {
+                (
+                    "Erzeugtes im Scratchpad freigegeben",
+                    "Nur wiederherstellbar belegte Ordner darin dürfen in einen Papierkorb-Plan; das Scratchpad bleibt geschützt.",
+                )
+            } else {
+                ("Erzeugtes im Scratchpad wieder geschützt", "Kein Ordner darin kommt mehr in einen Plan.")
+            };
+            log_in(tx, now, "protection", title, detail)
         })
     }
 

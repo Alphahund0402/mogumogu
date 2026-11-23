@@ -257,11 +257,28 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
     if !children.is_empty() {
         dialog = dialog.row("Bestandteile", children.join("\n"));
     }
+    if resource.kind == ResourceKind::Scratchpad && resource.protected {
+        dialog = dialog.row(
+            "Erzeugtes darin",
+            if resource.plans_inside {
+                "Darf in Papierkorb-Pläne: nur wiederherstellbar belegte Ordner darin; das Scratchpad bleibt geschützt"
+            } else {
+                "Geschützt wie das Scratchpad: kein Ordner darin kommt in einen Plan"
+            },
+        );
+    }
     if snapshot.demo || resource.origin == Origin::Demo {
         return dialog.body("Beispieldaten. Der Prototyp erzeugt hier keine ausführbare Freigabe.");
     }
     if !resource.protected {
         dialog = dialog.action(format!("protect:{}", resource.id), "Schützen", false);
+    }
+    if resource.kind == ResourceKind::Scratchpad && resource.protected {
+        dialog = if resource.plans_inside {
+            dialog.action(format!("scratch-inside-off:{}", resource.id), "Erzeugtes darin wieder schützen", false)
+        } else {
+            dialog.action(format!("scratch-inside-ask:{}", resource.id), "Erzeugtes darin zulassen …", false)
+        };
     }
     if resource.kind == ResourceKind::Scratchpad {
         dialog = dialog.action(format!("extend:{}", resource.id), "Prüftermin +7 Tage", false).action(
@@ -274,6 +291,31 @@ pub fn resource(snapshot: &Snapshot, resource: &Resource) -> Dialog {
         dialog = dialog.action(format!("measure:{}", resource.id), "Größe messen", false);
     }
     dialog
+}
+
+/// What opening a scratchpad for plans means, before it is switched on.
+pub fn scratch_inside(resource: &Resource) -> Dialog {
+    Dialog::new(format!("Erzeugtes in „{}“ zulassen?", resource.name))
+        .path(&resource.path)
+        .row(
+            "Darf in Pläne",
+            "Ordner darin, die mogumogu als wiederherstellbar belegt: etwa node_modules oder .venv neben ihrem \
+             Lockfile, Build-Ausgaben neben ihrer Build-Datei",
+        )
+        .row(
+            "Bleibt geschützt",
+            "Das Scratchpad selbst, alles unter „Prüfen“ (Skripte, Notebooks, Testdaten, Ergebnisse), behaltene und \
+             gehaltene Ordner und jede andere geschützte Ressource darin",
+        )
+        .row(
+            "Danach",
+            "Jeder Papierkorb-Plan wird wie immer im Dashboard geprüft und bestätigt; der Schalter verschiebt nichts",
+        )
+        .body(
+            "Zurücknehmen geht jederzeit, auch per CLI (scratch protect-inside) und mit „Schützen“. Ein bestätigter Plan, \
+             der noch nicht läuft, prüft vor jedem Verschieben erneut; einen laufenden Plan hält das Zurücknehmen nicht an.",
+        )
+        .action(format!("scratch-inside-on:{}", resource.id), "Zulassen", true)
 }
 
 pub fn ai(entry: &AiEntry) -> Dialog {

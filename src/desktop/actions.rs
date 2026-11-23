@@ -128,6 +128,14 @@ impl Desktop {
             "cancel-plan" => Request::CleanupCancel { plan_id: arg },
             "reconcile-plan" => Request::CleanupReconcile { plan_id: arg },
             "open-resource" => return self.open_resource(arg),
+            "scratch-inside-ask" => {
+                if let Some(resource) = self.snapshot.resources.iter().find(|r| r.id == arg).cloned() {
+                    self.dialog(dialogs::scratch_inside(&resource));
+                }
+                return;
+            }
+            "scratch-inside-on" => Request::ScratchPlansInside { resource_id: arg, allowed: true },
+            "scratch-inside-off" => Request::ScratchPlansInside { resource_id: arg, allowed: false },
             "register-candidate" => Request::RegisterCandidate { scope_id: arg, rel_path: extra },
             "tidy" => Request::Tidy { project_id: Some(arg) },
             "finish" => Request::FinishReport { project_id: arg },

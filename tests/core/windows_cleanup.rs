@@ -212,6 +212,51 @@ fn a_protected_resource_inside_keeps_the_folder() {
 }
 
 #[test]
+fn an_opened_scratchpad_lets_only_recoverable_folders_inside_go() {
+    let mut env = env(false);
+    let spike = env.project.join("spike");
+    write(&spike, "package.json", "{}");
+    write(&spike, "package-lock.json", "{}");
+    write(&spike, "node_modules/dep/index.js", "module.exports = 1");
+    write(&spike, "explore.ipynb", "{}");
+    let scratch = env.core.register_scratch(env.project_id, "spike", &path_text(&spike)).unwrap();
+    let blocked = |plan: &PlanSummary| {
+        plan.targets.iter().find(|t| t.rel_path == "spike/node_modules").map(|t| !t.blockers.is_empty())
+    };
+    // Protected by default: the folder inside is listed, but blocked.
+    let closed = env.core.cleanup_plan(env.project_id, &[]).unwrap();
+    assert_eq!(blocked(&closed), Some(true), "{:#?}", closed.targets);
+
+    env.core.scratch_plans_inside(scratch, true).unwrap();
+    let open = env.core.cleanup_plan(env.project_id, &[]).unwrap();
+    assert_eq!(blocked(&open), Some(false), "{:#?}", open.targets);
+    assert!(open.targets.iter().all(|t| t.rel_path != "spike"), "the scratchpad itself is never a target");
+    assert!(matches!(env.core.cleanup_plan(env.project_id, &["spike".into()]), Err(Error::Blocked(_))));
+
+    // Switched off after approval: the next check before moving stops the plan.
+    let approved = env.core.cleanup_approve(open.id, open.short_fingerprint()).unwrap();
+    env.core.scratch_plans_inside(scratch, false).unwrap();
+    assert!(matches!(env.core.cleanup_apply(approved.id), Err(Error::Blocked(_))));
+    assert_eq!(moved(&env), 0);
+
+    // Open again: only the recoverable folder inside moves; the scratchpad and its notebook stay.
+    env.core.scratch_plans_inside(scratch, true).unwrap();
+    let plan = approved_with(&mut env, &["spike/node_modules".into()]);
+    env.core.cleanup_apply(plan.id).unwrap();
+    assert_eq!(moved(&env), 1);
+    assert!(!spike.join("node_modules").exists());
+    assert!(spike.join("explore.ipynb").is_file() && spike.join("package-lock.json").is_file());
+    let resource = env.core.repository().resource(scratch).unwrap();
+    assert!(resource.protected && resource.plans_inside, "the scratchpad stays protected");
+}
+
+fn approved_with(env: &mut Env, paths: &[String]) -> PlanSummary {
+    let plan = env.core.cleanup_plan(env.project_id, paths).unwrap();
+    assert!(plan.executable(), "{:#?}", plan.targets);
+    env.core.cleanup_approve(plan.id, plan.short_fingerprint()).unwrap()
+}
+
+#[test]
 fn a_missing_lockfile_after_approval_invalidates_the_plan() {
     let mut env = env(false);
     let plan = approved(&mut env);

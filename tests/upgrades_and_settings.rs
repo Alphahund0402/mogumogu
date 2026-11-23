@@ -252,6 +252,57 @@ fn v10_projects_stay_active_and_the_lifecycle_table_refuses_odd_rows() {
 }
 
 #[test]
+fn v11_scratchpads_stay_closed_and_only_scratchpads_can_be_opened() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("inventory.sqlite3");
+    {
+        let db = Connection::open(&path).unwrap();
+        for sql in [
+            include_str!("../migrations/001_initial.sql"),
+            include_str!("../migrations/002_inventory.sql"),
+            include_str!("../migrations/003_package_evidence.sql"),
+            include_str!("../migrations/004_user_scopes.sql"),
+            include_str!("../migrations/005_recycle.sql"),
+            include_str!("../migrations/006_cache_scopes.sql"),
+            include_str!("../migrations/007_storage_analysis.sql"),
+            include_str!("../migrations/008_cleanup_keeps.sql"),
+            include_str!("../migrations/009_runs_docker_history.sql"),
+            include_str!("../migrations/010_databases_and_release.sql"),
+            include_str!("../migrations/011_project_lifecycle.sql"),
+        ] {
+            db.execute_batch(sql).unwrap();
+        }
+        db.execute_batch(
+            "INSERT INTO app_meta(key,value) VALUES('mode','local');
+            INSERT INTO projects(name,path,origin) VALUES('web','C:\\fixture\\web','registered');
+            INSERT INTO resources(project_id,name,path,kind,evidence,origin)
+                VALUES(1,'spike','C:\\fixture\\web\\spike','scratchpad','x','registered');
+            INSERT INTO resources(project_id,name,path,kind,evidence,origin)
+                VALUES(1,'venv','C:\\fixture\\web\\.venv','environment','x','registered');",
+        )
+        .unwrap();
+        db.pragma_update(None, "user_version", 11).unwrap();
+    }
+    let mut repo = Repository::open_path(&path, false, Arc::new(FixedClock::new(1_000))).unwrap();
+    let resources = repo.resources().unwrap();
+    assert!(resources.iter().all(|r| r.protected && !r.plans_inside), "nothing opens with the upgrade");
+    assert!(matches!(repo.set_plans_inside(2, true), Err(Error::Invalid(_))), "only scratchpads");
+    repo.set_plans_inside(1, true).unwrap();
+    assert!(matches!(repo.set_plans_inside(1, true), Err(Error::Blocked(_))), "already open");
+    let db = Connection::open(&path).unwrap();
+    assert_eq!(db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), SCHEMA_VERSION);
+    for bad in [
+        "UPDATE resources SET plans_inside = 1 WHERE id = 2",
+        "UPDATE resources SET plans_inside = 2 WHERE id = 1",
+        "UPDATE resources SET protected = 0 WHERE id = 1",
+    ] {
+        assert!(db.execute(bad, []).is_err(), "{bad}");
+    }
+    repo.protect(1).unwrap();
+    assert!(!repo.resource(1).unwrap().plans_inside, "protecting closes an opened scratchpad again");
+}
+
+#[test]
 fn v3_scopes_keep_their_meaning_and_user_folders_get_their_own_realm() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("inventory.sqlite3");

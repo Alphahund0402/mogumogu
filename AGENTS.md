@@ -65,8 +65,9 @@ unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PR
   Datenbankdatei wird geöffnet; gemessen werden Größe, Anzahl und Änderungszeit, an der Identität
   des Ordners gebunden und ohne Verknüpfung auf dem Weg (`ScopeRoot::open_local`).
 - Schutz hinzufügen darf die CLI, Schutz aufheben nur das Dashboard: `owner.rs` lehnt über die Pipe
-  `RunRelease`, `DbUnregister`, `KeepFolder { keep: false }`, `DockerRevoke` und
-  `RunsAllow { allowed: true }` ab, die CLI bietet sie nicht an. Ebenso bestätigt und führt nur das
+  `RunRelease`, `DbUnregister`, `KeepFolder { keep: false }`, `DockerRevoke`,
+  `ScratchPlansInside { allowed: true }` und `RunsAllow { allowed: true }` ab, die CLI bietet sie nicht
+  an (`validate.py` prüft beides). Ebenso bestätigt und führt nur das
   Dashboard einen Papierkorb-Plan aus: `CleanupApprove` und `CleanupApply` lehnt `owner.rs` über die
   Pipe ab, auch mit richtigem Fingerabdruck; die CLI plant, bricht ab und gleicht ab. Ein Projekt
   abschließen (`FinishProject`) lehnt `owner.rs` über die Pipe ebenso ab; Bericht, Verlauf und
@@ -96,7 +97,11 @@ nur ohne Datei, die der Index führt. Ein unlesbarer Git-Stand, ein behaltener O
 Reste von KI-Agenten sind nie wiederherstellbar; ebenso nichts, was ein registrierter, nicht
 freigegebener Lauf meldet, eine überwachte Datenbank und nichts, was ein Container eines
 freigegebenen Docker-Kontexts einbindet. Ist so eine Engine nicht
-erreichbar, blockiert das. Neue Regeln dürfen das nur enger machen
+erreichbar, blockiert das. Eine geschützte Ressource hält jeden Ordner darin, daran und
+darüber; einzige Ausnahme ist ein Scratchpad, bei dem die Person im Dashboard „Erzeugtes darin
+zulassen“ gewählt hat (Schema v12): dann dürfen wiederherstellbar belegte Ordner **echt darin** in
+einen Plan, das Scratchpad selbst und alles unter „Prüfen“ bleiben geschützt (`cleanup::gate::unprotected`).
+Neue Regeln dürfen das nur enger machen
 oder brauchen den zweiten Review. Unbekannt bleibt unbekannt. „Erledigt“ in den offenen Punkten ist kein Löschurteil. Demo- und lokale Datenbanken niemals mischen. Neue Schemaversion nicht still
 zurückstufen. Keine Secrets, rohen Config-Snapshots oder Testbenutzerpfade in Logs, DB oder Git.
 
