@@ -1,7 +1,10 @@
 # Projekt abschließen: Spezifikation
 
-Stand: 23. November 2026. **Entwurf, nichts davon ist umgesetzt.** Die
-Entscheidungen in [Abschnitt 8](#8-offene-entscheidungen) stehen aus.
+Stand: 23. November 2026. Die Entscheidungen in [Abschnitt 8](#8-entscheidungen)
+sind getroffen. **Umgesetzt ist Schritt 1**, der Abschlussbericht nur lesend
+([Abschnitt 9](#9-reihenfolge)); Zustände, Verlauf und Scratchpads folgen.
+
+![Abschlussbericht auf der Projektseite, native Darstellung mit Beispieldaten](screenshots/abschlussbericht.png)
 
 Ist ein Projekt fertig, zeigt mogumogu in einem Abschlussbericht, was bleiben
 muss, was in den Papierkorb kann und worüber du entscheiden musst, besonders
@@ -32,32 +35,37 @@ Archivieren, Verschieben und Löschen des Projekts bleiben außerhalb des Umfang
 
 **Reaktivieren** setzt ein abgeschlossenes Projekt zurück auf aktiv und ändert
 sonst nichts. Jeder Wechsel ist ein datiertes Ereignis mit optionaler Notiz und
-dem Fingerabdruck des Berichts, auf dem er beruht. „Stilllegen“ als dritter
-Zustand ist Entscheidung E1.
+dem Fingerabdruck des Berichts, auf dem er beruht. Einen dritten Zustand
+„Stilllegen“ gibt es nach E1 nicht.
 
 ## 3. Abschlussbericht
 
-„Projekt abschließen …“ auf der Projektseite erfasst das Projekt frisch und zeigt
-vier Teile. Bestätigt wird per Fingerabdruck wie bei einem Papierkorb-Plan;
-ändert sich der Stand vor der Bestätigung, ist ein neuer Bericht nötig.
+„Abschlussbericht …“ auf der Projektseite (CLI: `project finish-report --project ID`)
+erfasst das Projekt frisch und zeigt vier Teile. Ab Schritt 2 wird das
+Abschließen per Fingerabdruck bestätigt wie ein Papierkorb-Plan; ändert sich
+der Stand vor der Bestätigung, ist ein neuer Bericht nötig. Schritt 1 zeigt den
+Bericht nur.
 
 **A. Ist die Arbeit gesichert?** Die Punkte der Gruppe „Gesichert“: Commits,
 Remote, Commits auf dem Remote, zurückgelegte und vorgemerkte Änderungen,
 geänderte Dateien, Dateien nur auf diesem Rechner, weitere Arbeitskopien. Offene
-und unbekannte Punkte stehen zuerst. Jeder muss ausdrücklich bestätigt werden,
-etwa „3 Commits liegen nur hier“. Unbekannt zählt nie als erledigt.
+und unbekannte Punkte stehen zuerst. Ab Schritt 2 muss jeder ausdrücklich
+bestätigt werden, etwa „3 Commits liegen nur hier“. Unbekannt zählt nie als
+erledigt. Die Punkte der Gruppe „Vollständig“ (README, Lizenz, Tests, CI,
+Lockfile) stehen zur Kenntnis daneben.
 
 **B. Bleibt ohne Frage.** Versionierte Dateien und der übrige eigene Inhalt,
 Projektdateien, alles mit einer Haltung (behalten, Lauf, überwachte Datenbank,
 Docker-Einbindung) und geschützte Ressourcen. Gezeigt mit Größe, damit sichtbar
 wird, was das Projekt dauerhaft belegt.
 
-**C. Du entscheidest.** Alles der Klasse „Prüfen“: Testdaten, Datenbanken, Logs,
-große Dateien, Umgebungen oder Ausgaben ohne Datei, die sie neu baut, und Reste
-von KI-Agenten. Je Ordner Größe, letzte Änderung, Wachstum der letzten 90 Tage
-aus dem Berichtsverlauf und der Beleg. Wahl je Ordner: „Behalten“ (wie heute,
-als behaltener Ordner) oder „offen lassen“. Ob ein Ordner aus diesem Teil in den
-Papierkorb darf, ist Entscheidung E3.
+**C. Du entscheidest.** Alles der Klasse „Prüfen“ ohne Haltung: Testdaten,
+Datenbanken, Logs, große Dateien, Umgebungen oder Ausgaben ohne Datei, die sie
+neu baut, und Reste von KI-Agenten. Je Ordner Größe, letzte Änderung, Beleg und
+Wachstum seit dem ältesten gespeicherten Bericht der letzten 90 Tage. Hat dieser
+Bericht den Ordner nicht unter seinen größten Einträgen geführt, bleibt das
+Wachstum unbekannt, nie null. Behalten geht wie heute über „Immer behalten“ auf
+der Projektseite. Nach E3 kommt aus diesem Teil nichts in den Papierkorb.
 
 **D. Kann in den Papierkorb.** Alles der Klasse „Wiederherstellbar“ mit Beleg
 und Platz, vorausgewählt. Führt in den gewohnten Papierkorb-Plan mit Journal,
@@ -85,7 +93,8 @@ globale Caches und Werkzeuge, die nur dieses Projekt nutzte, sobald es
 Heute hält ein geschütztes Scratchpad jeden Plan für Ordner darin auf, auch
 `node_modules` neben einem Lockfile ([gate.rs](../src/cleanup/gate.rs),
 `unprotected`). Der Plan fragt, wie ein geschütztes Scratchpad Pläne darin
-zulassen kann. Optionen, Entscheidung E4:
+zulassen kann. Nach E4 gilt Option B, mit zweitem Review; A bleibt die
+Rückfallebene:
 
 - **A. Bleibt so.** Am sichersten und einfachsten; Erzeugtes in Scratchpads
   räumst du selbst auf.
@@ -108,25 +117,27 @@ zulassen kann. Optionen, Entscheidung E4:
 - **Anwendungsfälle** in `service/`: `FinishReport { project_id }` (nur lesend),
   `FinishProject { project_id, confirmation }` (Fingerabdruck),
   `ReactivateProject { project_id }`.
-- **CLI:** `project finish-report --project ID` zeigt den Bericht. Ob die CLI
-  abschließen darf, ist Entscheidung E2.
+- **CLI:** `project finish-report --project ID` zeigt den Bericht. Nach E2
+  schließt nur das Dashboard ab; Bericht und Reaktivieren gehen auch per CLI.
 
 ## 7. Abnahme
 
 | Szenario | Muss gelten |
 |---|---|
 | Projekt abschließen | `protected`, Haltungen, behaltene Ordner und die Menge des Wiederherstellbaren sind vorher und nachher gleich |
-| Ordner unter „Prüfen“ | Kommt ohne E3 nie in einen Plan, auch nicht nach dem Abschluss |
+| Ordner unter „Prüfen“ | Kommt nie in einen Plan, auch nicht nach dem Abschluss (E3) |
 | Offener oder unbekannter Punkt unter „Gesichert“ | Abschließen nur nach ausdrücklicher Bestätigung genau dieses Punkts |
 | Stand ändert sich zwischen Bericht und Bestätigung | Abgelehnt, neuer Bericht nötig |
 | Änderung nach dem Abschluss | Hinweis „Seit dem Abschluss geändert“, kein automatischer Wechsel |
 | Reaktivieren | Nur der Zustand ändert sich |
 | Upgrade v10 → v11 | Sicherung, alle Projekte aktiv, Demo und lokal getrennt |
-| Abschließen über die Pipe | Nach E2 abgelehnt oder erlaubt, in beiden Fällen getestet |
+| Abschließen über die Pipe | Abgelehnt, auch mit richtigem Fingerabdruck (E2) |
 
-## 8. Offene Entscheidungen
+## 8. Entscheidungen
 
-| Nr. | Frage | Empfehlung |
+Am 23. November 2026 so entschieden, wie empfohlen.
+
+| Nr. | Frage | Entscheidung |
 |---|---|---|
 | E1 | Eigener Zustand „stillgelegt“ (pausiert, Rückkehr erwartet) neben „abgeschlossen“? | Nein, zuerst nur „abgeschlossen“ und Reaktivieren. Ein zweiter Zustand lohnt erst, wenn er etwas anderes bewirkt. |
 | E2 | Darf die CLI (und damit ein Agent) abschließen? | Nein, nur das Dashboard, wie das Freigeben eines Laufs. Bericht und Reaktivieren auch per CLI, denn beides lenkt nur Aufmerksamkeit. |
@@ -137,7 +148,11 @@ zulassen kann. Optionen, Entscheidung E4:
 ## 9. Reihenfolge
 
 1. **Abschlussbericht, nur lesend:** CLI und Dialog auf der Projektseite, ohne
-   Schemaänderung. Liefert schon den Hauptnutzen.
+   Schemaänderung. Liefert schon den Hauptnutzen. **Umgesetzt am 23. November
+   2026:** [domain/finish.rs](../src/domain/finish.rs) teilt einen frischen
+   Aufräumbericht auf, [service/finish.rs](../src/service/finish.rs) misst dafür
+   neu und nutzt dieselben Haltungen; Tests `the_finishing_report_sorts_every_folder_once_and_changes_nothing`
+   und `the_finishing_report_reads_through_the_owner_in_json_and_text`.
 2. **Zustand und Verlauf** (Schema v11), Filter und der Hinweis nach dem
    Abschluss.
 3. **Scratchpads** nach E4, mit zweitem Review.

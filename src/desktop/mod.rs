@@ -628,6 +628,12 @@ impl Desktop {
                     self.status = text;
                 }
             }
+            Request::FinishReport { .. } => {
+                if let Ok(report) = serde_json::from_value::<mogumogu::domain::FinishReport>(value) {
+                    self.dialog(dialogs::finish(&report));
+                }
+                return;
+            }
             Request::AgentsOverview => {
                 if let (Ok(runs), Ok(docker)) = (
                     serde_json::from_value::<mogumogu::domain::RunOverview>(value["runs"].clone()),

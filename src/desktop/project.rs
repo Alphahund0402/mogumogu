@@ -118,6 +118,7 @@ pub fn render(ui: &Dashboard, snapshot: &Snapshot, project_id: i64, skipped: &BT
         if report.is_some() {
             actions.push(action(format!("tidy:{}", project.id), "Neu messen", false));
         }
+        actions.push(action(format!("finish:{}", project.id), "Abschlussbericht …", false));
         actions.push(action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false));
     }
     store.set_project_actions(model(actions));

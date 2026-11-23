@@ -431,6 +431,69 @@ pub fn docker(inventory: &DockerInventory) -> Dialog {
     )
 }
 
+/// The finishing report: what finishing would mean, read only
+/// (docs/LEBENSZYKLUS.md). The only action leads into the usual plan.
+pub fn finish(report: &FinishReport) -> Dialog {
+    let since = report.growth_since.map(mogumogu::clock::display_date);
+    let check = |c: &ProjectCheck| format!("{}: {} – {}", c.state.label(), c.title, c.detail);
+    let folder = |item: &FinishItem| {
+        format!(
+            "{} · {} · {}\n{} · {}",
+            item.rel_path,
+            report_size(item.bytes),
+            growth_text(item.grown, since.as_deref()),
+            item.label,
+            item.evidence
+        )
+    };
+    let lines = |items: Vec<String>, empty: &str| if items.is_empty() { empty.to_string() } else { items.join("\n") };
+    let saved_title = match report.unsaved() {
+        0 => "Gesichert".to_string(),
+        n => format!("Gesichert? {n} offen"),
+    };
+    let mut stays = vec![format!(
+        "Eigener Inhalt {} · Versionsverwaltung {}",
+        report.own.map_or("unbekannt".into(), report_size),
+        report_size(report.vcs)
+    )];
+    stays.extend(report.held.iter().map(folder));
+    stays.extend(report.held_unmeasured.iter().map(|rel| format!("{rel} · von dir behalten")));
+    let mut dialog = Dialog::new(format!("Abschlussbericht · {}", report.name))
+        .path(&report.path)
+        .row(&saved_title, lines(report.saved.iter().map(check).collect(), "Nichts gelesen."))
+        .row("Vollständig", lines(report.completeness.iter().map(check).collect(), "–"))
+        .row("Bleibt ohne Frage", stays.join("\n"))
+        .row(
+            &format!("Du entscheidest · {}", report_size(report.decide_bytes)),
+            lines(report.decide.iter().map(folder).collect(), "Nichts unter den größten Einträgen."),
+        )
+        .row(
+            &format!("Papierkorb möglich · {}", report_size(report.recoverable_bytes)),
+            lines(report.recoverable.iter().map(folder).collect(), "Nichts Wiederherstellbares."),
+        );
+    if !report.runs.is_empty() {
+        dialog = dialog.row(
+            "Läufe, nicht freigegeben",
+            report
+                .runs
+                .iter()
+                .map(|r| format!("{} · {} Artefakte", r.title, r.artifacts))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
+    let partial = if report.complete { "" } else { "Teilweise erfasst: Größen sind Untergrenzen. " };
+    dialog = dialog.body(format!(
+        "{partial}Nur lesend, erfasst {}. Abschließen ändert keinen Schutz. „Du entscheidest“ kommt nie in einen Plan; \
+         in den Papierkorb geht nur Wiederherstellbares über einen Papierkorb-Plan.",
+        display_local(report.checked_at)
+    ));
+    if !report.recoverable.is_empty() {
+        dialog = dialog.action(format!("tidy-plan:{}", report.project_id), "Papierkorb-Plan prüfen …", false);
+    }
+    dialog
+}
+
 /// Monitored databases with size and growth, and what else looks like one.
 pub fn databases(overview: &DatabaseOverview) -> Dialog {
     let size = |b: Option<u64>| b.map_or("Größe unbekannt".to_string(), |b| format_bytes(i64::try_from(b).ok()));

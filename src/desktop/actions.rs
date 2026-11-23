@@ -130,6 +130,7 @@ impl Desktop {
             "open-resource" => return self.open_resource(arg),
             "register-candidate" => Request::RegisterCandidate { scope_id: arg, rel_path: extra },
             "tidy" => Request::Tidy { project_id: Some(arg) },
+            "finish" => Request::FinishReport { project_id: arg },
             "filter-preview" => Request::ContextFilter { scope_id: arg },
             "filter-apply" => Request::ApplyContextFilter { scope_id: arg, fingerprint: extra },
             "filter-all-preview" => Request::ContextFilterAll,

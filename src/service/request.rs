@@ -117,6 +117,10 @@ pub enum Request {
     TidyHistory {
         project_id: i64,
     },
+    /// What finishing a project would mean: measures it anew, decides nothing.
+    FinishReport {
+        project_id: i64,
+    },
     /// Switches registration of runs by cooperating harnesses on or off.
     RunsAllow {
         allowed: bool,
@@ -386,6 +390,7 @@ impl Core {
                 let (points, growth) = self.tidy_history(project_id)?;
                 json!({ "points": points, "growth": growth })
             }
+            FinishReport { project_id } => json!(self.finish_report(project_id)?),
             RunsAllow { allowed } => json!(self.allow_agent_runs(allowed)?),
             Runs { project_id } => json!(self.run_overview(project_id)?),
             RunStart { project, harness, purpose } => json!(self.start_run(&project, &harness, purpose.as_deref())?),

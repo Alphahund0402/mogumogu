@@ -18,6 +18,7 @@ mod disk;
 mod disk_analysis;
 mod docker;
 mod filters;
+mod finish;
 mod inventory;
 mod maintenance;
 mod packages;

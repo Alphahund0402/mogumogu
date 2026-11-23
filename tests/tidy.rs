@@ -103,3 +103,53 @@ fn package_caches_are_measured_with_their_own_approval_and_never_listed() {
     assert!(report.regenerable() >= 3_000);
     assert!(npm.join("_cacache/content-v2/sha512/ab/blob").is_file(), "nothing is removed");
 }
+
+#[test]
+fn the_finishing_report_sorts_every_folder_once_and_changes_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = temp.path().join("app");
+    write(&app, "package.json", "{}");
+    write(&app, "package-lock.json", "{}");
+    write(&app, "node_modules/dep/index.js", &"x".repeat(4_000));
+    write(&app, "src/index.js", "console.log(1)");
+    write(&app, "fixtures/big.json", &"y".repeat(2_000));
+    write(&app, "golden/expected.json", &"z".repeat(1_500));
+    write(&app, "logs/app.log", &"l".repeat(1_200));
+    let mut core = core(temp.path());
+    let app_id = core.register_project("app", &path_text(&app)).unwrap();
+    core.approve_project(app_id).unwrap();
+    core.keep_folder(app_id, "fixtures", true).unwrap();
+    core.keep_folder(app_id, "golden", true).unwrap();
+    let before = core.tidy_report(Some(app_id)).unwrap().projects.remove(0);
+
+    let report = core.finish_report(app_id).unwrap();
+    let paths = |items: &[FinishItem]| items.iter().map(|i| i.rel_path.clone()).collect::<Vec<_>>();
+    assert_eq!(paths(&report.recoverable), ["node_modules"], "{report:#?}");
+    assert_eq!(paths(&report.decide), ["logs"], "{report:#?}");
+    assert_eq!(paths(&report.held), ["fixtures"], "{report:#?}");
+    assert_eq!(report.held[0].evidence, "von dir behalten");
+    // A kept folder the report does not list as its own entry is still named.
+    assert_eq!(report.held_unmeasured, ["golden"]);
+    assert!(report.saved.iter().any(|c| c.state != CheckState::Done), "no repository: the work is not saved");
+    assert!(report.complete && report.own.is_some_and(|own| own > 0), "{report:#?}");
+
+    // Read only: protection, keeps and what is recoverable stay as they were.
+    let after = core.tidy_report(Some(app_id)).unwrap().projects.remove(0);
+    let recoverable = |p: &ProjectTidy| {
+        p.items.iter().filter(|i| i.class == TidyClass::Regenerable).map(|i| i.rel_path.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(recoverable(&before), recoverable(&after));
+    assert_eq!(before.kept, after.kept);
+    assert!(core.repository().project(app_id).unwrap().protected);
+    assert!(app.join("node_modules/dep/index.js").exists() && app.join("golden/expected.json").exists());
+}
+
+#[test]
+fn no_finishing_report_without_a_read_approval() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = temp.path().join("app");
+    write(&app, "Cargo.toml", "[package]");
+    let mut core = core(temp.path());
+    let app_id = core.register_project("app", &path_text(&app)).unwrap();
+    assert!(matches!(core.finish_report(app_id), Err(Error::Blocked(_))));
+}

@@ -245,3 +245,31 @@ fn second_owner_and_foreign_protocols_are_refused() {
     let (code, exit) = err(cli(&f.data, &["status"]));
     assert_eq!((code.as_str(), exit), ("unsupported", 6), "--no-start never spawns an owner");
 }
+
+#[test]
+fn the_finishing_report_reads_through_the_owner_in_json_and_text() {
+    let f = fixture("finish");
+    let _owner = start_owner(&f.data);
+    let web = f.root.join("web");
+    write(&web, "package.json", "{}");
+    write(&web, "package-lock.json", "{}");
+    write(&web, "node_modules/dep/index.js", &"x".repeat(2_000));
+    write(&web, "src/main.js", "1");
+    let project_id = approved_project(&f.data, &web);
+    let report = ok(cli(&f.data, &["project", "finish-report", "--project", &project_id]));
+    assert_eq!(report["recoverable"][0]["rel_path"], "node_modules", "{report}");
+    assert_eq!(report["complete"], true);
+    let text = std::process::Command::new(env!("CARGO_BIN_EXE_mogumogu-cli"))
+        .arg("--data-dir")
+        .arg(&f.data)
+        .args(["--no-start", "project", "finish-report", "--project", &project_id])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&text.stdout);
+    for part in
+        ["1. Ist die Arbeit gesichert?", "2. Bleibt ohne Frage", "3. Du entscheidest", "4. Kann in den Papierkorb"]
+    {
+        assert!(text.contains(part), "{part} missing in:\n{text}");
+    }
+    assert!(web.join("node_modules/dep/index.js").exists(), "read only");
+}

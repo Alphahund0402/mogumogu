@@ -10,7 +10,8 @@ nativen Screen-Renderer, nichts davon gehört zur Laufzeit.
 Umgesetzt: Tray/Dashboard, Besitzerprozess mit Named-Pipe-IPC, identitätsgebundene Lesefreigaben,
 statische Erfassung (35 Paketmanager plus Laufzeitvorgaben, Container-Images, CI-Actions, pre-commit-Hooks und Git-Submodule; zwölf KI-Profile), Generationen, Prüfregeln, ein
 lesender Aufräumbericht mit offenen Punkten je Projekt (liest je Repository `.git/config` und `.git/index`, an der Projektwurzel auch `HEAD`, `packed-refs`, Refs und Reflogs, erkennt Reste von
-KI-Agenten), eine Speicheranalyse nur aus Dateimetadaten (eigene Freigabe, Ergebnis nur
+KI-Agenten), ein lesender Abschlussbericht je Projekt (`project finish-report`; ändert keinen Schutz,
+„Prüfen“ kommt nie in einen Plan; Spezifikation `docs/LEBENSZYKLUS.md`), eine Speicheranalyse nur aus Dateimetadaten (eigene Freigabe, Ergebnis nur
 im Arbeitsspeicher), behaltene Ordner (Schema v8), ein gespeicherter Verlauf der Aufräumberichte,
 KI-Läufe, die kooperierende Harnesses auf Wunsch per CLI registrieren (Schema v9; nur Herkunft und
 Schutz; einen beendeten Lauf gibt nur die Person frei, Schema v10), ein schreibgeschütztes

@@ -798,6 +798,34 @@ fn main() {
     // Without a report the page says how to get one.
     desktop::project::render(&ui, &snapshot, 2, &none);
     renderer.shot("16-projekt-ohne-bericht", 1080, 680, 1.0);
+    // The finishing report of the first project: read only, its one action
+    // leads into the usual plan.
+    desktop::project::render(&ui, &snapshot, 1, &none);
+    let mut tidy = snapshot.tidy.projects.iter().find(|p| p.project_id == 1).unwrap().clone();
+    let check = |group, state, title: &str, detail: &str| ProjectCheck {
+        group,
+        state,
+        title: title.into(),
+        detail: detail.into(),
+    };
+    tidy.checks = vec![
+        check(CheckGroup::Saved, CheckState::Done, "Änderungen", "Keine versionierte Datei weicht vom Index ab."),
+        check(CheckGroup::Saved, CheckState::Open, "Commits auf dem Remote", "1 Branch mit Commits nur hier"),
+        check(CheckGroup::Complete, CheckState::Done, "README", "Vorhanden."),
+    ];
+    let earlier = TidyPoint {
+        checked_at: now - 60 * DAY,
+        items: tidy.items.iter().map(|i| (i.rel_path.clone(), i.class, i.bytes * 3 / 4)).collect(),
+        ..TidyPoint::of(&tidy)
+    };
+    let database = Hold {
+        kind: HoldKind::Database,
+        location: r"C:\dev\my-app\data\app.sqlite".into(),
+        reason: "überwachte Datenbank".into(),
+    };
+    show_dialog(&ui, dialogs::finish(&finish_report(&tidy, &[earlier], &[database], Vec::new(), now)));
+    renderer.shot("18-abschlussbericht", 1080, 680, 1.0);
+    store.set_modal(0);
     store.invoke_open(0, 0);
     show_dialog(&ui, dialogs::message("Hilfe", dialogs::HELP));
     renderer.shot("17-hilfe", 1080, 680, 1.0);

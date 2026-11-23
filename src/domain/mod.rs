@@ -71,6 +71,8 @@ mod disk_analysis;
 pub use disk_analysis::*;
 mod docker;
 pub use docker::*;
+mod finish;
+pub use finish::*;
 mod runs;
 pub use runs::*;
 mod inventory;

@@ -16,6 +16,11 @@ impl Core {
     /// projects also the approved global stores. Measured project sizes are
     /// recorded on the way.
     pub fn tidy_report(&mut self, project_id: Option<i64>) -> Result<TidyReport> {
+        self.measure_tidy(project_id).map(|(report, _)| report)
+    }
+
+    /// [`Self::tidy_report`] and the holds it measured with.
+    pub(super) fn measure_tidy(&mut self, project_id: Option<i64>) -> Result<(TidyReport, cleanup::Holds)> {
         self.repo.require_local()?;
         let scopes = self.repo.scopes()?;
         let projects = self.repo.projects()?;
@@ -155,7 +160,7 @@ impl Core {
         report.unapproved = projects.iter().filter(|p| approved(p).is_none()).count();
         report.checked_at = Some(now);
         self.tidy = Some(report.clone());
-        Ok(report)
+        Ok((report, held))
     }
 
     /// Keeps a folder of a project out of every cleanup plan, or suggests it

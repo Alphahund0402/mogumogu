@@ -1,7 +1,9 @@
 //! Human-readable output. `--json` prints the versioned machine format.
 use crate::commands::View;
+use mogumogu::clock::{display_date, display_local};
 use mogumogu::domain::{
-    CheckGroup, PlanSummary, ProjectTidy, ReviewHint, Snapshot, TidyReport, checks_summary, format_bytes,
+    CheckGroup, FinishItem, FinishReport, PlanSummary, ProjectCheck, ProjectTidy, ReviewHint, Snapshot, TidyReport,
+    checks_summary, format_bytes, growth_text, report_size,
 };
 use serde_json::{Value, json};
 
@@ -35,6 +37,7 @@ pub fn human(view: View, value: &Value) -> String {
             .ok()
             .and_then(|report| report.projects.into_iter().find(|p| p.project_id == id))
             .map(|project| checks(&project)),
+        View::Finish => serde_json::from_value::<FinishReport>(value.clone()).ok().map(|report| finish(&report)),
     };
     rendered.unwrap_or_else(|| serde_json::to_string_pretty(value).unwrap_or_default())
 }
@@ -106,6 +109,79 @@ fn checks(project: &ProjectTidy) -> String {
         }
     }
     lines.push("Kein Löschurteil: „erledigt“ heißt nur, dass die gelesenen Dateien nichts Offenes zeigen.".into());
+    lines.join("\n")
+}
+
+fn finish(report: &FinishReport) -> String {
+    let size = report_size;
+    let check = |c: &ProjectCheck| format!("  [{:<9}] {} – {}", c.state.label(), c.title, c.detail);
+    let since = report.growth_since.map(display_date);
+    let folder = |item: &FinishItem| {
+        let grown = growth_text(item.grown, since.as_deref());
+        let changed =
+            item.modified_at.map_or("geändert: unbekannt".to_string(), |t| format!("geändert {}", display_date(t)));
+        format!(
+            "  {} · {} · {} · {grown} · {changed}\n      {}",
+            item.rel_path,
+            item.label,
+            size(item.bytes),
+            item.evidence
+        )
+    };
+    let mut lines = vec![format!(
+        "Abschlussbericht · {} · erfasst {} · nur lesend, ändert nichts",
+        report.name,
+        display_local(report.checked_at)
+    )];
+    if !report.complete {
+        lines.push("Teilweise erfasst: Größen sind Untergrenzen, der eigene Inhalt ist unbekannt.".into());
+    }
+    if !report.note.is_empty() {
+        lines.push(format!("Hinweis: {}", report.note));
+    }
+    lines.push(format!("\n1. Ist die Arbeit gesichert? ({} offen oder unbekannt)", report.unsaved()));
+    lines.extend(report.saved.iter().map(check));
+    if !report.completeness.is_empty() {
+        lines.push("   Vollständig, zur Kenntnis:".into());
+        lines.extend(report.completeness.iter().map(check));
+    }
+    lines.push("\n2. Bleibt ohne Frage".into());
+    lines.push(format!(
+        "  Eigener Inhalt {} · Versionsverwaltung {}",
+        report.own.map_or("unbekannt".to_string(), size),
+        size(report.vcs)
+    ));
+    lines.extend(report.held.iter().map(folder));
+    lines.extend(
+        report
+            .held_unmeasured
+            .iter()
+            .map(|rel| format!("  {rel} · von dir behalten · nicht unter den größten Einträgen gemessen")),
+    );
+    lines.push(format!(
+        "\n3. Du entscheidest ({} unter „Prüfen“; nie Teil eines Plans, gelöscht wird außerhalb von mogumogu)",
+        size(report.decide_bytes)
+    ));
+    if report.decide.is_empty() {
+        lines.push("  Nichts unter den größten Einträgen.".into());
+    }
+    lines.extend(report.decide.iter().map(folder));
+    lines.push(format!(
+        "\n4. Kann in den Papierkorb ({}, belegt {}; nur über einen Papierkorb-Plan im Dashboard)",
+        size(report.recoverable_bytes),
+        size(report.recoverable_allocated)
+    ));
+    if report.recoverable.is_empty() {
+        lines.push("  Nichts Wiederherstellbares.".into());
+    }
+    lines.extend(report.recoverable.iter().map(folder));
+    if !report.runs.is_empty() {
+        lines.push("\nAußerhalb, zur Kenntnis: Läufe, die du noch nicht freigegeben hast".into());
+        lines.extend(report.runs.iter().map(|run| {
+            format!("  #{} {} · seit {} · {} Artefakte", run.id, run.title, display_date(run.started_at), run.artifacts)
+        }));
+    }
+    lines.push("\nAbschließen ändert keinen Schutz; „erledigt“ ist kein Löschurteil.".into());
     lines.join("\n")
 }
 
