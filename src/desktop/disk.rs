@@ -2,7 +2,7 @@
 use super::ui::*;
 use super::view::model;
 use mogumogu::clock::{Clock, SystemClock, display_local, display_relative};
-use mogumogu::domain::{DriveUsage, ScopeStatus, StorageOverview, TidyClass, TidyReport, format_bytes};
+use mogumogu::domain::{DriveUsage, Project, ScopeStatus, StorageOverview, TidyClass, TidyReport, format_bytes};
 use slint::ComponentHandle;
 
 fn size(value: Option<u64>) -> String {
@@ -98,9 +98,11 @@ fn bytes(value: u64) -> String {
     size(Some(value))
 }
 
-pub(super) fn render_tidy(ui: &Dashboard, report: &TidyReport) {
+/// `projects` only says which are finished: those are expected to rest.
+pub(super) fn render_tidy(ui: &Dashboard, report: &TidyReport, projects: &[Project]) {
     let store = ui.global::<Store>();
     let now = SystemClock.now();
+    let finished = |id: i64| projects.iter().any(|p| p.id == id && p.finished_at.is_some());
     store.set_tidy_summary(
         match report.checked_at {
             None => "Noch kein Aufräumbericht.".to_string(),
@@ -144,7 +146,9 @@ pub(super) fn render_tidy(ui: &Dashboard, report: &TidyReport) {
                     .last_change
                     .map_or_else(String::new, |t| format!("zuletzt geändert {}", display_relative(t, now)))
                     .into(),
-                dormant: p.last_change.is_some_and(|t| now - t > DORMANT_DAYS * 86_400) && p.regenerable > 0,
+                dormant: !finished(p.project_id)
+                    && p.last_change.is_some_and(|t| now - t > DORMANT_DAYS * 86_400)
+                    && p.regenerable > 0,
                 note: p.note.clone().into(),
             })
             .collect(),

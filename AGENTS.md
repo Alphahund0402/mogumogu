@@ -11,7 +11,8 @@ Umgesetzt: Tray/Dashboard, Besitzerprozess mit Named-Pipe-IPC, identitätsgebund
 statische Erfassung (35 Paketmanager plus Laufzeitvorgaben, Container-Images, CI-Actions, pre-commit-Hooks und Git-Submodule; zwölf KI-Profile), Generationen, Prüfregeln, ein
 lesender Aufräumbericht mit offenen Punkten je Projekt (liest je Repository `.git/config` und `.git/index`, an der Projektwurzel auch `HEAD`, `packed-refs`, Refs und Reflogs, erkennt Reste von
 KI-Agenten), ein lesender Abschlussbericht je Projekt (`project finish-report`; ändert keinen Schutz,
-„Prüfen“ kommt nie in einen Plan; Spezifikation `docs/LEBENSZYKLUS.md`), eine Speicheranalyse nur aus Dateimetadaten (eigene Freigabe, Ergebnis nur
+„Prüfen“ kommt nie in einen Plan) und der Zustand „abgeschlossen“ mit Verlauf (Schema v11; abschließen nur im
+Dashboard per Fingerabdruck, reaktivieren auch per CLI; Spezifikation `docs/LEBENSZYKLUS.md`), eine Speicheranalyse nur aus Dateimetadaten (eigene Freigabe, Ergebnis nur
 im Arbeitsspeicher), behaltene Ordner (Schema v8), ein gespeicherter Verlauf der Aufräumberichte,
 KI-Läufe, die kooperierende Harnesses auf Wunsch per CLI registrieren (Schema v9; nur Herkunft und
 Schutz; einen beendeten Lauf gibt nur die Person frei, Schema v10), ein schreibgeschütztes
@@ -67,7 +68,9 @@ unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PR
   `RunRelease`, `DbUnregister`, `KeepFolder { keep: false }`, `DockerRevoke` und
   `RunsAllow { allowed: true }` ab, die CLI bietet sie nicht an. Ebenso bestätigt und führt nur das
   Dashboard einen Papierkorb-Plan aus: `CleanupApprove` und `CleanupApply` lehnt `owner.rs` über die
-  Pipe ab, auch mit richtigem Fingerabdruck; die CLI plant, bricht ab und gleicht ab.
+  Pipe ab, auch mit richtigem Fingerabdruck; die CLI plant, bricht ab und gleicht ab. Ein Projekt
+  abschließen (`FinishProject`) lehnt `owner.rs` über die Pipe ebenso ab; Bericht, Verlauf und
+  Reaktivieren gehen auch per CLI. Abschließen ändert keinen Schutz und keine Haltung.
 - `src/desktop/`, `ui/`: nur Darstellung. Kein SQL, keine Dateisystemzugriffe, keine Löschung in Callbacks.
 - Schwachstellen-Watcher (`packages/mogumogu-advisories/`, Hüllen `scripts/watch_advisories.py`,
   `scripts/audit_cargo_lock.py`, `scripts/advisory_report.py`): ein eigener, optionaler

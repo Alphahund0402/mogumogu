@@ -59,6 +59,7 @@ export global Store {
 
     // Overview: key figures, items needing a decision, hints and changes
     in property <string> project-count: "0";
+    in property <string> project-caption: "Projekte";
     in property <string> package-count: "0";
     in property <string> ai-count: "0";
     in property <string> storage-total: "—";
@@ -84,6 +85,10 @@ export global Store {
 
     // Projects: 0 projects, 1 registered resources, 2 findings
     in-out property <int> project-tab: 0;
+    // Projects by state: 0 all, 1 active, 2 finished; the chips show only
+    // once a project is finished.
+    in-out property <int> project-state-filter: 0;
+    in property <int> finished-count: 0;
     in-out property <int> candidate-filter: 0;
     in-out property <string> candidate-search;
 
@@ -284,6 +289,7 @@ export global Actions {
     callback open-candidate(int);
     callback open-artifact(int);
     callback filter-candidates();
+    callback filter-projects();
     callback approve-search-folder();
     callback add-store();
     callback storage-refresh();

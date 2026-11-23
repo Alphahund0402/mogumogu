@@ -218,7 +218,7 @@ Neue Befehle beginnen bei `service/request.rs` und dem passenden Fachmodul:
 `system` für den Systembefund, `search` für die bereichsübergreifende Suche,
 `packages` für Paketprüfung, `resources` für Scratchpads/Schutz/Prüfliste,
 `tidy` für den Aufräumbericht, `filters` für den Kontextfilter,
-`advisories` für die Versionsbelege des Watchers und
+`advisories` für die Versionsbelege des Watchers, `finish` für Abschlussbericht und Abschließen und
 `maintenance` für Einstellungen/Sicherung/Papierkorb-Pläne.
 Öffentliche Typen bleiben über `service` erreichbar; interne Helfer bleiben privat.
 

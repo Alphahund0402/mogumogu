@@ -92,11 +92,27 @@ pub fn render(ui: &Dashboard, snapshot: &Snapshot, project_id: i64, skipped: &BT
         Some(r) => chips.push(chip(format!("Bericht vom {}", display_date(r.checked_at)), "neutral")),
         None => {}
     }
+    // A finished project is expected to be quiet: no "Ruht", but a change
+    // after the finish is worth a look (docs/LEBENSZYKLUS.md).
+    let changed_since = project
+        .finished_at
+        .is_some_and(|finished| report.and_then(|r| r.last_change).is_some_and(|changed| changed > finished));
+    // One short chip: the row shares its width; the date is in the report.
+    if project.finished_at.is_some() {
+        chips.push(if changed_since {
+            chip("Abgeschlossen, geändert", "review")
+        } else {
+            chip("Abgeschlossen", "ok")
+        });
+    }
     if let Some(r) = report {
         if r.heavy_test_data() {
             chips.push(chip("Viele Testdaten", "review"));
         }
-        if r.last_change.is_some_and(|t| now - t > DORMANT_DAYS * DAY) && r.regenerable > 0 {
+        if project.finished_at.is_none()
+            && r.last_change.is_some_and(|t| now - t > DORMANT_DAYS * DAY)
+            && r.regenerable > 0
+        {
             chips.push(chip("Ruht", "review"));
         }
     }
@@ -120,6 +136,9 @@ pub fn render(ui: &Dashboard, snapshot: &Snapshot, project_id: i64, skipped: &BT
         }
         actions.push(action(format!("finish:{}", project.id), "Abschlussbericht …", false));
         actions.push(action(format!("revoke-scope:{}", scope.id), "Freigabe widerrufen", false));
+    }
+    if !demo && changed_since {
+        actions.insert(0, action(format!("reactivate:{}", project.id), "Reaktivieren", true));
     }
     store.set_project_actions(model(actions));
 

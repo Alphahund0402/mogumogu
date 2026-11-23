@@ -1,8 +1,9 @@
 # Projekt abschließen: Spezifikation
 
 Stand: 23. November 2026. Die Entscheidungen in [Abschnitt 8](#8-entscheidungen)
-sind getroffen. **Umgesetzt ist Schritt 1**, der Abschlussbericht nur lesend
-([Abschnitt 9](#9-reihenfolge)); Zustände, Verlauf und Scratchpads folgen.
+sind getroffen. **Umgesetzt sind Schritt 1 und 2**: der Abschlussbericht und der Zustand
+„abgeschlossen“ mit Verlauf ([Abschnitt 9](#9-reihenfolge)); der
+Scratchpad-Schalter folgt.
 
 ![Abschlussbericht auf der Projektseite, native Darstellung mit Beispieldaten](screenshots/abschlussbericht.png)
 
@@ -34,23 +35,26 @@ Archivieren, Verschieben und Löschen des Projekts bleiben außerhalb des Umfang
 | Abgeschlossen | Du erklärst: fertig, das Ergebnis bleibt |
 
 **Reaktivieren** setzt ein abgeschlossenes Projekt zurück auf aktiv und ändert
-sonst nichts. Jeder Wechsel ist ein datiertes Ereignis mit optionaler Notiz und
-dem Fingerabdruck des Berichts, auf dem er beruht. Einen dritten Zustand
+sonst nichts. Jeder Wechsel ist ein datiertes Ereignis; ein Abschluss trägt den
+Fingerabdruck des Berichts, auf dem er beruht. Eine Notiz je Wechsel gibt es
+nicht, solange es kein Eingabefeld dafür gibt. Einen dritten Zustand
 „Stilllegen“ gibt es nach E1 nicht.
 
 ## 3. Abschlussbericht
 
 „Abschlussbericht …“ auf der Projektseite (CLI: `project finish-report --project ID`)
-erfasst das Projekt frisch und zeigt vier Teile. Ab Schritt 2 wird das
-Abschließen per Fingerabdruck bestätigt wie ein Papierkorb-Plan; ändert sich
-der Stand vor der Bestätigung, ist ein neuer Bericht nötig. Schritt 1 zeigt den
-Bericht nur.
+erfasst das Projekt frisch und zeigt vier Teile. „Abschließen“ im Dialog
+bestätigt genau diesen Bericht per Fingerabdruck: Er umfasst die Punkte unter
+„Gesichert“ und welche Ordner in welchem Teil stehen, nicht aber Größen und
+Zeiten, damit ein wachsendes Log keinen neuen Bericht erzwingt. mogumogu
+erstellt den Bericht beim Bestätigen neu; weicht der Fingerabdruck ab, ist ein
+neuer Bericht nötig.
 
 **A. Ist die Arbeit gesichert?** Die Punkte der Gruppe „Gesichert“: Commits,
 Remote, Commits auf dem Remote, zurückgelegte und vorgemerkte Änderungen,
 geänderte Dateien, Dateien nur auf diesem Rechner, weitere Arbeitskopien. Offene
-und unbekannte Punkte stehen zuerst. Ab Schritt 2 muss jeder ausdrücklich
-bestätigt werden, etwa „3 Commits liegen nur hier“. Unbekannt zählt nie als
+und unbekannte Punkte stehen zuerst. Der Dialog nennt sie beim Abschließen
+ausdrücklich mit, etwa „3 Commits liegen nur hier“. Unbekannt zählt nie als
 erledigt. Die Punkte der Gruppe „Vollständig“ (README, Lizenz, Tests, CI,
 Lockfile) stehen zur Kenntnis daneben.
 
@@ -79,12 +83,17 @@ globale Caches und Werkzeuge, die nur dieses Projekt nutzte, sobald es
 
 ## 4. Nach dem Abschluss
 
+![Projektseite eines abgeschlossenen, seither geänderten Projekts, native Darstellung mit Beispieldaten](screenshots/projekt-abgeschlossen.png)
+
 - Die Projekttabelle filtert nach „Abgeschlossen“. Die Übersicht zählt
   abgeschlossene Projekte getrennt und zeigt für sie keinen Hinweis „ruhend“,
   weil Ruhe hier erwartet ist.
-- **Seit dem Abschluss geändert:** Zeigt ein späterer Bericht neuere
-  Änderungszeiten, einen anderen `HEAD` oder Wachstum, bietet die Projektseite
-  „Reaktivieren“ an. Automatisch ändert sich nichts.
+- **Seit dem Abschluss geändert:** Zeigt ein späterer Bericht eine Datei, die
+  neuer ist als der Abschluss (außer Ausgaben, Caches und Versionsverwaltung),
+  steht auf der Projektseite „Abgeschlossen, geändert“ mit „Reaktivieren“.
+  Automatisch ändert sich nichts. `HEAD` wird nicht verglichen: mogumogu
+  speichert keinen Git-Stand ([AGENTS.md](../AGENTS.md)), neue Commits allein
+  zeigen sich deshalb nicht.
 - Abgeschlossene Projekte bleiben in „Alles erfassen“, sonst gäbe es den
   Hinweis nicht.
 
@@ -109,16 +118,16 @@ Rückfallebene:
 ## 6. Daten und Schnittstellen
 
 - **Schema v11:** Tabelle `project_lifecycle` (`project_id`, `state` in
-  `active`/`finished`, `at`, `note` bis 500 Zeichen, `report_fingerprint`),
-  höchstens 50 Einträge je Projekt. Der neueste Eintrag ist der Zustand; ohne
-  Eintrag ist ein Projekt aktiv. Sicherung vor der Migration wie gewohnt, kein
-  Projekt wechselt dabei den Zustand. Die Demo-Datenbank bekommt eigene
-  Beispieldaten.
-- **Anwendungsfälle** in `service/`: `FinishReport { project_id }` (nur lesend),
-  `FinishProject { project_id, confirmation }` (Fingerabdruck),
-  `ReactivateProject { project_id }`.
-- **CLI:** `project finish-report --project ID` zeigt den Bericht. Nach E2
-  schließt nur das Dashboard ab; Bericht und Reaktivieren gehen auch per CLI.
+  `active`/`finished`, `at`, `fingerprint` genau bei `finished`), höchstens 50
+  Einträge je Projekt. Der neueste Eintrag ist der Zustand; ohne Eintrag ist ein
+  Projekt aktiv. Sicherung vor der Migration wie gewohnt, kein Projekt wechselt
+  dabei den Zustand. Die Demo zeigt keine abgeschlossenen Projekte.
+- **Anwendungsfälle** in [service/finish.rs](../src/service/finish.rs):
+  `FinishReport { project_id }` (misst neu), `FinishProject { project_id,
+  confirmation }` (Fingerabdruck), `ReactivateProject { project_id }` und
+  `LifecycleHistory { project_id }`.
+- **CLI:** `project finish-report`, `project reactivate` und `project lifecycle`,
+  je mit `--project ID`. Nach E2 schließt nur das Dashboard ab.
 
 ## 7. Abnahme
 
@@ -154,5 +163,8 @@ Am 23. November 2026 so entschieden, wie empfohlen.
    neu und nutzt dieselben Haltungen; Tests `the_finishing_report_sorts_every_folder_once_and_changes_nothing`
    und `the_finishing_report_reads_through_the_owner_in_json_and_text`.
 2. **Zustand und Verlauf** (Schema v11), Filter und der Hinweis nach dem
-   Abschluss.
+   Abschluss. **Umgesetzt am 23. November 2026**, Tests
+   `finishing_binds_the_report_changes_no_protection_and_reactivating_undoes_only_the_state`,
+   `only_the_dashboard_finishes_a_project_and_the_cli_reactivates_it` und
+   `v10_projects_stay_active_and_the_lifecycle_table_refuses_odd_rows`.
 3. **Scratchpads** nach E4, mit zweitem Review.

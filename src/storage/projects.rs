@@ -30,7 +30,9 @@ const PROJECT_QUERY: &str = "
       IFNULL(packages.n, 0) AS inventory_packages,
       EXISTS(SELECT 1 FROM complete c WHERE c.pid = p.id) AS has_complete,
       ecosystems.e AS ecosystems,
-      EXISTS(SELECT 1 FROM scopes s WHERE s.project_id = p.id AND s.status = 'approved') AS read_approved
+      EXISTS(SELECT 1 FROM scopes s WHERE s.project_id = p.id AND s.status = 'approved') AS read_approved,
+      (SELECT CASE WHEN l.state = 'finished' THEN l.at END FROM project_lifecycle l
+        WHERE l.project_id = p.id ORDER BY l.id DESC LIMIT 1) AS finished_at
     FROM projects p
     LEFT JOIN packages ON packages.pid = p.id
     LEFT JOIN ecosystems ON ecosystems.pid = p.id";
@@ -58,6 +60,7 @@ fn map_project(row: &Row<'_>) -> rusqlite::Result<Project> {
         origin,
         read_approved: row.get(13)?,
         coverage: String::new(),
+        finished_at: row.get(14)?,
     })
 }
 
@@ -94,31 +97,9 @@ impl Repository {
     }
 
     pub fn projects(&mut self) -> Result<Vec<Project>> {
-        const SQL: &str = "WITH complete AS (
-                SELECT g.id AS gid, s.project_id AS pid FROM generations g JOIN scopes s ON s.id = g.scope_id
-                WHERE g.state = 'complete' AND s.project_id IS NOT NULL),
-            packages AS (
-                SELECT c.pid, COUNT(DISTINCT i.ecosystem || '|' || i.name || '|' || IFNULL(i.version, '')) AS n
-                FROM complete c CROSS JOIN inventory_items i ON i.generation_id = c.gid
-                WHERE i.category = 'package' AND i.install_state IN ('resolved','installed') GROUP BY c.pid),
-            ecosystems AS (
-                SELECT pid, group_concat(e, ' · ') AS e FROM (
-                    SELECT DISTINCT c.pid AS pid, i.ecosystem AS e
-                    FROM complete c CROSS JOIN inventory_items i ON i.generation_id = c.gid
-                    WHERE i.category = 'manifest' AND i.ecosystem NOT IN
-                        ('discovery','toolchain','docker','github-actions','pre-commit','git-submodule')
-                    ORDER BY c.pid, e)
-                GROUP BY pid)
-            SELECT p.id, p.name, p.path, p.ecosystem, p.state, p.evidence, p.bytes, p.packages, p.protected, p.origin,
-              IFNULL(packages.n, 0) AS inventory_packages,
-              EXISTS(SELECT 1 FROM complete c WHERE c.pid = p.id) AS has_complete,
-              ecosystems.e AS ecosystems,
-              EXISTS(SELECT 1 FROM scopes s WHERE s.project_id = p.id AND s.status = 'approved') AS read_approved
-            FROM projects p
-            LEFT JOIN packages ON packages.pid = p.id
-            LEFT JOIN ecosystems ON ecosystems.pid = p.id
-            ORDER BY p.id LIMIT ?1";
-        self.query(SQL, [limits::MAX_PROJECTS], map_project)
+        // The same query as for one project, so both always read the same columns.
+        let sql = format!("{PROJECT_QUERY} ORDER BY p.id LIMIT ?1");
+        self.query(&sql, [limits::MAX_PROJECTS], map_project)
     }
 
     /// Labels only for the local advisory report. Project paths stay in the repository.

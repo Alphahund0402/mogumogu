@@ -616,7 +616,7 @@ impl Desktop {
                     );
                     self.snapshot.tidy = report;
                     if let Some(ui) = &self.dashboard {
-                        disk::render_tidy(ui, &self.snapshot.tidy);
+                        disk::render_tidy(ui, &self.snapshot.tidy, &self.snapshot.projects);
                     }
                     self.render_project();
                     self.notify(&text, "ok");
@@ -633,6 +633,20 @@ impl Desktop {
                     self.dialog(dialogs::finish(&report));
                 }
                 return;
+            }
+            Request::FinishProject { .. } => {
+                if let Ok(report) = serde_json::from_value::<mogumogu::domain::FinishReport>(value) {
+                    self.dialog(dialogs::finish(&report));
+                }
+                self.status = "Projekt abgeschlossen. Schutz und Dateien bleiben, wie sie sind.".into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
+            }
+            Request::ReactivateProject { .. } => {
+                self.close_modal();
+                self.status = "Projekt reaktiviert.".into();
+                let text = self.status.clone();
+                self.notify(&text, "ok");
             }
             Request::AgentsOverview => {
                 if let (Ok(runs), Ok(docker)) = (
@@ -677,7 +691,7 @@ impl Desktop {
                 if let Ok(report) = serde_json::from_value::<mogumogu::domain::TidyReport>(value) {
                     self.snapshot.tidy = report;
                     if let Some(ui) = &self.dashboard {
-                        disk::render_tidy(ui, &self.snapshot.tidy);
+                        disk::render_tidy(ui, &self.snapshot.tidy, &self.snapshot.projects);
                     }
                     self.render_project();
                     self.status = if keep {

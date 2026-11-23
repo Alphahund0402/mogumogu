@@ -248,8 +248,13 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
         None => "Noch nicht erfasst".to_string(),
     }));
 
-    // Key figures of the overview
+    // Key figures of the overview; finished projects counted apart.
     store.set_project_count(s(snapshot.projects.len().to_string()));
+    let finished = snapshot.projects.iter().filter(|p| p.finished_at.is_some()).count();
+    store.set_project_caption(s(match finished {
+        0 => "Projekte".to_string(),
+        n => format!("Projekte · {n} abgeschlossen"),
+    }));
     // A searched package page counts only its matches; keep the total.
     let query = &snapshot.packages.query;
     if query.text.trim().is_empty() && query.ecosystem.is_empty() {
@@ -276,7 +281,7 @@ pub fn render_snapshot(ui: &Dashboard, snapshot: &Snapshot, data_path: &str, sta
     render_system(&store, snapshot, now);
     super::disk::render(ui, &snapshot.disks);
     super::disk_analysis::targets(ui, &snapshot.scopes);
-    super::disk::render_tidy(ui, &snapshot.tidy);
+    super::disk::render_tidy(ui, &snapshot.tidy, &snapshot.projects);
 
     render_candidates(ui, snapshot);
 
@@ -526,10 +531,19 @@ pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
             scope_by_project.entry(pid).or_insert(scope);
         }
     }
+    let finished = snapshot.projects.iter().filter(|p| p.finished_at.is_some()).count();
+    store.set_finished_count(finished as i32);
+    // Without a finished project the chips are hidden: show everything.
+    let filter = if finished == 0 { 0 } else { store.get_project_state_filter() };
     store.set_projects(model(
         snapshot
             .projects
             .iter()
+            .filter(|p| match filter {
+                1 => p.finished_at.is_none(),
+                2 => p.finished_at.is_some(),
+                _ => true,
+            })
             .map(|p| {
                 let (coverage, coverage_kind) = if snapshot.demo {
                     ("Beispieldaten".into(), "neutral")
@@ -550,8 +564,9 @@ pub fn render_projects(ui: &Dashboard, snapshot: &Snapshot) {
                     name: s(&p.name),
                     path: s(&p.path),
                     ecosystem: s(&p.ecosystem),
-                    state: s(p.state.label()),
-                    state_kind: s(observation_kind(p.state)),
+                    // A finished project says so first; its protection is unchanged.
+                    state: s(if p.finished_at.is_some() { "Abgeschlossen" } else { p.state.label() }),
+                    state_kind: s(if p.finished_at.is_some() { "ok" } else { observation_kind(p.state) }),
                     size: s(format_bytes(p.bytes)),
                     detail: s(&p.evidence),
                     approved: p.read_approved,

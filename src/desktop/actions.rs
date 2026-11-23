@@ -131,6 +131,8 @@ impl Desktop {
             "register-candidate" => Request::RegisterCandidate { scope_id: arg, rel_path: extra },
             "tidy" => Request::Tidy { project_id: Some(arg) },
             "finish" => Request::FinishReport { project_id: arg },
+            "finish-confirm" => Request::FinishProject { project_id: arg, confirmation: extra },
+            "reactivate" => Request::ReactivateProject { project_id: arg },
             "filter-preview" => Request::ContextFilter { scope_id: arg },
             "filter-apply" => Request::ApplyContextFilter { scope_id: arg, fingerprint: extra },
             "filter-all-preview" => Request::ContextFilterAll,
@@ -392,6 +394,13 @@ pub(super) fn wire(ui: &Dashboard) {
         with(|d| {
             if let Some(ui) = &d.dashboard {
                 super::view::render_candidates(ui, &d.snapshot);
+            }
+        })
+    });
+    actions.on_filter_projects(|| {
+        with(|d| {
+            if let Some(ui) = &d.dashboard {
+                super::view::render_projects(ui, &d.snapshot);
             }
         })
     });

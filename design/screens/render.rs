@@ -107,6 +107,7 @@ fn project(id: i64, name: &str, path: &str, eco: &str, state: Observation, bytes
         origin: Origin::Registered,
         read_approved: true,
         coverage: String::new(),
+        finished_at: None,
     }
 }
 
@@ -826,6 +827,21 @@ fn main() {
     show_dialog(&ui, dialogs::finish(&finish_report(&tidy, &[earlier], &[database], Vec::new(), now)));
     renderer.shot("18-abschlussbericht", 1080, 680, 1.0);
     store.set_modal(0);
+    // The same project finished five days ago and changed since: counted
+    // apart, filterable, no "Ruht", and the page offers reactivation.
+    let mut finished = snapshot.clone();
+    if let Some(project) = finished.projects.iter_mut().find(|p| p.id == 1) {
+        project.finished_at = Some(now - 5 * DAY);
+    }
+    view::render_snapshot(&ui, &finished, "", &state());
+    store.invoke_open(0, 0);
+    renderer.shot("19-uebersicht-abgeschlossen", 1080, 680, 1.0);
+    store.invoke_open(1, 0);
+    renderer.shot("19-projekte-abgeschlossen", 1080, 680, 1.0);
+    desktop::project::render(&ui, &finished, 1, &none);
+    store.invoke_open(6, 0);
+    renderer.shot("19-projekt-abgeschlossen", 1080, 680, 1.0);
+    view::render_snapshot(&ui, &snapshot, "", &state());
     store.invoke_open(0, 0);
     show_dialog(&ui, dialogs::message("Hilfe", dialogs::HELP));
     renderer.shot("17-hilfe", 1080, 680, 1.0);

@@ -13,6 +13,7 @@ mod decisions;
 mod demo;
 mod generations;
 mod history;
+mod lifecycle;
 mod migrations;
 mod projects;
 mod resources;

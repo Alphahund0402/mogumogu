@@ -20,6 +20,12 @@ export component ProjectsPage inherits PageCard {
             activated => { Actions.approve-search-folder(); }
         }
     }
+    if Store.project-tab == 0 && Store.finished-count > 0 : HorizontalLayout {
+        spacing: 6px; alignment: start;
+        FilterChip { label: "Alle"; selected: Store.project-state-filter == 0; activated => { Store.project-state-filter = 0; Actions.filter-projects(); } }
+        FilterChip { label: "Aktiv"; selected: Store.project-state-filter == 1; activated => { Store.project-state-filter = 1; Actions.filter-projects(); } }
+        FilterChip { label: "Abgeschlossen"; count: "" + Store.finished-count; selected: Store.project-state-filter == 2; activated => { Store.project-state-filter = 2; Actions.filter-projects(); } }
+    }
     if Store.project-tab == 0 : ProjectTable { vertical-stretch: 1; rows: Store.projects; selected(id) => { Actions.open-project(id); } }
     if Store.project-tab == 1 && Store.resources.length == 0 : VerticalLayout {
         vertical-stretch: 1; alignment: center; spacing: 8px; padding: 16px;

@@ -273,3 +273,39 @@ fn the_finishing_report_reads_through_the_owner_in_json_and_text() {
     }
     assert!(web.join("node_modules/dep/index.js").exists(), "read only");
 }
+
+#[test]
+fn only_the_dashboard_finishes_a_project_and_the_cli_reactivates_it() {
+    let f = fixture("lifecycle");
+    let (dashboard, _bin) = start_dashboard(&f.data);
+    let web = f.root.join("web");
+    write(&web, "package.json", "{}");
+    write(&web, "src/main.js", "1");
+    let project_id = approved_project(&f.data, &web);
+    let id: i64 = project_id.parse().unwrap();
+    let report = ok(cli(&f.data, &["project", "finish-report", "--project", &project_id]));
+    let fingerprint = report["fingerprint"].as_str().unwrap().to_string();
+
+    // E2: over the pipe (an agent, the CLI) finishing is refused, even with the right fingerprint.
+    let config = mogumogu::config::Config::new(Some(f.data.clone()), false).unwrap();
+    let client = mogumogu::ipc::Client::new(&config).unwrap();
+    let refused = client.call(Request::FinishProject { project_id: id, confirmation: fingerprint.clone() });
+    assert!(matches!(refused, Err(mogumogu::Error::Blocked(_))), "{refused:?}");
+    let listed = |data: &Path| ok(cli(data, &["list"]))["projects"][0].clone();
+    assert!(listed(&f.data)["finished_at"].is_null());
+
+    // In the dashboard a stale confirmation is refused; the exact fingerprint finishes.
+    let finish = |confirmation: &str| {
+        dashboard.send(Request::FinishProject { project_id: id, confirmation: confirmation.into() })
+    };
+    assert_eq!(finish(&"0".repeat(64)).unwrap_err(), "blocked");
+    assert!(finish(&fingerprint).unwrap()["finished_at"].is_i64());
+    let project = listed(&f.data);
+    assert!(project["finished_at"].is_i64() && project["protected"] == true, "{project}");
+
+    // Reactivating only draws attention back, so the CLI may do it.
+    ok(cli(&f.data, &["project", "reactivate", "--project", &project_id]));
+    assert!(listed(&f.data)["finished_at"].is_null());
+    let history = ok(cli(&f.data, &["project", "lifecycle", "--project", &project_id]));
+    assert_eq!((history[0]["state"].as_str(), history[1]["state"].as_str()), (Some("active"), Some("finished")));
+}

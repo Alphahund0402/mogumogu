@@ -139,6 +139,15 @@ fn finish(report: &FinishReport) -> String {
     if !report.note.is_empty() {
         lines.push(format!("Hinweis: {}", report.note));
     }
+    match report.finished_at {
+        Some(at) if report.changed_since_finish() => lines.push(format!(
+            "Abgeschlossen am {}; seither geändert. Reaktivieren: project reactivate --project {}",
+            display_date(at),
+            report.project_id
+        )),
+        Some(at) => lines.push(format!("Abgeschlossen am {}.", display_date(at))),
+        None => lines.push("Aktiv. Abschließen geht nur im Dashboard (Projektseite → Abschlussbericht …).".into()),
+    }
     lines.push(format!("\n1. Ist die Arbeit gesichert? ({} offen oder unbekannt)", report.unsaved()));
     lines.extend(report.saved.iter().map(check));
     if !report.completeness.is_empty() {

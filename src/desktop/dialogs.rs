@@ -458,8 +458,16 @@ pub fn finish(report: &FinishReport) -> Dialog {
     )];
     stays.extend(report.held.iter().map(folder));
     stays.extend(report.held_unmeasured.iter().map(|rel| format!("{rel} · von dir behalten")));
+    let state = match report.finished_at {
+        Some(at) if report.changed_since_finish() => {
+            format!("Abgeschlossen am {}; seither geändert", mogumogu::clock::display_date(at))
+        }
+        Some(at) => format!("Abgeschlossen am {}", mogumogu::clock::display_date(at)),
+        None => "Aktiv".to_string(),
+    };
     let mut dialog = Dialog::new(format!("Abschlussbericht · {}", report.name))
         .path(&report.path)
+        .row("Stand", state)
         .row(&saved_title, lines(report.saved.iter().map(check).collect(), "Nichts gelesen."))
         .row("Vollständig", lines(report.completeness.iter().map(check).collect(), "–"))
         .row("Bleibt ohne Frage", stays.join("\n"))
@@ -483,14 +491,29 @@ pub fn finish(report: &FinishReport) -> Dialog {
         );
     }
     let partial = if report.complete { "" } else { "Teilweise erfasst: Größen sind Untergrenzen. " };
+    // Finishing confirms exactly this report, open points included.
+    let confirms = match (report.finished_at, report.unsaved()) {
+        (Some(_), _) => String::new(),
+        (None, 0) => "„Abschließen“ bestätigt genau diesen Bericht. ".into(),
+        (None, 1) => "„Abschließen“ bestätigt genau diesen Bericht, auch den offenen Punkt unter „Gesichert“. ".into(),
+        (None, n) => {
+            format!("„Abschließen“ bestätigt genau diesen Bericht, auch die {n} offenen Punkte unter „Gesichert“. ")
+        }
+    };
     dialog = dialog.body(format!(
-        "{partial}Nur lesend, erfasst {}. Abschließen ändert keinen Schutz. „Du entscheidest“ kommt nie in einen Plan; \
-         in den Papierkorb geht nur Wiederherstellbares über einen Papierkorb-Plan.",
+        "{partial}{confirms}Erfasst {}. Abschließen ändert keinen Schutz und entfernt nichts. „Du entscheidest“ \
+         kommt nie in einen Plan; in den Papierkorb geht nur Wiederherstellbares über einen Papierkorb-Plan.",
         display_local(report.checked_at)
     ));
     if !report.recoverable.is_empty() {
         dialog = dialog.action(format!("tidy-plan:{}", report.project_id), "Papierkorb-Plan prüfen …", false);
     }
+    dialog = match report.finished_at {
+        Some(_) => dialog.action(format!("reactivate:{}", report.project_id), "Reaktivieren", false),
+        None => {
+            dialog.action(format!("finish-confirm:{}:{}", report.project_id, report.fingerprint), "Abschließen", true)
+        }
+    };
     dialog
 }
 

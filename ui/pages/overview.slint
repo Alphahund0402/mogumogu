@@ -78,7 +78,7 @@ export component OverviewPage inherits VerticalLayout {
     }
     HorizontalLayout {
         spacing: 10px;
-        FigureTile { value: Store.project-count; caption: "Projekte"; icon: Icons.folder; target: 1; }
+        FigureTile { value: Store.project-count; caption: Store.project-caption; icon: Icons.folder; target: 1; }
         FigureTile { value: Store.package-count; caption: "Paketversionen"; icon: Icons.package; target: 2; }
         FigureTile { value: Store.ai-count; caption: "KI-Dateien"; icon: Icons.spark; target: 3; }
         FigureTile { value: Store.storage-total; caption: Store.storage-caption; icon: Icons.drive; target: 4; }

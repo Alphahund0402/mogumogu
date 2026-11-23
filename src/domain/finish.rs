@@ -10,6 +10,21 @@ use super::{
 use crate::clock::Timestamp;
 use serde::{Deserialize, Serialize};
 
+string_enum! {
+    /// Where a project stands. No row means active; finishing changes no protection.
+    pub enum Lifecycle {
+        Active => "active",
+        Finished => "finished",
+    }
+}
+
+/// One change of a project's state, newest first in a history.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LifecycleEvent {
+    pub state: Lifecycle,
+    pub at: Timestamp,
+}
+
 /// One folder of the report.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FinishItem {
@@ -61,12 +76,46 @@ pub struct FinishReport {
     pub recoverable_allocated: u64,
     /// Registered runs of this project the person has not released.
     pub runs: Vec<RunBrief>,
+    /// Newest file outside outputs, caches and version control.
+    pub last_change: Option<Timestamp>,
+    /// When the project was finished; `None` while it is active.
+    pub finished_at: Option<Timestamp>,
+    /// What finishing confirms, see [`FinishReport::decision_fingerprint`].
+    pub fingerprint: String,
 }
 
 impl FinishReport {
     /// Open or unknown points about whether the work is saved.
     pub fn unsaved(&self) -> usize {
         self.saved.iter().filter(|c| c.state != CheckState::Done).count()
+    }
+
+    /// A finished project with a file newer than the finish: worth a look,
+    /// and maybe a reactivation. New commits alone do not show here, since
+    /// mogumogu keeps no Git state in its database.
+    pub fn changed_since_finish(&self) -> bool {
+        self.finished_at.zip(self.last_change).is_some_and(|(finished, changed)| changed > finished)
+    }
+
+    /// What the person confirms when finishing: the points about saved work,
+    /// which folders stay and why, which they decide and which can go. Sizes
+    /// and times stay out, so a growing log does not ask for a new report; a
+    /// changed point or folder does.
+    pub fn decision_fingerprint(&self) -> String {
+        let mut lines = vec![format!("project\t{}\t{}\t{}", self.project_id, fold_case(&self.path), self.complete)];
+        lines.extend(self.saved.iter().map(|c| format!("saved\t{}\t{}\t{}", c.state.as_str(), c.title, c.detail)));
+        let mut folders: Vec<String> = self
+            .held
+            .iter()
+            .map(|i| format!("held\t{}\t{}", fold_case(&i.rel_path), i.evidence))
+            .chain(self.held_unmeasured.iter().map(|rel| format!("held\t{}", fold_case(rel))))
+            .chain(self.decide.iter().map(|i| format!("decide\t{}\t{}", fold_case(&i.rel_path), i.label)))
+            .chain(self.recoverable.iter().map(|i| format!("recoverable\t{}\t{}", fold_case(&i.rel_path), i.label)))
+            .chain(self.runs.iter().map(|r| format!("run\t{}", r.id)))
+            .collect();
+        folders.sort();
+        lines.extend(folders);
+        crate::sha256::hex(&crate::sha256::Sha256::digest(lines.join("\n")))
     }
 }
 
@@ -129,7 +178,7 @@ pub fn finish_report(
     let held_bytes: u64 = held.iter().map(|h| h.bytes).sum();
     // Never less than what the part lists, whatever the totals say.
     let decide_bytes = tidy.review.saturating_sub(held_bytes).max(decide.iter().map(|d: &FinishItem| d.bytes).sum());
-    FinishReport {
+    let mut report = FinishReport {
         project_id: tidy.project_id,
         name: tidy.name.clone(),
         path: tidy.path.clone(),
@@ -149,7 +198,12 @@ pub fn finish_report(
         recoverable_bytes: tidy.regenerable,
         recoverable_allocated: tidy.regenerable_allocated,
         runs,
-    }
+        last_change: tidy.last_change,
+        finished_at: None,
+        fingerprint: String::new(),
+    };
+    report.fingerprint = report.decision_fingerprint();
+    report
 }
 
 /// Why a folder stays: a keep of the person or a hold at it, in it or
@@ -268,6 +322,38 @@ mod tests {
         assert_eq!(order, ["Commits auf dem Remote", "Änderungen", "Remote"]);
         assert_eq!(report.unsaved(), 2);
         assert_eq!(report.completeness.len(), 1);
+    }
+
+    #[test]
+    fn the_fingerprint_follows_points_and_folders_but_not_sizes_or_times() {
+        let report = |tidy: ProjectTidy| finish_report(&tidy, &[], &[], Vec::new(), 100 * DAY).fingerprint;
+        let base = report(tidy());
+        assert_eq!(base.len(), 64);
+        let mut grown = tidy();
+        grown.items[1].bytes *= 3;
+        grown.review *= 3;
+        grown.checked_at += DAY;
+        grown.items.reverse(); // largest first changes with the sizes
+        assert_eq!(report(grown), base, "a growing log asks for no new report");
+        let mut pushed = tidy();
+        pushed.checks[3].state = CheckState::Done;
+        assert_ne!(report(pushed), base, "a changed point is a new decision");
+        let mut new_folder = tidy();
+        new_folder.items.push(item("logs", TidyClass::Review, 10));
+        assert_ne!(report(new_folder), base, "a new folder is a new decision");
+        let mut unkept = tidy();
+        unkept.kept.retain(|k| k != "fixtures/golden");
+        assert_ne!(report(unkept), base, "a folder that no longer stays is a new decision");
+    }
+
+    #[test]
+    fn a_file_newer_than_the_finish_is_a_change_since() {
+        let mut report = finish_report(&tidy(), &[], &[], Vec::new(), 100 * DAY);
+        assert!(!report.changed_since_finish(), "active projects have no finish to compare with");
+        report.finished_at = Some(5);
+        assert!(report.changed_since_finish(), "last change 10 is after 5");
+        report.finished_at = Some(10);
+        assert!(!report.changed_since_finish());
     }
 
     #[test]

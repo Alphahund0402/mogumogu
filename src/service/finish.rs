@@ -38,6 +38,40 @@ impl Core {
                 artifacts: run.artifact_count,
             })
             .collect();
-        Ok(finish_report(&tidy, &history, &holds, runs, self.repo.now()))
+        let mut report = finish_report(&tidy, &history, &holds, runs, self.repo.now());
+        report.finished_at = self.repo.lifecycle(project_id)?.filter(|e| e.state == Lifecycle::Finished).map(|e| e.at);
+        Ok(report)
+    }
+
+    /// Finishes a project after the person confirmed its report. The report
+    /// is made again: a changed point or folder needs a new confirmation.
+    /// Changes no protection, no hold and nothing on disk. Only the
+    /// dashboard asks for this (the owner refuses it over the pipe).
+    pub fn finish_project(&mut self, project_id: i64, confirmation: &str) -> Result<FinishReport> {
+        self.repo.require_local()?;
+        let mut report = self.finish_report(project_id)?;
+        if report.finished_at.is_some() {
+            return Err(Error::blocked("Das Projekt ist schon abgeschlossen."));
+        }
+        if confirmation != report.fingerprint {
+            return Err(Error::blocked(
+                "Seit dem Bericht hat sich etwas geändert. Bitte den neuen Abschlussbericht prüfen und dann abschließen.",
+            ));
+        }
+        self.repo.record_lifecycle(project_id, Lifecycle::Finished, Some(&report.fingerprint))?;
+        report.finished_at = self.repo.lifecycle(project_id)?.map(|e| e.at);
+        Ok(report)
+    }
+
+    /// Makes a finished project active again; nothing else changes.
+    pub fn reactivate_project(&mut self, project_id: i64) -> Result<()> {
+        self.repo.require_local()?;
+        self.repo.record_lifecycle(project_id, Lifecycle::Active, None)
+    }
+
+    /// The project's changes, newest first.
+    pub fn lifecycle_history(&mut self, project_id: i64) -> Result<Vec<LifecycleEvent>> {
+        self.repo.project(project_id)?;
+        self.repo.lifecycle_history(project_id)
     }
 }

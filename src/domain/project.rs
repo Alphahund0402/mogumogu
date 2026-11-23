@@ -21,6 +21,10 @@ pub struct Project {
     pub read_approved: bool,
     #[serde(default)]
     pub coverage: String,
+    /// When the person finished the project; `None` while it is active.
+    /// Finishing changes no protection (docs/LEBENSZYKLUS.md).
+    #[serde(default)]
+    pub finished_at: Option<Timestamp>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

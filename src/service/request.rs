@@ -4,7 +4,7 @@
 use super::Core;
 use super::advisories::AdvisorySelection;
 use super::runs::{ArtifactRequest, ProjectRef};
-use crate::domain::{DatabaseEngine, DatabasePlace, DiskQuery, PackageQuery, RunState, ScopeKind, Settings};
+use crate::domain::{DatabaseEngine, DatabasePlace, DiskQuery, Lifecycle, PackageQuery, RunState, ScopeKind, Settings};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -119,6 +119,20 @@ pub enum Request {
     },
     /// What finishing a project would mean: measures it anew, decides nothing.
     FinishReport {
+        project_id: i64,
+    },
+    /// Finishes a project with the fingerprint of the report the person
+    /// confirmed. Dashboard only: the owner refuses it over the pipe.
+    FinishProject {
+        project_id: i64,
+        confirmation: String,
+    },
+    /// Makes a finished project active again.
+    ReactivateProject {
+        project_id: i64,
+    },
+    /// When a project was finished and reactivated, newest first.
+    LifecycleHistory {
         project_id: i64,
     },
     /// Switches registration of runs by cooperating harnesses on or off.
@@ -317,6 +331,7 @@ impl Request {
                 | Self::ClearStorageAnalysis
                 | Self::AiContent { .. }
                 | Self::TidyHistory { .. }
+                | Self::LifecycleHistory { .. }
                 | Self::Runs { .. }
                 | Self::DockerContexts
                 | Self::AgentsOverview
@@ -391,6 +406,12 @@ impl Core {
                 json!({ "points": points, "growth": growth })
             }
             FinishReport { project_id } => json!(self.finish_report(project_id)?),
+            FinishProject { project_id, confirmation } => json!(self.finish_project(project_id, &confirmation)?),
+            ReactivateProject { project_id } => {
+                self.reactivate_project(project_id)?;
+                json!({ "project_id": project_id, "state": Lifecycle::Active })
+            }
+            LifecycleHistory { project_id } => json!(self.lifecycle_history(project_id)?),
             RunsAllow { allowed } => json!(self.allow_agent_runs(allowed)?),
             Runs { project_id } => json!(self.run_overview(project_id)?),
             RunStart { project, harness, purpose } => json!(self.start_run(&project, &harness, purpose.as_deref())?),

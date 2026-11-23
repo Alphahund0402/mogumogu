@@ -17,6 +17,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (8, include_str!("../../migrations/008_cleanup_keeps.sql")),
     (9, include_str!("../../migrations/009_runs_docker_history.sql")),
     (10, include_str!("../../migrations/010_databases_and_release.sql")),
+    (11, include_str!("../../migrations/011_project_lifecycle.sql")),
 ];
 
 pub const SCHEMA_VERSION: i64 = MIGRATIONS[MIGRATIONS.len() - 1].0;

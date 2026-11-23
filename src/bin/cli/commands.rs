@@ -29,6 +29,9 @@ Projekte und Lesefreigaben (Registrierung ≠ Lesefreigabe)
   project approve --project ID           Ordner identitätsgebunden zum Lesen freigeben
   project checks --project ID            offene Punkte: Git-Stand (nie git gestartet) und Vollständigkeit; kein Löschurteil
   project finish-report --project ID     Abschlussbericht, nur lesend: gesichert?, bleibt, du entscheidest, Papierkorb möglich
+                                         (abschließen nur im Dashboard)
+  project reactivate --project ID        abgeschlossenes Projekt wieder aktiv; sonst ändert sich nichts
+  project lifecycle --project ID         wann das Projekt abgeschlossen und reaktiviert wurde
   system approve --kind npm-global|uv-tools|python|cargo-tools|nuget-cache [--path PFAD]
   system approve --kind npm-cache|pip-cache|uv-cache|cargo-registry|gradle-caches|maven-repository|pnpm-store|yarn-cache [--path PFAD]
                                          Paket-Cache nur messen (Aufräumbericht nennt den Aufräumbefehl)
@@ -254,6 +257,12 @@ pub fn parse(args: &[String]) -> Result<Action> {
         ["project", "finish-report", ..] => {
             let project_id = opts(rest(2), &["--project"])?.id("--project")?;
             call(Request::FinishReport { project_id }, View::Finish)
+        }
+        ["project", "reactivate", ..] => {
+            call(Request::ReactivateProject { project_id: opts(rest(2), &["--project"])?.id("--project")? }, View::Json)
+        }
+        ["project", "lifecycle", ..] => {
+            call(Request::LifecycleHistory { project_id: opts(rest(2), &["--project"])?.id("--project")? }, View::Json)
         }
         ["project", "candidates"] => call(Request::ProjectCandidates, View::Json),
         ["project", "accept-all", ..] => {

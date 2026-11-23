@@ -277,6 +277,15 @@ fn run(mut core: Core, receiver: Receiver<Job>, events: Arc<Mutex<impl OwnerEven
                             )));
                         }
                     }
+                    // Finishing a project is the person's decision (docs/LEBENSZYKLUS.md,
+                    // E2): an agent may read the report and reactivate, never finish.
+                    Request::FinishProject { .. } if !from_ui => {
+                        if let Some(reply) = reply {
+                            let _ = reply.send(Err(crate::Error::blocked(
+                                "Ein Projekt abschließen geht nur im Dashboard (Projektseite → Abschlussbericht …).",
+                            )));
+                        }
+                    }
                     request => {
                         // Reads (search, filters, findings) stay quiet so typing
                         // never blocks the dashboard's buttons.

@@ -199,6 +199,59 @@ fn v9_runs_stay_held_and_no_database_is_monitored_after_the_upgrade() {
 }
 
 #[test]
+fn v10_projects_stay_active_and_the_lifecycle_table_refuses_odd_rows() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("inventory.sqlite3");
+    {
+        let db = Connection::open(&path).unwrap();
+        for sql in [
+            include_str!("../migrations/001_initial.sql"),
+            include_str!("../migrations/002_inventory.sql"),
+            include_str!("../migrations/003_package_evidence.sql"),
+            include_str!("../migrations/004_user_scopes.sql"),
+            include_str!("../migrations/005_recycle.sql"),
+            include_str!("../migrations/006_cache_scopes.sql"),
+            include_str!("../migrations/007_storage_analysis.sql"),
+            include_str!("../migrations/008_cleanup_keeps.sql"),
+            include_str!("../migrations/009_runs_docker_history.sql"),
+            include_str!("../migrations/010_databases_and_release.sql"),
+        ] {
+            db.execute_batch(sql).unwrap();
+        }
+        db.execute_batch(
+            "INSERT INTO app_meta(key,value) VALUES('mode','local');
+            INSERT INTO projects(name,path,origin) VALUES('web','C:\\fixture\\web','registered');",
+        )
+        .unwrap();
+        db.pragma_update(None, "user_version", 10).unwrap();
+    }
+    let mut repo = Repository::open_path(&path, false, Arc::new(FixedClock::new(1_000))).unwrap();
+    let projects = repo.projects().unwrap();
+    assert_eq!((projects.len(), projects[0].finished_at), (1, None), "no project changes state with the upgrade");
+    assert!(projects[0].protected);
+    assert!(repo.lifecycle(1).unwrap().is_none());
+    let backups = std::fs::read_dir(temp.path().join("backups")).unwrap().count();
+    assert!(backups >= 1, "backed up before the migration");
+    let db = Connection::open(&path).unwrap();
+    db.pragma_update(None, "foreign_keys", "ON").unwrap();
+    assert_eq!(db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), SCHEMA_VERSION);
+    let fingerprint = "a".repeat(64);
+    for bad in [
+        format!(
+            "INSERT INTO project_lifecycle(project_id,state,at,fingerprint) VALUES(1,'archived',0,'{fingerprint}')"
+        ),
+        "INSERT INTO project_lifecycle(project_id,state,at) VALUES(1,'finished',0)".to_string(),
+        format!("INSERT INTO project_lifecycle(project_id,state,at,fingerprint) VALUES(1,'active',0,'{fingerprint}')"),
+        "INSERT INTO project_lifecycle(project_id,state,at,fingerprint) VALUES(1,'finished',0,'short')".to_string(),
+        format!(
+            "INSERT INTO project_lifecycle(project_id,state,at,fingerprint) VALUES(9,'finished',0,'{fingerprint}')"
+        ),
+    ] {
+        assert!(db.execute(&bad, []).is_err(), "{bad}");
+    }
+}
+
+#[test]
 fn v3_scopes_keep_their_meaning_and_user_folders_get_their_own_realm() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("inventory.sqlite3");
