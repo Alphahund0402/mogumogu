@@ -206,6 +206,11 @@ flowchart LR
   einer temporären Paketliste und `mogumogu-cli`. Projektpfade und
   Registry-Hosts verlassen das Inventar nicht.
 
+[validate.py](../scripts/validate.py) hält diese Grenzen am Python-Syntaxbaum
+fest: welche Module Netzwerk- oder Prozessmodule importieren dürfen, die beiden
+Downloadhosts, kein `shell=`, keine Paketabhängigkeiten und ein HTML-Bericht,
+der nichts nachlädt.
+
 ## Änderungen gezielt beginnen
 
 Neue Befehle beginnen bei `service/request.rs` und dem passenden Fachmodul:

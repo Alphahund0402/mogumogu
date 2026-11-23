@@ -4,6 +4,7 @@
 Python 3.11+, standard library only. Reads only this repository.
 Usage: python scripts/validate.py
 """
+import ast
 from contextlib import contextmanager
 from pathlib import Path
 import hashlib
@@ -17,6 +18,26 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT / 'assets/demo.json').read_text(encoding='utf-8'))
 MIGRATIONS = sorted((ROOT / 'migrations').glob('*.sql'))
+ADVISORIES = ROOT / 'packages/mogumogu-advisories'
+
+
+def python_effects(path):
+    """Imported modules, called names and whether any call passes `shell=`; parsed, never imported."""
+    tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+    imports, calls, shell = set(), set(), False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+            imports.update(f'{node.module}.{alias.name}' for alias in node.names)
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                calls.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                calls.add(f'{node.func.value.id}.{node.func.attr}')
+            shell = shell or any(keyword.arg == 'shell' for keyword in node.keywords)
+    return imports, calls, shell
 
 
 def rust_sources():
@@ -183,6 +204,48 @@ class Contracts(unittest.TestCase):
         http = (ROOT / 'src/docker/http.rs').read_text(encoding='utf-8')
         self.assertEqual(production_rust(http).count('"GET '), 1, 'one request line, always GET')
 
+    def test_advisory_watcher_goes_online_and_starts_programs_only_where_documented(self):
+        # The watcher is a separate, optional process (AGENTS.md): stdlib only,
+        # downloads only OSV archives and the pinned scanner, starts only the
+        # offline scanner and `mogumogu-cli --no-start`. Parsed, not a proof.
+        package = ADVISORIES / 'src/mogumogu_advisories'
+        online = {'feeds.py', 'scanner.py', 'watcher.py'}
+        processes = {'scanner.py', 'watcher.py'}
+        downloads = {'feeds.py': 'osv-vulnerabilities.storage.googleapis.com', 'scanner.py': 'github.com'}
+        never = {'socket', 'ssl', 'ctypes', 'pickle', 'marshal', 'importlib', 'multiprocessing', 'pty', 'asyncio',
+                 'ftplib', 'smtplib', 'telnetlib', 'xmlrpc', 'requests', 'urllib3', 'httpx', 'aiohttp'}
+        wrappers = ['watch_advisories.py', 'audit_cargo_lock.py', 'advisory_report.py']
+        files = {path.name: path for path in package.glob('*.py')}
+        files.update({f'scripts/{name}': ROOT / 'scripts' / name for name in wrappers})
+        files['_build_backend.py'] = ADVISORIES / '_build_backend.py'
+        self.assertTrue(online <= set(files), 'renamed watcher modules: update this contract')
+        for name, path in files.items():
+            imports, calls, shell = python_effects(path)
+            roots = {module.split('.')[0] for module in imports}
+            with self.subTest(module=name):
+                self.assertEqual(roots & never, set())
+                if name not in online:
+                    self.assertEqual({m for m in imports if m.startswith(('urllib.request', 'http.client'))}, set())
+                if name not in processes:
+                    self.assertNotIn('subprocess', roots)
+                self.assertEqual({c for c in calls if c in {'eval', 'exec', '__import__', 'compile'}
+                                  or c.startswith(('os.system', 'os.popen', 'os.startfile', 'os.exec', 'os.spawn'))},
+                                 set())
+                self.assertFalse(shell, 'no shell=')
+        for name, host in downloads.items():
+            text = files[name].read_text(encoding='utf-8')
+            self.assertNotIn('http://', text, name)
+            self.assertEqual(set(re.findall(r'https://([^/\s"\'{}]+)', text)), {host}, name)
+        self.assertNotIn('urlopen', python_effects(files['watcher.py'])[1], 'watcher only passes the opener on')
+        self.assertIn('"--offline"', files['scanner.py'].read_text(encoding='utf-8'))
+        self.assertIn('"--no-start"', files['watcher.py'].read_text(encoding='utf-8'))
+        report = files['report_html.py'].read_text(encoding='utf-8').lower()
+        for tag in ['<script', '<link', '<img', '<iframe', '<object', '@import', 'src=']:
+            self.assertNotIn(tag, report, 'the HTML report loads nothing')
+        project = tomllib.loads((ADVISORIES / 'pyproject.toml').read_text(encoding='utf-8'))
+        self.assertEqual(project['project']['dependencies'], [])
+        self.assertEqual(project['build-system']['requires'], [])
+
     def test_every_unsafe_block_is_documented(self):
         text = (ROOT / 'src/platform/windows.rs').read_text(encoding='utf-8')
         lines = text.splitlines()
@@ -251,8 +314,8 @@ class Contracts(unittest.TestCase):
                      'docs/ANLEITUNG.md', 'build.ps1', 'start.ps1', 'start.cmd', 'build.cmd', 'scripts/measure.ps1',
                      'scripts/release.ps1', 'docs/ARCHITEKTUR.md']:
             self.assertTrue((ROOT / name).is_file(), name)
-        for doc in [*ROOT.glob('*.md'), ROOT / 'docs/ARCHITEKTUR.md']:
-            for target in re.findall(r'\]\(((?!https?://|#)[^)#]+)', doc.read_text(encoding='utf-8')):
+        for doc in [*ROOT.glob('*.md'), *(ROOT / 'docs').glob('*.md'), *ROOT.glob('packages/*/README.md')]:
+            for target in re.findall(r'\]\(((?!https?://|#|mailto:)[^)#]+)', doc.read_text(encoding='utf-8')):
                 self.assertTrue((doc.parent / target).exists(), f'{doc.name}: {target}')
 
 
