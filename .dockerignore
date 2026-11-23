@@ -40,9 +40,14 @@
 !security/**
 !docs/
 !docs/**
-# Linked from README and THIRD_PARTY; the static validator checks these links.
+# Linked from README, THIRD_PARTY and docs/; the static validator checks these links.
 !design/brand/README.md
 !design/brand/index.html
+!design/brand/consistent-v2-prompt.md
+!design/brand/measurement/README.md
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
 !.agents/
 !.agents/skills/
 !.agents/skills/**
