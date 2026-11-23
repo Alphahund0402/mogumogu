@@ -44,10 +44,81 @@ def rust_sources():
     return {p: p.read_text(encoding='utf-8') for p in (ROOT / 'src').rglob('*.rs')}
 
 
+def _after_literal(code, i):
+    """Index after a comment, string, raw string or char literal starting at `i`, else None."""
+    if code[i] not in '/"\'rb':
+        return None
+    if code.startswith('//', i):
+        end = code.find('\n', i)
+        return len(code) if end < 0 else end
+    if code.startswith('/*', i):
+        depth, j = 0, i
+        while j < len(code):
+            if code.startswith('/*', j):
+                depth, j = depth + 1, j + 2
+            elif code.startswith('*/', j):
+                depth, j = depth - 1, j + 2
+                if depth == 0:
+                    return j
+            else:
+                j += 1
+        raise AssertionError('unterminated block comment')
+    if i and (code[i - 1].isalnum() or code[i - 1] == '_'):
+        return None
+    raw = re.match(r'b?r(#*)"', code[i:i + 300])
+    if raw:
+        end = code.find('"' + raw.group(1), i + raw.end())
+        if end < 0:
+            raise AssertionError('unterminated raw string')
+        return end + 1 + len(raw.group(1))
+    j = i + 1 if code.startswith('b', i) and code[i + 1:i + 2] in ('"', "'") else i
+    if code[j] == '"':
+        j += 1
+        while code[j] != '"':
+            j += 2 if code[j] == '\\' else 1
+        return j + 1
+    if code[j] == "'":
+        if code[j + 1] == '\\':
+            return code.index("'", j + 3) + 1
+        if code[j + 2:j + 3] == "'":
+            return j + 3
+    return None  # a lifetime or plain code
+
+
+def _item_end(code, start):
+    """End of the item that the attribute at `start` belongs to: its closing
+    brace, or the semicolon of an item without a body."""
+    depth, i = 0, start
+    while i < len(code):
+        after = _after_literal(code, i)
+        if after is not None:
+            i = after
+            continue
+        char = code[i]
+        if char in '([{':
+            depth += 1
+        elif char in ')]}':
+            depth -= 1
+            if char == '}' and depth == 0:
+                return i + 1
+        elif char == ';' and depth == 0:
+            return i + 1
+        i += 1
+    raise AssertionError(f'end of the cfg(test) item at offset {start} not found')
+
+
 def production_rust(text):
-    """Lexical checks skip line comments and trailing unit-test modules."""
+    """Lexical checks skip line comments and every item compiled only for tests
+    (`#[cfg(test)]`, `#[cfg(all(test, …))]`), wherever it sits in the file."""
     code = '\n'.join(line for line in text.splitlines() if not line.strip().startswith('//'))
-    return re.split(r'#\[cfg\((?:all\()?test\b', code, maxsplit=1)[0]
+    kept, i = [], 0
+    for marker in re.finditer(r'(?m)^[ \t]*#\[cfg\((?:all\()?test\b[^\]]*\]', code):
+        if marker.start() < i:
+            continue  # inside an item already skipped
+        kept.append(code[i:marker.start()])
+        i = _item_end(code, marker.end())
+    kept.append(code[i:])
+    return ''.join(kept)
 
 
 @contextmanager
