@@ -44,7 +44,8 @@ unabhängigen Review (G5) nur in registrierten Wegwerf-Testwurzeln (`cleanup::PR
   den gehaltenen `.claude`-Handle (`DirHandle::replace_file`: neue Hilfsdatei, Umbenennen im selben
   Ordner), nie über einen Pfad und nie durch Links oder Hardlinks.
 - `src/cleanup/`: einzige Stelle, die etwas aus einem Projekt entfernt – nur „Wiederherstellbar“,
-  nur als ganzer Ordner in den Papierkorb (`platform::recycle`), nach Bestätigung per Fingerabdruck,
+  nur als ganzer Ordner in den Papierkorb (`platform::recycle`; was Windows nicht in den Papierkorb
+  legen würde, lehnt es ab, bevor etwas gelöscht wird), nach Bestätigung per Fingerabdruck,
   erneuter Prüfung an gehaltenen Handles und vorher dauerhaft geschriebenem Journal. Tests nutzen
   einen eigenen `Recycler`, nie den echten Papierkorb.
 - `src/docker/`: einzige Stelle, die mit einem anderen Programm spricht – nur `GET` aus einer festen

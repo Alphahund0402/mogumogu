@@ -21,12 +21,14 @@ pub struct TestBin {
     pub moved: Arc<Mutex<Vec<PathBuf>>>,
     pub fail: bool,
     pub keep: bool,
+    /// Moves the folder but still reports an error, as a shell might.
+    pub fail_after_move: bool,
 }
 
 impl TestBin {
     pub fn new(dir: PathBuf) -> Self {
         fs::create_dir_all(&dir).unwrap();
-        Self { dir, moved: Arc::default(), fail: false, keep: false }
+        Self { dir, moved: Arc::default(), fail: false, keep: false, fail_after_move: false }
     }
 
     pub fn count(&self) -> usize {
@@ -44,7 +46,11 @@ impl Recycler for TestBin {
             return Ok(());
         }
         let count = self.count();
-        fs::rename(path, self.dir.join(format!("{count}-{}", path.file_name().unwrap().to_string_lossy())))
+        fs::rename(path, self.dir.join(format!("{count}-{}", path.file_name().unwrap().to_string_lossy())))?;
+        if self.fail_after_move {
+            return Err(std::io::Error::other("nicht bestätigt"));
+        }
+        Ok(())
     }
 }
 

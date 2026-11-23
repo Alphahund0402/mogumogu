@@ -359,6 +359,24 @@ fn a_failing_or_idle_recycle_bin_is_reported_and_leaves_the_folder() {
 }
 
 #[test]
+fn an_error_after_the_folder_left_its_place_says_so() {
+    let mut env = env(false);
+    let plan = approved(&mut env);
+    env.core.use_recycler(Box::new(TestBin { fail_after_move: true, ..env.bin.clone() }));
+    let unconfirmed = env.core.cleanup_apply(plan.id).unwrap();
+    assert_eq!(unconfirmed.state, PlanState::Failed, "an unconfirmed move is never counted as done");
+    assert!(
+        unconfirmed
+            .targets
+            .iter()
+            .all(|t| t.error.as_deref().is_some_and(|e| e.contains("trotzdem nicht mehr am Ort"))),
+        "{:#?}",
+        unconfirmed.targets
+    );
+    assert!(!env.project.join("node_modules").exists());
+}
+
+#[test]
 fn a_folder_with_versioned_files_is_never_planned_and_its_evidence_names_git() {
     let mut env = env(false);
     // A JavaScript action commits its bundled dependencies.

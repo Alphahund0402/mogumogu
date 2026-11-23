@@ -172,13 +172,13 @@ eigenen Projektordnern.
 | Start mit einer Datenbank mit Sessions oder offenem altem Plan: Sicherung vor Schema 5, alter Plan „Ungültig geworden“, Scratchpads bleiben | ☐ | ☐ |
 | Papierkorb-Plan für ein eigenes Projekt: nur Wiederherstellbares, Beleg je Ordner, Blocker „Gesperrt bis zum unabhängigen Review“, Bestätigen gesperrt | ☐ | ☐ |
 | Papierkorb-Plan in einer Wegwerf-Testwurzel: Ordner liegen danach im Windows-Papierkorb und lassen sich dort wiederherstellen; Quellen und Lockfile bleiben | ☐ | ☐ |
-| Zu großer Ordner für den Papierkorb: Windows fragt vor dem endgültigen Löschen; „Nein“ lässt den Ordner am Ort und meldet „nicht verschoben“ | ☐ | ☐ |
+| Zu großer Ordner für den Papierkorb: ohne Dialog abgelehnt, Ordner bleibt am Ort, Plan meldet „nicht verschoben“ mit den Codes (Plattformfunktion am 23.11.2026 auf Windows 11 direkt geprüft, Planweg offen) | ☐ | ☐ |
 | Kontextfilter mit Entwicklermodus: Symlink an `.claude/settings.local.json` und an `.claude` wird abgelehnt; schnelles Ersetzen von `.claude` durch eine Junction während des Schreibens trifft nichts außerhalb | ☐ | ☐ |
 | Echtes Claude Code nach dem Kontextfilter: `.env` und `.env.example` gesperrt, `/node_modules/**` greift bei Start in der Projektwurzel; ein „Nicht mehr fragen“ während des Schreibens geht nicht verloren (Vorschau neu nötig) | ☐ | ☐ |
 | Laufwerkssuche als Administrator auf einem Rechner mit mehreren Benutzern: fremde Profile erscheinen nicht; OneDrive-Ordner werden durchsucht (keine Reparse Points); externe USB-Platte als „fest“ läuft nicht unnötig an | ☐ | ☐ |
 | Paket-Caches: Systembefund zeigt die vorhandenen Caches mit maskiertem Pfad; nach „Lesen erlauben“ Größe im Aufräumbericht mit Aufräumbefehl; nichts im Cache verändert | ☐ | ☐ |
 | Ordner in Benutzung (z. B. laufender Dev-Server in `node_modules`): Verschieben scheitert ohne Dialog, Plan meldet den Ordner als nicht verschoben, und im Papierkorb liegen keine einzelnen Teile daraus | ☐ | ☐ |
-| Kein stilles endgültiges Löschen (in einer VM mit Wegwerf-Papierkorb): SUBST-Laufwerk, Richtlinie `NoRecycleFiles`, `NukeOnDelete`, Papierkorbgröße 0 oder zu klein – jeweils Nachfrage oder Ablehnung | ☐ | ☐ |
+| Kein stilles endgültiges Löschen (in einer VM mit Wegwerf-Papierkorb): SUBST-Laufwerk, Richtlinie `NoRecycleFiles`, `NukeOnDelete`, Papierkorbgröße 0 oder zu klein – jeweils Ablehnung ohne Dialog, nichts gelöscht | ☐ | ☐ |
 | Gepinnter Elternordner auf ReFS und auf exFAT/FAT: Umbenennen von Weg und Elternordner wird verweigert, sonst Plan dort sperren | ☐ | ☐ |
 
 ## K. Laufwerkssuche und Wegfall der Experimente-Seite (19. Oktober 2026)

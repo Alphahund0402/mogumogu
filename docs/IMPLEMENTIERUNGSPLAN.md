@@ -168,6 +168,8 @@ Grenzen: 2.000 Projekte, 5.000 registrierte Ressourcen, 200 Aktivitätszeilen, d
 | `.mogumogu-keep` im Ordner oder darüber | Ordner verweigern | `a_keep_marker_on_the_way_or_inside_blocks_the_folder` |
 | Ordner ersetzt oder Junction auf dem Weg | Plan ungültig, nichts verschoben | `a_replaced_folder_or_a_junction_on_the_way_invalidates_the_plan` |
 | Kein Papierkorb oder Ordner bleibt am Ort | Als nicht verschoben melden | `a_failing_or_idle_recycle_bin_is_reported_and_leaves_the_folder` |
+| Papierkorb meldet einen Fehler, der Ordner ist aber fort | Nie als verschoben gezählt; die Meldung sagt, dass der Ordner nicht mehr am Ort ist | `an_error_after_the_folder_left_its_place_says_so` |
+| Windows würde endgültig löschen (Papierkorb zu klein, abgeschaltet, Richtlinie), auch nur für den Inhalt eines Ordners | Ohne Dialog abgelehnt, bevor etwas gelöscht wird; Erfolg nur mit Element im Papierkorb | `only_a_confirmed_move_into_the_bin_counts`, `the_sink_answers_only_for_its_own_interfaces_and_frees_itself`; auf Windows 11 direkt geprüft, VM-Abnahme offen |
 | Projekt über eine Junction in der Testwurzel | G5-Sperre bleibt (Weg von der Testwurzel wird ohne Links gegangen) | `a_project_reached_through_a_junction_in_the_test_root_stays_locked` |
 | Kontextfilter: Hardlink am Ziel, schreibgeschütztes Ziel | Nichts außerhalb geschrieben, keine Hilfsdatei bleibt zurück | `a_context_filter_never_writes_through_a_hard_link_and_leaves_nothing_behind` |
 | Kontextfilter: `!`-Ausnahme würde eigene Verbote aufheben | Keine Negationsregel | `a_context_filter_goes_into_the_personal_file_and_keeps_the_shared_one` |
@@ -226,13 +228,19 @@ Abgestimmte Reihenfolge seit dem 1. November 2026: Der Zweck „Arbeit behalten,
    weiterhin ändern. Der Review braucht einen belastbaren Vertrag dafür, dass
    der überprüfte Ordner samt Inhalt und Schutzstatus zur Aktion passt.
    [Ausführung](../src/cleanup/executor.rs) [Schutzprüfung](../src/cleanup/gate.rs)
-2. **G5 · Papierkorb als einzige Folge nachweisen.** Die aktuelle Shell-API
-   kann warnen, wenn Windows endgültig löschen würde. Für einen Papierkorb-Plan
-   muss ein nicht verfügbarer Papierkorb die Aktion stoppen. Prüfe die
-   Ausführungsoptionen, Wiederherstellung und Ergebnisprotokoll in Wegwerf-VMs
-   auf Windows 10 und 11, einschließlich Richtlinien, Kapazität und
-   abgebrochener Operationen. [Windows-Abnahme](WINDOWS-ABNAHME.md)
-   [Windows-Shell-Optionen](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags)
+2. **G5 · Papierkorb als einzige Folge nachweisen.** Umgesetzt am
+   23. November 2026: `platform::recycle` nutzt `IFileOperation` ohne Dialog;
+   eine eigene Fortschrittsmeldung lehnt jedes Element ab, das Windows nicht in
+   den Papierkorb legen würde, bevor etwas gelöscht wird, und Erfolg verlangt
+   das Element im Papierkorb. Auf Windows 11 direkt geprüft: Ordner mit
+   Unterordner, mit Datei und leer landen im Papierkorb; ein Ordner, der größer
+   ist als der Papierkorb, bleibt unverändert, obwohl Windows ihn selbst als
+   wiederverwertbar ankündigte und erst seinen Inhalt nicht
+   ([Validierung](VALIDIERUNG.md#papierkorb-ohne-endgültiges-löschen-23-november-2026)).
+   Offen: Wegwerf-VMs auf Windows 10 und 11 für Richtlinien, Kapazität 0,
+   SUBST, abgebrochene Operationen und Ordner in Benutzung, dann der Review.
+   [Windows-Abnahme](WINDOWS-ABNAHME.md)
+   [Fortschrittsmeldung vor dem Löschen](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperationprogresssink-predeleteitem)
 3. **Vor der Beta · Sicherheit der eigenen Abhängigkeiten und Releases.**
    Umgesetzt für `Cargo.lock` und externe Pipelines: das eigenständige,
    abhängigkeitsfreie Python-Paket [mogumogu-advisories](../packages/mogumogu-advisories/README.md)

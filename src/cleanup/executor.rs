@@ -144,7 +144,15 @@ pub fn apply(
             continue;
         }
         let outcome = match recycler.recycle(&located.shell) {
-            Err(e) => Err(format!("Papierkorb: {e}")),
+            // An error is not proof that nothing moved: look again, and say
+            // so if the folder left its place anyway.
+            Err(e) => match located.current() {
+                Ok(Some(identity)) if identity == target.identity => Err(format!("Papierkorb: {e}")),
+                Ok(_) => Err(format!(
+                    "Papierkorb: {e}; der Ordner ist trotzdem nicht mehr am Ort, bitte im Papierkorb nachsehen"
+                )),
+                Err(check) => Err(format!("Papierkorb: {e}; Ergebnis nicht prüfbar: {check}")),
+            },
             Ok(()) => match located.current() {
                 Ok(Some(identity)) if identity == target.identity => Err("noch am Ort – nicht verschoben".into()),
                 Ok(_) => Ok(()),

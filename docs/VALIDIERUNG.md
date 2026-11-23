@@ -1146,6 +1146,58 @@ Läufen (einzeln und im Paket) nicht mehr. Bereinigungscode und Test sind in die
 Phase unverändert. Ursache noch offen; vermutlich wurde ein Plan wegen
 gleichzeitiger Dateizugriffe vor der Ausführung abgebrochen.
 
+## Papierkorb ohne endgültiges Löschen (23. November 2026)
+
+`platform::recycle` verschiebt jetzt über `IFileOperation` mit
+`FOFX_RECYCLEONDELETE` und ohne `FOF_WANTNUKEWARNING`, also ohne Dialog. Ein
+eigener `IFileOperationProgressSink` lehnt in `PreDeleteItem` jedes Element ab,
+das Windows ohne `TSF_DELETE_RECYCLE_IF_POSSIBLE` ankündigt (`E_ABORT`), bevor
+etwas gelöscht wird. Erfolg verlangt ein `PostDeleteItem` mit Erfolgscode und
+einem Element im Papierkorb; „ausgeführt, aber kein Element im Papierkorb“ gilt
+als endgültig gelöscht und wird so gemeldet. Jede Meldung nennt die Codes. Der
+Vorgang läuft auf einem eigenen Thread im Single-Threaded Apartment.
+
+Direkt über die Plattformfunktion geprüft, auf Windows 11 Pro (Build 26300),
+außerhalb der App und ohne Planweg:
+
+| Ordner | Ergebnis |
+|---|---|
+| Mit Unterordner | Im Papierkorb; `PostDeleteItem` meldet `0x00270008` („als Ganzes behandelt“) mit Element |
+| Nur mit Datei, leer | Im Papierkorb |
+| Mit einer 8-TiB-Sparse-Datei, größer als der Papierkorb | Abgelehnt, nichts gelöscht, nichts im Papierkorb: Windows kündigte den Ordner mit `0x282` (wiederverwertbar) an und erst die Datei darin ohne das Flag (`0x2`); danach `0x00270003`, Vorgang `E_ABORT` |
+| Mit 143 GB tatsächlich belegtem Inhalt | Blieb ebenso am Ort, nichts im Papierkorb |
+
+Befund für den Review: Windows kann einen Ordner als wiederverwertbar ankündigen
+und erst bei seinem Inhalt endgültig löschen wollen. Geprüft wird deshalb jede
+Ankündigung, nicht nur die erste.
+
+Ein getrennter Review des neuen Codes (KI-Agent, kein Ersatz für den
+menschlichen Review) fand keine Speicherfehler: Vtables Platz für Platz gegen
+die SDK-Reihenfolge, Referenzzählung auf allen Rückwegen und Apartment stimmen.
+Behoben wurden drei Risiken: Erfolg hing an der ersten Meldung nach dem Löschen
+statt an allen (jetzt muss jede ein Element im Papierkorb nennen); „nichts
+gelöscht“ stimmt nur, wenn vor der Ablehnung kein Teil im Papierkorb landete
+(jetzt gezählt und genannt); und bei einem Fehler prüfte der Executor nicht
+erneut, ob der Ordner trotzdem fort ist (jetzt in der Meldung, Test
+`an_error_after_the_folder_left_its_place_says_so`). Bewusst beibehalten:
+`FOF_ALLOWUNDO` legt im Explorer einen Rückgängig-Eintrag an; Strg+Z holt einen
+Ordner aus dem Papierkorb zurück, also nur in die sichere Richtung.
+
+`validate.py` lässt die Dateioperation nur in `platform/windows.rs` zu,
+verbietet `SHFileOperation` und `FOF_WANTNUKEWARNING` und verlangt, dass die
+Fortschrittsmeldung vor `PerformOperations` angemeldet ist. Dabei fiel auf, dass
+die lexikalischen Verträge jede Datei am ersten `#[cfg(test)]` abschnitten: In
+`platform/windows.rs` ab Zeile 1248, `inventory/tidy.rs` ab Zeile 128 und
+`docker/http.rs` ab Zeile 112 prüften sie den Rest nie. Jetzt entfernt
+`production_rust` nur die Testelemente selbst. In 156 Dateien bleibt das
+Ergebnis unverändert; eingeschleuste Verstöße in den bisher ungeprüften Teilen
+schlagen jetzt fehl.
+
+Offen: VM-Abnahme auf Windows 10 und 11 (Richtlinie `NoRecycleFiles`,
+`NukeOnDelete`, Papierkorbgröße 0, SUBST-Laufwerk, abgebrochener Vorgang, Ordner
+in Benutzung) und der unabhängige Review (G5). `PRODUCTION_ENABLED` bleibt
+`false`.
+
 ## Nicht ausgeführt
 
 | Bereich | Grund |

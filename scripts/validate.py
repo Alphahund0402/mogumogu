@@ -199,7 +199,11 @@ class Contracts(unittest.TestCase):
             'Command::new(': set(),
             # Rename and discard of the one temporary file `replace_file` creates.
             'SetFileInformationByHandle': {'src/platform/windows.rs'},
-            'SHFileOperationW': {'src/platform/windows.rs'},
+            # The recycle bin: the shell's file operation with the sink that
+            # refuses deleting for good (`platform::recycle`), nothing else.
+            'FileOperation': {'src/platform/windows.rs'}, 'SHCreateItemFromParsingName': {'src/platform/windows.rs'},
+            'CoCreateInstance': {'src/platform/windows.rs'}, 'perform_operations': {'src/platform/windows.rs'},
+            'SHFileOperation': set(),
             'platform::recycle(': {'src/cleanup/executor.rs'},
             # Real places of holds: metadata only, and only to block.
             'real_location(': {'src/platform/windows.rs', 'src/platform/fallback.rs', 'src/platform/mod.rs'},
@@ -211,7 +215,7 @@ class Contracts(unittest.TestCase):
             'FILE_DELETE_ON_CLOSE': set(),
             'FileDispositionInfo': {'src/platform/windows.rs'}, 'FileRenameInfo': {'src/platform/windows.rs'},
             'NtSetInformationFile': {'src/platform/windows.rs'},
-            'IFileOperation': set(), 'SHFileOperationA': set(), 'fs::remove': set(),
+            'fs::remove': set(),
             'unsafe ': {'src/platform/windows.rs'},
             'ureq::': set(),
             # The only write into a user's project: the confirmed context filter,
@@ -230,6 +234,12 @@ class Contracts(unittest.TestCase):
             for needle, modules in allowed.items():
                 if needle in code:
                     self.assertIn(rel, modules, f'{needle} in {rel}')
+        # Never deleted for good: no dialog that offers it, a sink that refuses
+        # every item Windows would not recycle, attached before anything runs.
+        windows = production_rust((ROOT / 'src/platform/windows.rs').read_text(encoding='utf-8'))
+        self.assertNotIn('FOF_WANTNUKEWARNING', windows)
+        self.assertIn('TSF_DELETE_RECYCLE_IF_POSSIBLE', windows)
+        self.assertLess(windows.index('(vtbl.advise)'), windows.index('(vtbl.perform_operations)'))
 
     def test_domain_and_presentation_stay_independent_of_io_and_storage(self):
         # Dependency checks complement the destructive-API allowlist. They

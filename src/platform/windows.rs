@@ -26,6 +26,7 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
@@ -1398,45 +1399,462 @@ fn reg_string(key: &RegKey, value: &str) -> Option<String> {
 
 // ------------------------------------------------------------ recycle bin
 
-/// Moves one folder to the recycle bin of its drive, by path. Local fixed
-/// drives only: elsewhere the shell has no recycle bin and would delete for
-/// good. If the folder is too large for the bin, the shell asks the person
-/// before deleting it permanently; nothing is destroyed silently.
+/// Moves one folder to the recycle bin of its drive, by path, and never
+/// deletes it for good. Local fixed drives only. Windows decides per item
+/// whether it can recycle (bin switched off, item too large, policy); where it
+/// would delete permanently instead, the progress sink refuses the item
+/// before anything happens and the operation stops. No dialog is shown.
+/// Success needs Windows to report the item in the recycle bin.
 pub fn recycle(path: &Path) -> io::Result<()> {
-    use windows_sys::Win32::UI::Shell::{
-        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FOF_WANTNUKEWARNING, SHFILEOPSTRUCTW,
-        SHFileOperationW,
-    };
     if !fixed_disk(path) {
         return Err(io::Error::new(io::ErrorKind::Unsupported, "kein Papierkorb auf diesem Laufwerk"));
     }
-    let mut from: Vec<u16> = path.as_os_str().encode_wide().collect();
-    if from.contains(&0) {
+    let from = wide(path.as_os_str());
+    if from[..from.len() - 1].contains(&0) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "NUL im Pfad"));
     }
-    // A list with exactly one entry, terminated by two NULs.
-    from.extend([0, 0]);
-    let flags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING | FOF_NOERRORUI | FOF_SILENT;
-    let mut operation = SHFILEOPSTRUCTW {
-        hwnd: ptr::null_mut(),
-        wFunc: FO_DELETE,
-        pFrom: from.as_ptr(),
-        pTo: ptr::null(),
-        fFlags: flags as u16,
-        fAnyOperationsAborted: 0,
-        hNameMappings: ptr::null_mut(),
-        lpszProgressTitle: ptr::null(),
+    // IFileOperation needs a single-threaded apartment; a thread of its own
+    // leaves the caller's COM state untouched.
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("mogumogu-recycle".into())
+            .spawn_scoped(scope, || recycle_in_apartment(&from))
+            .map_err(|e| io::Error::other(format!("Papierkorb-Vorgang nicht gestartet: {e}")))?
+            .join()
+            .unwrap_or_else(|_| Err(io::Error::other("Papierkorb-Vorgang abgebrochen")))
+    })
+}
+
+/// What the shell reported for the one item of a recycle operation.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct RecycleReport {
+    /// `PerformOperations`.
+    performed: i32,
+    /// `GetAnyOperationsAborted`.
+    aborted: bool,
+    /// Flags of the first `PreDeleteItem`, if it was called.
+    before: Option<u32>,
+    /// Flags of the first item the sink refused because Windows would have
+    /// deleted it for good. Windows may announce the folder as recyclable and
+    /// only its contents without the flag, so every announcement is checked.
+    refused: Option<u32>,
+    /// The first `PostDeleteItem`: its result and whether it named an item in
+    /// the bin. For the codes only; the decision uses all reports below.
+    after: Option<(i32, bool)>,
+    /// Reports with a success code that named an item in the bin.
+    in_bin: u32,
+    /// Some report was carried out without an item in the bin: deleted for good.
+    lost: bool,
+    /// Some report failed or named no item in the bin.
+    unconfirmed: bool,
+}
+
+impl RecycleReport {
+    fn codes(&self) -> String {
+        let flags = |value: Option<u32>| value.map_or("–".into(), |flags| format!("0x{flags:x}"));
+        let after =
+            self.after.map_or("–".into(), |(hr, in_bin)| format!("0x{:08x}, im Papierkorb: {in_bin}", hr as u32));
+        format!(
+            "vorher {}, abgelehnt bei {}; danach {after}, {} im Papierkorb; Vorgang 0x{:08x}, abgebrochen: {}",
+            flags(self.before),
+            flags(self.refused),
+            self.in_bin,
+            self.performed as u32,
+            self.aborted
+        )
+    }
+}
+
+/// `PostDeleteItem` results that mean the delete was carried out: `S_OK`, or
+/// for a folder "handled as a whole". Other success codes, such as "not
+/// handled" after a refusal, are not.
+fn delete_done(result: i32) -> bool {
+    use windows_sys::Win32::UI::Shell::COPYENGINE_S_DONT_PROCESS_CHILDREN;
+    result == 0 || result == COPYENGINE_S_DONT_PROCESS_CHILDREN
+}
+
+/// The item Windows names in the bin is the proof (it is null exactly when
+/// Windows deleted for good). Success needs every report to name one; a report
+/// carried out without one means deleted for good.
+fn recycle_outcome(report: RecycleReport) -> io::Result<()> {
+    let codes = report.codes();
+    if report.lost {
+        return Err(io::Error::other(format!("Windows meldet endgültig gelöscht statt im Papierkorb ({codes})")));
+    }
+    if report.refused.is_some() {
+        let done = match report.in_bin {
+            0 => "nichts gelöscht".to_string(),
+            n => format!("nichts endgültig gelöscht; {n} Teile liegen schon im Papierkorb, der Rest blieb am Ort"),
+        };
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!(
+                "Windows hätte endgültig gelöscht (Papierkorb abgeschaltet, zu klein oder per Richtlinie); abgelehnt, {done} ({codes})"
+            ),
+        ));
+    }
+    if report.aborted {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, format!("Papierkorb-Vorgang abgebrochen ({codes})")));
+    }
+    if report.in_bin > 0 && !report.unconfirmed && report.performed >= 0 {
+        return Ok(());
+    }
+    Err(io::Error::other(format!("Windows hat das Verschieben in den Papierkorb nicht bestätigt ({codes})")))
+}
+
+/// `PreDeleteItem`: only an item Windows will recycle may go ahead.
+fn refuse_delete(flags: u32) -> bool {
+    use windows_sys::Win32::UI::Shell::TSF_DELETE_RECYCLE_IF_POSSIBLE;
+    flags & TSF_DELETE_RECYCLE_IF_POSSIBLE as u32 == 0
+}
+
+fn hresult(what: &str, hr: i32) -> io::Result<()> {
+    if hr < 0 { Err(io::Error::other(format!("{what}: 0x{:08x}", hr as u32))) } else { Ok(()) }
+}
+
+fn recycle_in_apartment(path: &[u16]) -> io::Result<()> {
+    use windows_sys::Win32::System::Com::{
+        CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoCreateInstance, CoInitializeEx,
+        CoUninitialize,
     };
-    // SAFETY: `from` is double NUL-terminated and outlives the synchronous
-    // call; the other pointers are null as the API allows for FO_DELETE.
-    let result = unsafe { SHFileOperationW(&mut operation) };
-    if result != 0 {
-        return Err(io::Error::other(format!("Papierkorb meldet Fehler 0x{result:x}")));
+    use windows_sys::Win32::UI::Shell::{
+        FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOCONFIRMMKDIR, FOF_NOERRORUI, FOF_SILENT, FOFX_EARLYFAILURE,
+        FOFX_RECYCLEONDELETE, FileOperation, SHCreateItemFromParsingName,
+    };
+
+    struct Apartment;
+    impl Drop for Apartment {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful CoInitializeEx on this thread.
+            unsafe { CoUninitialize() }
+        }
     }
-    if operation.fAnyOperationsAborted != 0 {
-        return Err(io::Error::new(io::ErrorKind::Interrupted, "im Dialog abgebrochen"));
+    // SAFETY: first COM call on this fresh thread; the reserved pointer is null.
+    let hr = unsafe { CoInitializeEx(ptr::null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32) };
+    hresult("COM", hr)?;
+    let _apartment = Apartment;
+
+    let mut raw = ptr::null_mut();
+    // SAFETY: CLSID and IID name the shell's file operation object and its
+    // interface; `raw` receives one owned reference.
+    let hr = unsafe {
+        CoCreateInstance(&FileOperation, ptr::null_mut(), CLSCTX_INPROC_SERVER, &IID_IFILE_OPERATION, &mut raw)
+    };
+    hresult("Dateivorgang", hr)?;
+    let operation = ComRef(raw);
+    let mut raw = ptr::null_mut();
+    // SAFETY: `path` is NUL-terminated and lives across the call; `raw`
+    // receives one owned IShellItem reference.
+    let hr = unsafe { SHCreateItemFromParsingName(path.as_ptr(), ptr::null_mut(), &IID_ISHELL_ITEM, &mut raw) };
+    hresult("Ordner für den Papierkorb", hr)?;
+    let item = ComRef(raw);
+
+    let sink = RecycleSink::new();
+    // SAFETY: `operation` holds a live IFileOperation; `FileOperationVtbl`
+    // follows the SDK header order (slot positions asserted below).
+    let vtbl = unsafe { &*(*(operation.0 as *const *const FileOperationVtbl)) };
+    let flags = FOF_ALLOWUNDO
+        | FOFX_RECYCLEONDELETE
+        | FOF_NOCONFIRMATION
+        | FOF_NOCONFIRMMKDIR
+        | FOF_NOERRORUI
+        | FOF_SILENT
+        | FOFX_EARLYFAILURE;
+    // SAFETY: live interface pointer and a plain flag word.
+    hresult("Optionen", unsafe { (vtbl.set_operation_flags)(operation.0, flags) })?;
+    let mut cookie = 0_u32;
+    // SAFETY: the sink is a live COM object; the shell takes its own reference.
+    hresult("Fortschrittsmeldung", unsafe { (vtbl.advise)(operation.0, sink.0.cast(), &mut cookie) })?;
+    // Never perform without the sink attached: it is what refuses deleting for good.
+    // SAFETY: live item and operation; no per-item sink.
+    let queued = hresult("Ordner vormerken", unsafe { (vtbl.delete_item)(operation.0, item.0, ptr::null_mut()) });
+    let mut report = RecycleReport::default();
+    if queued.is_ok() {
+        // SAFETY: live operation; synchronous. The sink keeps only atomics, so it
+        // is sound whichever thread the shell calls it on.
+        report.performed = unsafe { (vtbl.perform_operations)(operation.0) };
+        let mut aborted = 0;
+        // SAFETY: live operation and a writable BOOL.
+        let hr = unsafe { (vtbl.get_any_operations_aborted)(operation.0, &mut aborted) };
+        report.aborted = hr < 0 || aborted != 0;
     }
-    Ok(())
+    // SAFETY: the cookie came from the successful Advise above.
+    unsafe { (vtbl.unadvise)(operation.0, cookie) };
+    queued?;
+    let state = sink.state();
+    report.refused = state.refused.load(Ordering::SeqCst).then(|| state.refused_flags.load(Ordering::SeqCst));
+    report.before = state.before_seen.load(Ordering::SeqCst).then(|| state.before_flags.load(Ordering::SeqCst));
+    report.after = state
+        .after_seen
+        .load(Ordering::SeqCst)
+        .then(|| (state.after_result.load(Ordering::SeqCst), state.after_in_bin.load(Ordering::SeqCst)));
+    report.in_bin = state.in_bin.load(Ordering::SeqCst);
+    report.lost = state.lost.load(Ordering::SeqCst);
+    report.unconfirmed = state.unconfirmed.load(Ordering::SeqCst);
+    recycle_outcome(report)
+}
+
+const IID_IUNKNOWN: windows_sys::core::GUID =
+    windows_sys::core::GUID::from_u128(0x00000000_0000_0000_c000_000000000046);
+const IID_IFILE_OPERATION: windows_sys::core::GUID =
+    windows_sys::core::GUID::from_u128(0x947aab5f_0a5c_4c13_b4d6_4bf7836fc9f8);
+const IID_ISHELL_ITEM: windows_sys::core::GUID =
+    windows_sys::core::GUID::from_u128(0x43826d1e_e718_42ee_bc55_a1e261c37bfe);
+const IID_IFILE_OPERATION_PROGRESS_SINK: windows_sys::core::GUID =
+    windows_sys::core::GUID::from_u128(0x04b0f1a7_9490_44bc_96e1_4296a31252e2);
+
+type Hr = windows_sys::core::HRESULT;
+type This = *mut c_void;
+type Item = *mut c_void;
+type Name = *const u16;
+
+#[repr(C)]
+struct UnknownVtbl {
+    query_interface: unsafe extern "system" fn(This, *const windows_sys::core::GUID, *mut *mut c_void) -> Hr,
+    add_ref: unsafe extern "system" fn(This) -> u32,
+    release: unsafe extern "system" fn(This) -> u32,
+}
+
+/// IFileOperation in SDK order; slots this module never calls stay opaque.
+#[repr(C)]
+struct FileOperationVtbl {
+    base: UnknownVtbl,
+    advise: unsafe extern "system" fn(This, *mut c_void, *mut u32) -> Hr,
+    unadvise: unsafe extern "system" fn(This, u32) -> Hr,
+    set_operation_flags: unsafe extern "system" fn(This, u32) -> Hr,
+    // SetProgressMessage … CopyItems
+    _unused: [*const c_void; 12],
+    delete_item: unsafe extern "system" fn(This, Item, *mut c_void) -> Hr,
+    // DeleteItems, NewItem
+    _unused_after_delete: [*const c_void; 2],
+    perform_operations: unsafe extern "system" fn(This) -> Hr,
+    get_any_operations_aborted: unsafe extern "system" fn(This, *mut windows_sys::core::BOOL) -> Hr,
+}
+const _: () = assert!(offset_of!(FileOperationVtbl, advise) == 3 * size_of::<usize>());
+const _: () = assert!(offset_of!(FileOperationVtbl, delete_item) == 18 * size_of::<usize>());
+const _: () = assert!(offset_of!(FileOperationVtbl, perform_operations) == 21 * size_of::<usize>());
+const _: () = assert!(size_of::<FileOperationVtbl>() == 23 * size_of::<usize>());
+
+/// IFileOperationProgressSink in SDK order.
+#[repr(C)]
+struct ProgressSinkVtbl {
+    base: UnknownVtbl,
+    start_operations: unsafe extern "system" fn(This) -> Hr,
+    finish_operations: unsafe extern "system" fn(This, Hr) -> Hr,
+    pre_rename_item: unsafe extern "system" fn(This, u32, Item, Name) -> Hr,
+    post_rename_item: unsafe extern "system" fn(This, u32, Item, Name, Hr, Item) -> Hr,
+    pre_move_item: unsafe extern "system" fn(This, u32, Item, Item, Name) -> Hr,
+    post_move_item: unsafe extern "system" fn(This, u32, Item, Item, Name, Hr, Item) -> Hr,
+    pre_copy_item: unsafe extern "system" fn(This, u32, Item, Item, Name) -> Hr,
+    post_copy_item: unsafe extern "system" fn(This, u32, Item, Item, Name, Hr, Item) -> Hr,
+    pre_delete_item: unsafe extern "system" fn(This, u32, Item) -> Hr,
+    post_delete_item: unsafe extern "system" fn(This, u32, Item, Hr, Item) -> Hr,
+    pre_new_item: unsafe extern "system" fn(This, u32, Item, Name) -> Hr,
+    post_new_item: unsafe extern "system" fn(This, u32, Item, Name, Name, u32, Hr, Item) -> Hr,
+    update_progress: unsafe extern "system" fn(This, u32, u32) -> Hr,
+    reset_timer: unsafe extern "system" fn(This) -> Hr,
+    pause_timer: unsafe extern "system" fn(This) -> Hr,
+    resume_timer: unsafe extern "system" fn(This) -> Hr,
+}
+const _: () = assert!(offset_of!(ProgressSinkVtbl, pre_delete_item) == 11 * size_of::<usize>());
+const _: () = assert!(size_of::<ProgressSinkVtbl>() == 19 * size_of::<usize>());
+
+/// One owned COM reference, released on drop.
+struct ComRef(*mut c_void);
+impl Drop for ComRef {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: an owned reference to a live COM object; every COM
+            // vtable starts with IUnknown.
+            unsafe { ((*(*(self.0 as *const *const UnknownVtbl))).release)(self.0) };
+        }
+    }
+}
+
+/// Our IFileOperationProgressSink. Heap-allocated, reference counted; freed
+/// by the last `Release`.
+#[repr(C)]
+struct RecycleSinkState {
+    vtbl: *const ProgressSinkVtbl,
+    refs: AtomicU32,
+    before_seen: AtomicBool,
+    before_flags: AtomicU32,
+    refused: AtomicBool,
+    refused_flags: AtomicU32,
+    after_seen: AtomicBool,
+    after_result: AtomicI32,
+    after_in_bin: AtomicBool,
+    in_bin: AtomicU32,
+    lost: AtomicBool,
+    unconfirmed: AtomicBool,
+}
+
+/// Our own reference to the sink.
+struct RecycleSink(*mut RecycleSinkState);
+impl RecycleSink {
+    fn new() -> Self {
+        RecycleSink(Box::into_raw(Box::new(RecycleSinkState {
+            vtbl: &SINK_VTBL,
+            refs: AtomicU32::new(1),
+            before_seen: AtomicBool::new(false),
+            before_flags: AtomicU32::new(0),
+            refused: AtomicBool::new(false),
+            refused_flags: AtomicU32::new(0),
+            after_seen: AtomicBool::new(false),
+            after_result: AtomicI32::new(0),
+            after_in_bin: AtomicBool::new(false),
+            in_bin: AtomicU32::new(0),
+            lost: AtomicBool::new(false),
+            unconfirmed: AtomicBool::new(false),
+        })))
+    }
+    fn state(&self) -> &RecycleSinkState {
+        // SAFETY: our reference keeps the allocation alive while `self` lives.
+        unsafe { &*self.0 }
+    }
+}
+impl Drop for RecycleSink {
+    fn drop(&mut self) {
+        // SAFETY: gives back the reference `new` created.
+        unsafe { sink_release(self.0.cast()) };
+    }
+}
+
+static SINK_VTBL: ProgressSinkVtbl = ProgressSinkVtbl {
+    base: UnknownVtbl { query_interface: sink_query_interface, add_ref: sink_add_ref, release: sink_release },
+    start_operations: sink_ok,
+    finish_operations: sink_finish,
+    pre_rename_item: sink_refuse_name,
+    post_rename_item: sink_post_name,
+    pre_move_item: sink_refuse_transfer,
+    post_move_item: sink_post_transfer,
+    pre_copy_item: sink_refuse_transfer,
+    post_copy_item: sink_post_transfer,
+    pre_delete_item: sink_pre_delete,
+    post_delete_item: sink_post_delete,
+    pre_new_item: sink_refuse_name,
+    post_new_item: sink_post_new,
+    update_progress: sink_progress,
+    reset_timer: sink_ok,
+    pause_timer: sink_ok,
+    resume_timer: sink_ok,
+};
+
+/// # Safety
+/// `this` is a live `RecycleSinkState` (COM passes the pointer we handed out).
+unsafe fn sink<'a>(this: This) -> &'a RecycleSinkState {
+    // SAFETY: guaranteed by the caller, see above.
+    unsafe { &*(this as *const RecycleSinkState) }
+}
+
+unsafe extern "system" fn sink_query_interface(
+    this: This,
+    iid: *const windows_sys::core::GUID,
+    out: *mut *mut c_void,
+) -> Hr {
+    use windows_sys::Win32::Foundation::{E_NOINTERFACE, E_POINTER, S_OK};
+    if out.is_null() {
+        return E_POINTER;
+    }
+    if iid.is_null() {
+        // SAFETY: `out` is a writable out pointer; COM clears it on failure.
+        unsafe { *out = ptr::null_mut() };
+        return E_POINTER;
+    }
+    // SAFETY: COM passes a readable IID and a writable out pointer.
+    let iid = unsafe { &*iid };
+    let known = [IID_IUNKNOWN, IID_IFILE_OPERATION_PROGRESS_SINK]
+        .iter()
+        .any(|k| k.data1 == iid.data1 && k.data2 == iid.data2 && k.data3 == iid.data3 && k.data4 == iid.data4);
+    if !known {
+        // SAFETY: as above.
+        unsafe { *out = ptr::null_mut() };
+        return E_NOINTERFACE;
+    }
+    // SAFETY: `this` is our live sink; the caller now owns one more reference.
+    unsafe {
+        sink(this).refs.fetch_add(1, Ordering::SeqCst);
+        *out = this;
+    }
+    S_OK
+}
+
+// Callbacks never panic: a panic cannot unwind out of `extern "system"`.
+unsafe extern "system" fn sink_add_ref(this: This) -> u32 {
+    // SAFETY: COM only calls this on our live sink.
+    unsafe { sink(this) }.refs.fetch_add(1, Ordering::SeqCst).wrapping_add(1)
+}
+
+unsafe extern "system" fn sink_release(this: This) -> u32 {
+    // SAFETY: COM, or our own `RecycleSink`, calls this on the live sink.
+    let previous = unsafe { sink(this) }.refs.fetch_sub(1, Ordering::SeqCst);
+    if previous == 1 {
+        // SAFETY: the last reference is gone; the box came from `RecycleSink::new`.
+        drop(unsafe { Box::from_raw(this as *mut RecycleSinkState) });
+    }
+    previous.wrapping_sub(1)
+}
+
+unsafe extern "system" fn sink_pre_delete(this: This, flags: u32, _item: Item) -> Hr {
+    use windows_sys::Win32::Foundation::{E_ABORT, S_OK};
+    // SAFETY: COM only calls this on our live sink.
+    let state = unsafe { sink(this) };
+    if !state.before_seen.swap(true, Ordering::SeqCst) {
+        state.before_flags.store(flags, Ordering::SeqCst);
+    }
+    if refuse_delete(flags) {
+        if !state.refused.swap(true, Ordering::SeqCst) {
+            state.refused_flags.store(flags, Ordering::SeqCst);
+        }
+        return E_ABORT;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn sink_post_delete(this: This, _flags: u32, _item: Item, result: Hr, in_bin: Item) -> Hr {
+    // SAFETY: COM only calls this on our live sink.
+    let state = unsafe { sink(this) };
+    let named = !in_bin.is_null();
+    // The first report gives the codes; the decision counts every report.
+    if !state.after_seen.swap(true, Ordering::SeqCst) {
+        state.after_result.store(result, Ordering::SeqCst);
+        state.after_in_bin.store(named, Ordering::SeqCst);
+    }
+    if result >= 0 && named {
+        state.in_bin.fetch_add(1, Ordering::SeqCst);
+    } else {
+        state.unconfirmed.store(true, Ordering::SeqCst);
+        if delete_done(result) && !named {
+            state.lost.store(true, Ordering::SeqCst);
+        }
+    }
+    windows_sys::Win32::Foundation::S_OK
+}
+
+// A delete never renames, moves, copies or creates; refuse if it ever did.
+unsafe extern "system" fn sink_refuse_name(_: This, _: u32, _: Item, _: Name) -> Hr {
+    windows_sys::Win32::Foundation::E_ABORT
+}
+unsafe extern "system" fn sink_refuse_transfer(_: This, _: u32, _: Item, _: Item, _: Name) -> Hr {
+    windows_sys::Win32::Foundation::E_ABORT
+}
+unsafe extern "system" fn sink_post_name(_: This, _: u32, _: Item, _: Name, _: Hr, _: Item) -> Hr {
+    windows_sys::Win32::Foundation::S_OK
+}
+unsafe extern "system" fn sink_post_transfer(_: This, _: u32, _: Item, _: Item, _: Name, _: Hr, _: Item) -> Hr {
+    windows_sys::Win32::Foundation::S_OK
+}
+unsafe extern "system" fn sink_post_new(_: This, _: u32, _: Item, _: Name, _: Name, _: u32, _: Hr, _: Item) -> Hr {
+    windows_sys::Win32::Foundation::S_OK
+}
+unsafe extern "system" fn sink_ok(_: This) -> Hr {
+    windows_sys::Win32::Foundation::S_OK
+}
+unsafe extern "system" fn sink_finish(_: This, _: Hr) -> Hr {
+    windows_sys::Win32::Foundation::S_OK
+}
+unsafe extern "system" fn sink_progress(_: This, _: u32, _: u32) -> Hr {
+    windows_sys::Win32::Foundation::S_OK
 }
 
 /// Free bytes for this user on the volume holding the folder `path`
@@ -1645,5 +2063,116 @@ mod owner_arguments {
         let quoted = quote_owner_arg(OsStr::new(r"C:\data folder\")).unwrap();
         assert_eq!(String::from_utf16(&quoted).unwrap(), r#""C:\data folder\\""#);
         assert!(quote_owner_arg(OsStr::new("bad\0arg")).is_err());
+    }
+}
+
+#[cfg(test)]
+mod recycle_rules {
+    use super::*;
+    use windows_sys::Win32::UI::Shell::TSF_DELETE_RECYCLE_IF_POSSIBLE;
+
+    #[test]
+    fn only_an_item_windows_will_recycle_may_go_ahead() {
+        assert!(!refuse_delete(TSF_DELETE_RECYCLE_IF_POSSIBLE as u32));
+        assert!(!refuse_delete(TSF_DELETE_RECYCLE_IF_POSSIBLE as u32 | 0x1));
+        assert!(refuse_delete(0));
+        assert!(refuse_delete(0x1));
+    }
+
+    #[test]
+    fn only_a_confirmed_move_into_the_bin_counts() {
+        // One report per carried-out delete; `report(result, in_bin)` folds
+        // them the way the sink does.
+        fn report(reports: &[(i32, bool)]) -> RecycleReport {
+            let mut r =
+                RecycleReport { before: Some(0x282), after: reports.first().copied(), ..RecycleReport::default() };
+            for &(result, named) in reports {
+                if result >= 0 && named {
+                    r.in_bin += 1;
+                } else {
+                    r.unconfirmed = true;
+                    r.lost |= delete_done(result) && !named;
+                }
+            }
+            r
+        }
+        let whole = 0x0027_0008; // COPYENGINE_S_DONT_PROCESS_CHILDREN
+        let skipped = 0x0027_0003; // COPYENGINE_S_NOT_HANDLED
+        let pending = 0x0027_0010; // COPYENGINE_S_PENDING_DELETE
+        assert!(recycle_outcome(report(&[(0, true)])).is_ok());
+        // As observed on Windows 11 for a folder with a subfolder: "handled as a whole".
+        assert!(recycle_outcome(report(&[(whole, true)])).is_ok());
+        for lost in [report(&[(whole, false)]), report(&[(0, false)]), report(&[(0, true), (0, false)])] {
+            assert!(recycle_outcome(lost).unwrap_err().to_string().contains("endgültig gelöscht statt"), "{lost:?}");
+        }
+        // The review's case: a child reported in the bin first, then the folder
+        // itself with another success code and no item. Never success.
+        assert!(recycle_outcome(report(&[(0, true), (pending, false)])).is_err());
+        // As observed on Windows 11 for a folder too large for the bin: the
+        // folder was announced as recyclable (0x282), its file without the
+        // flag; the refusal stopped the operation, the shell reported
+        // COPYENGINE_S_NOT_HANDLED and E_ABORT.
+        let refused = RecycleReport {
+            refused: Some(0x2),
+            performed: windows_sys::Win32::Foundation::E_ABORT,
+            ..report(&[(skipped, false)])
+        };
+        let error = recycle_outcome(refused).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+        assert!(error.to_string().contains("abgelehnt, nichts gelöscht"), "{error}");
+        assert!(error.to_string().contains("abgelehnt bei 0x2; danach 0x00270003"), "{error}");
+        // Parts recycled before the refusal: in the bin, not lost, and said so.
+        let partly = RecycleReport { refused: Some(0x2), ..report(&[(0, true), (0, true), (skipped, false)]) };
+        assert!(recycle_outcome(partly).unwrap_err().to_string().contains("2 Teile liegen schon im Papierkorb"));
+        for unconfirmed in [
+            RecycleReport::default(),
+            report(&[(skipped, false)]),
+            report(&[(-1, false)]),
+            report(&[(-1, true)]),
+            RecycleReport { aborted: true, ..report(&[(0, true)]) },
+            RecycleReport { performed: -1, ..report(&[(0, true)]) },
+            RecycleReport { refused: Some(0), ..report(&[(0, true)]) },
+        ] {
+            assert!(recycle_outcome(unconfirmed).is_err(), "{unconfirmed:?}");
+        }
+    }
+
+    #[test]
+    fn the_sink_answers_only_for_its_own_interfaces_and_frees_itself() {
+        let sink = RecycleSink::new();
+        let this: This = sink.0.cast();
+        let mut out = ptr::null_mut();
+        // SAFETY: `this` is the live sink; `out` is writable.
+        let hr = unsafe { sink_query_interface(this, &IID_IFILE_OPERATION_PROGRESS_SINK, &mut out) };
+        assert_eq!((hr, out), (0, this));
+        assert_eq!(sink.state().refs.load(Ordering::SeqCst), 2);
+        // SAFETY: gives back the reference QueryInterface handed out.
+        assert_eq!(unsafe { sink_release(this) }, 1);
+        // SAFETY: as above; an unknown interface is refused and the out pointer cleared.
+        let hr = unsafe { sink_query_interface(this, &IID_ISHELL_ITEM, &mut out) };
+        assert_eq!((hr, out), (windows_sys::Win32::Foundation::E_NOINTERFACE, ptr::null_mut()));
+        let in_bin: Item = this; // any non-null item stands for "now in the bin"
+        // SAFETY: the shell would call these on the live sink.
+        unsafe {
+            // The folder announced as recyclable, then its contents without the flag.
+            assert_eq!(sink_pre_delete(this, 0x282, ptr::null_mut()), 0);
+            assert!(sink_pre_delete(this, 0x202, ptr::null_mut()) < 0);
+            assert!(sink_pre_delete(this, 0x2, ptr::null_mut()) < 0);
+            sink_post_delete(this, 0, ptr::null_mut(), 0, in_bin);
+            // A later report of an item deleted for good sticks, whatever follows.
+            sink_post_delete(this, 0, ptr::null_mut(), 0, ptr::null_mut());
+            sink_post_delete(this, 0, ptr::null_mut(), 0, in_bin);
+        }
+        let state = sink.state();
+        assert!(state.refused.load(Ordering::SeqCst));
+        assert_eq!(state.before_flags.load(Ordering::SeqCst), 0x282, "the first announcement");
+        assert_eq!(state.refused_flags.load(Ordering::SeqCst), 0x202, "the first refusal");
+        assert!(state.after_in_bin.load(Ordering::SeqCst), "the first report gives the codes");
+        assert_eq!(state.in_bin.load(Ordering::SeqCst), 2);
+        assert!(state.lost.load(Ordering::SeqCst) && state.unconfirmed.load(Ordering::SeqCst));
+        let mut out = this;
+        // SAFETY: a null IID is refused and the out pointer cleared.
+        let hr = unsafe { sink_query_interface(this, ptr::null(), &mut out) };
+        assert_eq!((hr, out), (windows_sys::Win32::Foundation::E_POINTER, ptr::null_mut()));
     }
 }
